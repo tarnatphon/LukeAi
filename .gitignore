@@ -1,0 +1,28 @@
+
+# Downloaded native AI runtimes
+# Native AI runtimes downloaded during setup
+*.log
+*.part
+*.pyc
+*.pyo
+*.tmp
+.DS_Store
+.env
+.env.*
+.venv/
+Thumbs.db
+__pycache__/
+app/backend/mac/coreml_venv/
+app/backend/mac/libstable-diffusion.dylib
+app/backend/mac/sd
+app/tools/node-mac/
+backups/
+cache/
+models/
+node_modules/
+node_modules_mac/
+outputs/
+releases/
+runtime-logs/
+validation-reports/
+venv/

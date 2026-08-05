@@ -1,0 +1,29 @@
+{
+  "enabled": true,
+  "channel": "stable",
+  "manifestUrl": "https://github.com/tarnatphon/tmb-ai-os/releases/latest/download/local-ai-update-manifest.json",
+  "checkOnLaunch": true,
+  "timeoutMs": 2500,
+  "autoInstall": true,
+  "cleanupOldVersion": true,
+  "keepConfigBackups": 3,
+  "protectedPaths": [
+    "app/models",
+    "app/llm-models",
+    "app/image-models",
+    "app/video-models",
+    "app/speech-models",
+    "app/tts-models",
+    "app/openvino-models",
+    "app/chat-history",
+    "app/knowledge",
+    "app/projects",
+    "app/outputs",
+    "app/transcriptions",
+    "app/tts-outputs",
+    "app/cache",
+    "app/user-data",
+    "app/config/user-settings.json",
+    "app/update-state"
+  ]
+}
