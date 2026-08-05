@@ -18,6 +18,98 @@ const STATUS_FILE = path.join(STATE_DIR, "status.json");
 const MANAGED_FILE = path.join(STATE_DIR, "managed-files.json");
 const LOG_FILE = path.join(STATE_DIR, "updater.log");
 
+// LUKE_AI_EXTERNAL_UPDATE_STORAGE
+const STORAGE_CONFIG_FILE = path.join(APP, "config", "storage.json");
+
+function expandHome(value) {
+  if (typeof value !== "string") return value;
+
+  if (value === "~") return os.homedir();
+
+  if (value.startsWith("~/")) {
+    return path.join(os.homedir(), value.slice(2));
+  }
+
+  return value;
+}
+
+function isWritableDirectory(directory) {
+  if (!directory) return false;
+
+  try {
+    fs.mkdirSync(directory, {
+      recursive: true,
+      mode: 0o755
+    });
+
+    fs.accessSync(directory, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveUpdateStorage() {
+  const storage = readJson(STORAGE_CONFIG_FILE, {});
+  const configuredRoot = expandHome(storage.downloadRoot || "");
+  const fallbackRoot = expandHome(
+    storage.fallbackRoot ||
+    path.join(
+      os.homedir(),
+      "Library",
+      "Application Support",
+      "LUKE AI STUDIO",
+      "ai-downloads"
+    )
+  );
+
+  const preferredRoot = isWritableDirectory(configuredRoot)
+    ? configuredRoot
+    : fallbackRoot;
+
+  const updatesDirectoryName =
+    storage.directories &&
+    typeof storage.directories.updates === "string"
+      ? storage.directories.updates
+      : "updates";
+
+  const tempDirectoryName =
+    storage.directories &&
+    typeof storage.directories.temp === "string"
+      ? storage.directories.temp
+      : "temp";
+
+  const updatesDir = path.join(
+    preferredRoot,
+    updatesDirectoryName
+  );
+
+  const tempDir = path.join(
+    preferredRoot,
+    tempDirectoryName
+  );
+
+  fs.mkdirSync(updatesDir, {
+    recursive: true,
+    mode: 0o755
+  });
+
+  fs.mkdirSync(tempDir, {
+    recursive: true,
+    mode: 0o755
+  });
+
+  return {
+    configuredRoot,
+    fallbackRoot,
+    activeRoot: preferredRoot,
+    updatesDir,
+    tempDir,
+    usingFallback: preferredRoot !== configuredRoot
+  };
+}
+
+
 fs.mkdirSync(STATE_DIR, { recursive: true });
 
 function now() { return new Date().toISOString(); }
@@ -290,9 +382,20 @@ async function main() {
     return;
   }
 
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "local-ai-update-"));
+  const updateStorage = resolveUpdateStorage();
+  const tempRoot = fs.mkdtempSync(
+    path.join(updateStorage.tempDir, "luke-ai-update-")
+  );
+
+  log(
+    `Update storage: ${updateStorage.activeRoot}` +
+    (updateStorage.usingFallback ? " (fallback)" : "")
+  );
   const ext = asset.url.endsWith(".tar.gz") ? ".tar.gz" : asset.url.endsWith(".tgz") ? ".tgz" : ".zip";
-  const pkg = path.join(tempRoot, `update${ext}`);
+  const pkg = path.join(
+    updateStorage.updatesDir,
+    `LUKE-AI-STUDIO-${release.version}${ext}`
+  );
   const extractDir = path.join(tempRoot, "extract");
   try {
     status("downloading", { currentVersion: current.version, latestVersion: release.version });
