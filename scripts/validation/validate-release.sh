@@ -25,3 +25,11 @@ else
   echo "FAIL: Node.js is required for API contract validation"
   exit 1
 fi
+
+# LUKE AI STUDIO backend API smoke test
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-backend-api.cjs
+else
+  echo "FAIL: Node.js is required for backend API smoke testing"
+  exit 1
+fi
