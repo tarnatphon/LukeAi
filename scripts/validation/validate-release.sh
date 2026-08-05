@@ -17,3 +17,11 @@ find "$ROOT" -type d -name '__pycache__' -prune -exec rm -rf {} +
 find "$ROOT" -type f -name '*.pyc' -delete
 ! [ -d "$ROOT/app/tools/node-mac" ] || fail "stale portable Node runtime present"
 pass "release structure and syntax"
+
+# LUKE AI STUDIO API contract validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/check-api-contracts.cjs
+else
+  echo "FAIL: Node.js is required for API contract validation"
+  exit 1
+fi
