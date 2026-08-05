@@ -1,6 +1,6 @@
 {
-  "state": "offline",
-  "updatedAt": "2026-08-05T05:47:50.146Z",
-  "currentVersion": "0.2.0",
-  "message": "HTTP 404"
+  "state": "up-to-date",
+  "updatedAt": "2026-08-05T07:28:46.476Z",
+  "currentVersion": "1.0.0-beta.1",
+  "latestVersion": "1.0.0-beta.1"
 }
