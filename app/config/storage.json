@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "product": "LUKE AI STUDIO",
+  "storageMode": "external",
+  "externalVolume": "/Volumes/AI",
+  "downloadRoot": "/Volumes/AI/ai-downloads",
+  "fallbackRoot": "~/Library/Application Support/LUKE AI STUDIO/ai-downloads",
+  "fallbackWhenDriveMissing": true,
+  "createMissingDirectories": true,
+  "directories": {
+    "releases": "releases",
+    "betaReleases": "releases/beta",
+    "stableReleases": "releases/stable",
+    "archivedReleases": "releases/archive",
+    "updates": "updates",
+    "models": "models",
+    "llmModels": "models/llm",
+    "visionModels": "models/vision",
+    "videoModels": "models/video",
+    "speechModels": "models/speech",
+    "embeddingModels": "models/embedding",
+    "assets": "assets",
+    "plugins": "plugins",
+    "backups": "backups",
+    "logs": "logs",
+    "temp": "temp"
+  }
+}
