@@ -101,7 +101,46 @@ function walkFiles(base, prefix = "") {
   }
   return out;
 }
+
+// LUKE_AI_WRITABLE_PATH_FIX
+function prepareWritablePath(targetPath) {
+  if (!targetPath) return;
+
+  const executableNames = new Set([
+    "node",
+    "npm",
+    "npx",
+    "sd",
+    "whisper-cli",
+    "llama-cli",
+    "llama-server",
+    "ffmpeg",
+    "ffprobe"
+  ]);
+
+  try {
+    fs.mkdirSync(path.dirname(targetPath), {
+      recursive: true,
+      mode: 0o755
+    });
+  } catch {}
+
+  try {
+    fs.chmodSync(path.dirname(targetPath), 0o755);
+  } catch {}
+
+  if (fs.existsSync(targetPath)) {
+    try {
+      const mode = executableNames.has(path.basename(targetPath))
+        ? 0o755
+        : 0o644;
+      fs.chmodSync(targetPath, mode);
+    } catch {}
+  }
+}
+
 function copyFileSafe(source, destination) {
+  prepareWritablePath(destination);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.copyFileSync(source, destination);
   try { fs.chmodSync(destination, fs.statSync(source).mode); } catch {}
@@ -173,6 +212,7 @@ function installPayload(payload, config, nextVersion) {
         if (newSet.has(rel) || isProtected(rel, protectedPaths)) continue;
         const target = path.join(ROOT, rel);
         if (fs.existsSync(target) && fs.statSync(target).isFile()) {
+          prepareWritablePath(target);
           fs.unlinkSync(target);
           removeEmptyParents(target, ROOT);
         }
