@@ -86,11 +86,11 @@ if (osPlatform === "win32") {
     BACKEND_PATH = BACKEND_PATHS.linuxVulkan;
   }
 }
-const MODELS = MODEL_STORAGE.modelsRoot;
+const MODELS  = path.join(ROOT, "app", "models");
 if (!fs.existsSync(MODELS)) {
   fs.mkdirSync(MODELS, { recursive: true });
 }
-const LLM_MODELS = MODEL_STORAGE.llm;
+const LLM_MODELS = path.join(ROOT, "app", "llm-models");
 if (!fs.existsSync(LLM_MODELS)) {
   fs.mkdirSync(LLM_MODELS, { recursive: true });
 }
@@ -118,7 +118,7 @@ const LLM_BENCHMARK_PATH = path.join(LLM_CONFIG_DIR, "llm-benchmarks.json");
 if (!fs.existsSync(LLM_CONFIG_DIR)) {
   fs.mkdirSync(LLM_CONFIG_DIR, { recursive: true });
 }
-const SPEECH_MODELS = MODEL_STORAGE.speech;
+const SPEECH_MODELS = path.join(ROOT, "app", "speech-models");
 if (!fs.existsSync(SPEECH_MODELS)) {
   fs.mkdirSync(SPEECH_MODELS, { recursive: true });
 }
@@ -126,7 +126,7 @@ const TRANSCRIPTIONS = path.join(ROOT, "app", "transcriptions");
 if (!fs.existsSync(TRANSCRIPTIONS)) {
   fs.mkdirSync(TRANSCRIPTIONS, { recursive: true });
 }
-const TTS_MODELS = MODEL_STORAGE.speech;
+const TTS_MODELS = path.join(ROOT, "app", "tts-models");
 if (!fs.existsSync(TTS_MODELS)) {
   fs.mkdirSync(TTS_MODELS, { recursive: true });
 }
@@ -215,108 +215,11 @@ const TTS_VOICES = [
   { id: "bf_emma", name: "Emma", language: "en-gb", gender: "Female", recommended: false },
   { id: "bm_george", name: "George", language: "en-gb", gender: "Male", recommended: false },
 ];
-const OPENVINO_MODELS = MODEL_STORAGE.vision;
+const OPENVINO_MODELS = path.join(ROOT, "app", "openvino-models");
 if (!fs.existsSync(OPENVINO_MODELS)) {
   fs.mkdirSync(OPENVINO_MODELS, { recursive: true });
 }
 const OUTPUTS = path.join(ROOT, "app", "outputs");
-
-// LUKE_AI_EXTERNAL_MODEL_STORAGE
-const STORAGE_CONFIG_FILE = path.join(APP, "config", "storage.json");
-
-function expandStorageHome(value) {
-  if (typeof value !== "string") return value;
-
-  if (value === "~") {
-    return os.homedir();
-  }
-
-  if (value.startsWith("~/")) {
-    return path.join(os.homedir(), value.slice(2));
-  }
-
-  return value;
-}
-
-function ensureWritableStorageDirectory(directory) {
-  if (!directory) return false;
-
-  try {
-    fs.mkdirSync(directory, {
-      recursive: true,
-      mode: 0o755
-    });
-
-    fs.accessSync(directory, fs.constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function resolveModelStorage() {
-  let storage = {};
-
-  try {
-    storage = JSON.parse(
-      fs.readFileSync(STORAGE_CONFIG_FILE, "utf8")
-    );
-  } catch {}
-
-  const configuredRoot = expandStorageHome(
-    storage.downloadRoot || ""
-  );
-
-  const fallbackRoot = expandStorageHome(
-    storage.fallbackRoot ||
-    path.join(
-      os.homedir(),
-      "Library",
-      "Application Support",
-      "LUKE AI STUDIO",
-      "ai-downloads"
-    )
-  );
-
-  const activeRoot = ensureWritableStorageDirectory(configuredRoot)
-    ? configuredRoot
-    : fallbackRoot;
-
-  ensureWritableStorageDirectory(activeRoot);
-
-  const directories = storage.directories || {};
-
-  const resolveDirectory = (key, fallback) => {
-    const relativePath =
-      typeof directories[key] === "string"
-        ? directories[key]
-        : fallback;
-
-    const resolvedPath = path.join(activeRoot, relativePath);
-    ensureWritableStorageDirectory(resolvedPath);
-    return resolvedPath;
-  };
-
-  return {
-    configuredRoot,
-    fallbackRoot,
-    activeRoot,
-    usingFallback: activeRoot !== configuredRoot,
-    modelsRoot: resolveDirectory("models", "models"),
-    llm: resolveDirectory("llmModels", "models/llm"),
-    vision: resolveDirectory("visionModels", "models/vision"),
-    video: resolveDirectory("videoModels", "models/video"),
-    speech: resolveDirectory("speechModels", "models/speech"),
-    embedding: resolveDirectory(
-      "embeddingModels",
-      "models/embedding"
-    ),
-    temp: resolveDirectory("temp", "temp")
-  };
-}
-
-const MODEL_STORAGE = resolveModelStorage();
-
 if (!fs.existsSync(OUTPUTS)) {
   fs.mkdirSync(OUTPUTS, { recursive: true });
 }
