@@ -27,8 +27,8 @@
     "app/update-state"
   ],
   "product": "LUKE AI STUDIO",
-  "currentVersion": "1.0.0-beta.1",
+  "currentVersion": "1.0.0-beta.2",
   "offlineFirst": true,
   "stagedUpdate": true,
-  "version": "1.0.0-beta.1"
+  "version": "1.0.0-beta.2"
 }
