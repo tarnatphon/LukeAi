@@ -233,7 +233,7 @@ async function main() {
   if (!release?.version) throw new Error("Update manifest has no version");
   if (compareVersions(release.version, current.version) <= 0) {
     status("up-to-date", { currentVersion: current.version, latestVersion: release.version });
-    log(`Local AI ${current.version} is up to date.`);
+    log(`LUKE AI STUDIO ${current.version} is up to date.`);
     return;
   }
 
@@ -256,7 +256,7 @@ async function main() {
   const extractDir = path.join(tempRoot, "extract");
   try {
     status("downloading", { currentVersion: current.version, latestVersion: release.version });
-    log(`Downloading Local AI ${release.version}...`);
+    log(`Downloading LUKE AI STUDIO ${release.version}...`);
     await download(asset.url, pkg, Number(config.timeoutMs) || 2500);
     const actualHash = sha256(pkg);
     if (actualHash.toLowerCase() !== String(asset.sha256).toLowerCase()) throw new Error("SHA256 verification failed");
