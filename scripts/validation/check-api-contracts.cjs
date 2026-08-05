@@ -95,10 +95,11 @@ function extractEndpoints(filePath) {
   const source = fs.readFileSync(filePath, "utf8");
   const endpoints = new Set();
 
-  const pattern = /\/api\/[A-Za-z0-9_./:?=&${}-]*/g;
+  const pattern = /(?:["'`(=:\s]|^)\/api\/[A-Za-z0-9_.~!$&'()*+,;=:@%/?#{}${}-]*/gm;
   const matches = source.match(pattern) || [];
 
-  for (const match of matches) {
+  for (const rawMatch of matches) {
+    const match = rawMatch.replace(/^[\\s"'`(=:]+/, "");
     const normalized = normalizeEndpoint(match);
 
     if (normalized) {
@@ -192,7 +193,8 @@ if (unmatched.length > 0) {
     }
   }
 
-  process.exitCode = 1;
-} else {
-  console.log("PASS: All frontend API endpoints have backend contracts.");
+  process.exit(1);
 }
+
+console.log("PASS: All frontend API endpoints have backend contracts.");
+process.exit(0);
