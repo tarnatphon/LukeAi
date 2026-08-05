@@ -1,0 +1,13 @@
+{
+  "product": "LUKE AI STUDIO",
+  "runtime": "portable-node",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "nodeVersion": "v25.2.1",
+  "npmVersion": "11.6.2",
+  "npxVersion": "11.6.2",
+  "sourceNode": "/usr/local/bin/node",
+  "sourceNpmPackage": "/usr/local/lib/node_modules/npm",
+  "generatedAt": "2026-08-05T09:20:26Z",
+  "validated": true
+}
