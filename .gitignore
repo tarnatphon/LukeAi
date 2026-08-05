@@ -1,5 +1,6 @@
 
 # Downloaded native AI runtimes
+# Generated updater state and local backups
 # Native AI runtimes downloaded during setup
 *.log
 *.part
@@ -15,7 +16,10 @@ __pycache__/
 app/backend/mac/coreml_venv/
 app/backend/mac/libstable-diffusion.dylib
 app/backend/mac/sd
+app/config/*.backup-*
 app/tools/node-mac/
+app/update-state/*.log
+app/update-state/*.tmp
 backups/
 cache/
 models/
