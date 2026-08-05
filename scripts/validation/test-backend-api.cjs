@@ -62,11 +62,12 @@ function getFreePort() {
 }
 
 function discoverHealthEndpoints(source) {
+  // LUKE_AI_BACKEND_TEST_LIFECYCLE_V2
+  // Only API routes may be used for backend readiness checks.
+  // Frontend SPA fallback routes such as /health must never count.
   const candidates = new Set([
     "/api/health",
     "/api/status",
-    "/health",
-    "/status",
   ]);
 
   const patterns = [
@@ -85,35 +86,155 @@ function discoverHealthEndpoints(source) {
   return Array.from(candidates);
 }
 
-async function requestEndpoint(url) {
+async function requestEndpoint(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
 
   try {
     const response = await fetch(url, {
-      method: "GET",
+      method: options.method || "GET",
+      headers: options.headers || {},
+      body: options.body,
       redirect: "manual",
       signal: controller.signal,
     });
 
     const body = await response.text();
 
+    let json = null;
+
+    try {
+      json = body ? JSON.parse(body) : null;
+    } catch {}
+
     return {
-      ok: response.status >= 200 && response.status < 500,
+      transportOk: true,
       status: response.status,
-      body: body.slice(0, 500),
+      body: body.slice(0, 1000),
+      json,
+      contentType: response.headers.get("content-type") || "",
     };
   } catch (error) {
     return {
-      ok: false,
+      transportOk: false,
       status: 0,
       body: error instanceof Error
         ? error.message
         : String(error),
+      json: null,
+      contentType: "",
     };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isApiReady(endpoint, result) {
+  if (
+    !endpoint.startsWith("/api/") ||
+    !result.transportOk ||
+    result.status !== 200
+  ) {
+    return false;
+  }
+
+  if (
+    !result.contentType.toLowerCase().includes("application/json") ||
+    !result.json ||
+    typeof result.json !== "object"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function dependencyHealthIsHealthy(endpoint, result) {
+  if (endpoint !== "/api/health") {
+    return true;
+  }
+
+  return result.json && result.json.ok === true;
+}
+
+async function runNegativeTests(baseUrl) {
+  const tests = [];
+
+  const missingRoute = await requestEndpoint(
+    `${baseUrl}/api/__luke_missing_route__`
+  );
+
+  tests.push({
+    name: "Unknown API route",
+    passed:
+      missingRoute.transportOk &&
+      [404, 405].includes(missingRoute.status),
+    expected: "HTTP 404 or 405",
+    actual: `HTTP ${missingRoute.status}`,
+    body: missingRoute.body,
+  });
+
+  const unsupportedMethod = await requestEndpoint(
+    `${baseUrl}/api/health`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  tests.push({
+    name: "Unsupported health method",
+    passed:
+      unsupportedMethod.transportOk &&
+      [400, 404, 405].includes(unsupportedMethod.status),
+    expected: "HTTP 400, 404 or 405",
+    actual: `HTTP ${unsupportedMethod.status}`,
+    body: unsupportedMethod.body,
+  });
+
+  const invalidJson = await requestEndpoint(
+    `${baseUrl}/api/settings`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: "{invalid-json",
+    }
+  );
+
+  tests.push({
+    name: "Invalid JSON payload",
+    passed:
+      invalidJson.transportOk &&
+      [400, 404, 405, 415, 422].includes(invalidJson.status),
+    expected: "HTTP 400, 404, 405, 415 or 422",
+    actual: `HTTP ${invalidJson.status}`,
+    body: invalidJson.body,
+  });
+
+  console.log("");
+  console.log("Negative API tests:");
+
+  for (const test of tests) {
+    console.log(`${test.passed ? "PASS" : "FAIL"}: ${test.name}`);
+    console.log(`  Expected: ${test.expected}`);
+    console.log(`  Actual  : ${test.actual}`);
+
+    if (test.body) {
+      console.log(`  Body    : ${test.body.slice(0, 300)}`);
+    }
+  }
+
+  const failedTests = tests.filter((test) => !test.passed);
+
+  if (failedTests.length > 0) {
+    throw new Error(
+      `${failedTests.length} negative API test(s) failed.`
+    );
+  }
+
+  console.log("");
+  console.log("PASS: Backend negative API tests completed.");
 }
 
 async function stopProcess(child) {
@@ -184,6 +305,7 @@ async function main() {
 
   let passed = false;
   let selectedEndpoint = "";
+  let selectedResult = null;
   let lastResult = null;
 
   const startedAt = Date.now();
@@ -202,16 +324,25 @@ async function main() {
 
         lastResult = result;
 
-        if (result.ok) {
+        if (isApiReady(endpoint, result)) {
           passed = true;
           selectedEndpoint = endpoint;
+          selectedResult = result;
 
           console.log("");
-          console.log(`PASS: ${endpoint}`);
+          console.log(`PASS: Backend API ready at ${endpoint}`);
           console.log(`HTTP: ${result.status}`);
 
           if (result.body) {
             console.log(`Body: ${result.body}`);
+          }
+
+          if (!dependencyHealthIsHealthy(endpoint, result)) {
+            console.log("");
+            console.log(
+              "NOTICE: Backend API is reachable, but optional runtime " +
+              "dependencies are not fully installed."
+            );
           }
 
           break;
@@ -224,35 +355,53 @@ async function main() {
 
       await delay(500);
     }
+
+    if (!passed) {
+      console.error("");
+      console.error("FAIL: Backend API did not become ready.");
+
+      if (lastResult) {
+        console.error(`Last status: ${lastResult.status}`);
+        console.error(`Last result: ${lastResult.body}`);
+      }
+
+      const logs = output.join("").trim();
+
+      if (logs) {
+        console.error("");
+        console.error("Backend output:");
+        console.error(logs.slice(-4000));
+      }
+
+      throw new Error("Backend API readiness test failed.");
+    }
+
+    console.log("");
+    console.log(
+      `PASS: Backend API smoke test completed using ${selectedEndpoint}.`
+    );
+
+    await runNegativeTests(
+      `http://127.0.0.1:${port}`
+    );
+
+    if (
+      selectedEndpoint === "/api/health" &&
+      selectedResult &&
+      !dependencyHealthIsHealthy(selectedEndpoint, selectedResult)
+    ) {
+      console.log("");
+      console.log(
+        "NOTICE: Dependency health is degraded; " +
+        "API lifecycle and error contracts still passed."
+      );
+    }
   } finally {
     await stopProcess(child);
   }
 
-  if (!passed) {
-    console.error("");
-    console.error("FAIL: Backend API did not become ready.");
-
-    if (lastResult) {
-      console.error(`Last status: ${lastResult.status}`);
-      console.error(`Last result: ${lastResult.body}`);
-    }
-
-    const logs = output.join("").trim();
-
-    if (logs) {
-      console.error("");
-      console.error("Backend output:");
-      console.error(logs.slice(-4000));
-    }
-
-    process.exit(1);
-  }
-
   console.log("");
-  console.log(
-    `PASS: Backend API smoke test completed using ${selectedEndpoint}.`
-  );
-
+  console.log("PASS: Backend process stopped after all API tests.");
   process.exit(0);
 }
 
