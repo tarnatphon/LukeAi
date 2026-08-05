@@ -30,3 +30,4 @@ releases/
 runtime-logs/
 validation-reports/
 venv/
+releases/staging-*/
