@@ -4693,3 +4693,116 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-direction: column;
   }
 }
+
+/* LUKE_AI_RUNTIME_STORAGE_CLEANUP_STYLES_V1 */
+.runtime-cleanup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.runtime-cleanup-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 18px;
+}
+
+.runtime-cleanup-heading h3 {
+  margin: 4px 0 5px;
+}
+
+.runtime-cleanup-heading p {
+  margin: 0;
+  max-width: 720px;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.55;
+}
+
+.runtime-cleanup-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border-radius: 12px;
+  color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+  white-space: nowrap;
+}
+
+.runtime-cleanup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.runtime-cleanup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px;
+}
+
+.runtime-cleanup-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtime-cleanup-path {
+  margin-top: 5px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.runtime-cleanup-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.runtime-cleanup-stat strong {
+  font-size: 1.3rem;
+}
+
+.runtime-cleanup-stat span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.78rem;
+}
+
+.runtime-cleanup-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--md-sys-color-error);
+  font-size: 0.76rem;
+}
+
+.runtime-cleanup-protected {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .runtime-cleanup-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .runtime-cleanup-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .runtime-cleanup-total {
+    white-space: normal;
+  }
+}

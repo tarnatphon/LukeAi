@@ -9,6 +9,8 @@ import {
   RefreshCw,
   ShieldCheck,
   Square,
+  Trash2,
+  Database,
 } from "lucide-react";
 import {
   useCallback,
@@ -272,6 +274,9 @@ export default function RuntimeDownloadDashboard() {
   const [fallbackDirectory, setFallbackDirectory] = useState("");
   // LUKE_AI_RUNTIME_STORAGE_DASHBOARD_V1
   const [storageStatus, setStorageStatus] = useState(null);
+  // LUKE_AI_RUNTIME_STORAGE_CLEANUP_DASHBOARD_V1
+  const [storageUsage, setStorageUsage] = useState(null);
+  const [cleanupCategoryId, setCleanupCategoryId] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyDependencyId, setBusyDependencyId] = useState("");
@@ -321,10 +326,12 @@ export default function RuntimeDownloadDashboard() {
         dependencyData,
         jobData,
         storageData,
+        storageUsageData,
       ] = await Promise.all([
         requestJson("/api/runtime/dependencies"),
         requestJson("/api/runtime/install/jobs"),
         requestJson("/api/runtime/storage"),
+        requestJson("/api/runtime/storage/usage"),
       ]);
 
       if (!mountedRef.current) {
@@ -341,6 +348,7 @@ export default function RuntimeDownloadDashboard() {
       );
       setJobs(jobData.jobs || []);
       setStorageStatus(storageData || null);
+      setStorageUsage(storageUsageData || null);
       setError("");
     } catch (requestError) {
       if (mountedRef.current) {
@@ -417,6 +425,63 @@ export default function RuntimeDownloadDashboard() {
         );
       } finally {
         setBusyDependencyId("");
+      }
+    },
+    [refresh, requestJson],
+  );
+
+  const cleanupStorageCategory = useCallback(
+    async (category, dryRun) => {
+      setCleanupCategoryId(category.id);
+      setError("");
+
+      try {
+        const result = await requestJson(
+          "/api/runtime/storage/cleanup",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              categoryId: category.id,
+              dryRun,
+            }),
+          },
+        );
+
+        if (
+          dryRun &&
+          result.cleanup?.deletedFiles > 0
+        ) {
+          const confirmed = window.confirm(
+            `พบไฟล์ที่ลบได้ ${result.cleanup.deletedFiles} ไฟล์ ` +
+            `รวม ${formatBytes(result.cleanup.deletedBytes)}\n\n` +
+            "ยืนยันลบไฟล์เหล่านี้หรือไม่?",
+          );
+
+          if (!confirmed) {
+            return;
+          }
+
+          await requestJson(
+            "/api/runtime/storage/cleanup",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                categoryId: category.id,
+                dryRun: false,
+              }),
+            },
+          );
+        }
+
+        await refresh({ silent: true });
+      } catch (cleanupError) {
+        setError(
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
+        );
+      } finally {
+        setCleanupCategoryId("");
       }
     },
     [refresh, requestJson],
@@ -577,6 +642,121 @@ export default function RuntimeDownloadDashboard() {
           )}
         </div>
       </div>
+
+      {storageUsage && (
+        <div className="runtime-cleanup-section">
+          <div className="runtime-cleanup-heading">
+            <div>
+              <div className="runtime-dashboard-eyebrow">
+                Storage Manager
+              </div>
+              <h3>พื้นที่จัดเก็บและการทำความสะอาด</h3>
+              <p>
+                ระบบจะทำ Dry Run ก่อนลบจริง และจะไม่ลบไฟล์ที่กำลัง
+                ดาวน์โหลด ติดตั้ง ตรวจสอบ หรือ Rollback
+              </p>
+            </div>
+
+            <div className="runtime-cleanup-total">
+              <Database size={18} />
+              <span>
+                ใช้พื้นที่ทั้งหมด
+                {" "}
+                <strong>
+                  {formatBytes(storageUsage.summary?.totalBytes)}
+                </strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="runtime-cleanup-grid">
+            {(storageUsage.categories || []).map((category) => (
+              <article
+                key={category.id}
+                className="m3-card runtime-cleanup-card"
+              >
+                <div className="runtime-cleanup-card-header">
+                  <div>
+                    <strong>{category.label}</strong>
+                    <div className="runtime-cleanup-path">
+                      {category.path || "ไม่พบตำแหน่งจัดเก็บ"}
+                    </div>
+                  </div>
+
+                  <span
+                    className={
+                      "status-chip " +
+                      (
+                        category.protected
+                          ? "runtime-status-active"
+                          : category.cleanupAllowed
+                            ? "runtime-status-ready"
+                            : "runtime-status-muted"
+                      )
+                    }
+                  >
+                    {category.protected
+                      ? "กำลังใช้งาน"
+                      : category.cleanupAllowed
+                        ? "ล้างได้"
+                        : "ป้องกัน"}
+                  </span>
+                </div>
+
+                <div className="runtime-cleanup-stat">
+                  <strong>{formatBytes(category.sizeBytes)}</strong>
+                  <span>
+                    {category.fileCount} ไฟล์ ·
+                    {" "}
+                    {category.directoryCount} โฟลเดอร์
+                  </span>
+                </div>
+
+                {category.symlinkCount > 0 && (
+                  <div className="runtime-cleanup-warning">
+                    <AlertTriangle size={14} />
+                    ข้าม Symbolic Link {category.symlinkCount} รายการ
+                  </div>
+                )}
+
+                <div className="runtime-card-actions">
+                  {category.cleanupAllowed && (
+                    <button
+                      type="button"
+                      className="m3-btn m3-btn-outlined"
+                      disabled={
+                        category.protected ||
+                        cleanupCategoryId === category.id ||
+                        category.sizeBytes <= 0
+                      }
+                      onClick={() =>
+                        cleanupStorageCategory(category, true)
+                      }
+                    >
+                      {cleanupCategoryId === category.id
+                        ? (
+                          <LoaderCircle
+                            className="progress-spinner"
+                            size={15}
+                          />
+                        )
+                        : <Trash2 size={15} />}
+                      ทำความสะอาด
+                    </button>
+                  )}
+
+                  {!category.cleanupAllowed && (
+                    <span className="runtime-cleanup-protected">
+                      <ShieldCheck size={15} />
+                      ป้องกันการลบ
+                    </span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="runtime-dashboard-error">

@@ -7313,6 +7313,614 @@ function resolveRuntimeStorageDirectory(
   };
 }
 
+
+// LUKE_AI_RUNTIME_STORAGE_CLEANUP_V1
+const runtimeCleanupCategories = {
+  outputs: {
+    label: "Generated outputs",
+    path: path.join(ROOT, "app", "outputs"),
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  transcriptions: {
+    label: "Transcriptions",
+    path: path.join(ROOT, "app", "transcriptions"),
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  cache: {
+    label: "Runtime cache",
+    resolvePath() {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        });
+
+      return storage.selectedDirectory
+        ? path.join(
+            storage.selectedDirectory,
+            ".luke-runtime"
+          )
+        : null;
+    },
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  backups: {
+    label: "Runtime backups",
+    resolvePath() {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        });
+
+      return storage.selectedDirectory
+        ? path.join(
+            storage.selectedDirectory,
+            ".luke-runtime-backups"
+          )
+        : null;
+    },
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  models: {
+    label: "AI models",
+    path: path.join(ROOT, "app", "models"),
+    cleanupAllowed: false,
+    preserveDirectory: true,
+  },
+  chatHistory: {
+    label: "Chat history",
+    path: path.join(ROOT, "app", "chat-history"),
+    cleanupAllowed: false,
+    preserveDirectory: true,
+  },
+  installedRuntimes: {
+    label: "Installed runtimes",
+    resolvePath() {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        });
+
+      return storage.selectedDirectory
+        ? path.join(
+            storage.selectedDirectory,
+            "installed"
+          )
+        : null;
+    },
+    cleanupAllowed: false,
+    preserveDirectory: true,
+  },
+};
+
+function resolveRuntimeCleanupCategoryPath(
+  category
+) {
+  if (!category) {
+    return null;
+  }
+
+  if (typeof category.resolvePath === "function") {
+    return category.resolvePath();
+  }
+
+  return category.path || null;
+}
+
+function isPathInside(parentPath, childPath) {
+  if (!parentPath || !childPath) {
+    return false;
+  }
+
+  const parent = path.resolve(parentPath);
+  const child = path.resolve(childPath);
+
+  return (
+    child === parent ||
+    child.startsWith(`${parent}${path.sep}`)
+  );
+}
+
+function collectRuntimeProtectedPaths() {
+  const protectedPaths = new Set();
+  const state = readRuntimeInstallState();
+
+  for (const job of state.jobs) {
+    if (
+      !job ||
+      ![
+        "queued",
+        "preparing",
+        "downloading",
+        "verifying",
+        "installing",
+        "rolling-back",
+      ].includes(job.state)
+    ) {
+      continue;
+    }
+
+    const paths = getRuntimeJobPaths(job);
+
+    for (const protectedPath of [
+      paths.jobRoot,
+      paths.temporaryFile,
+      paths.verifiedFile,
+      paths.installDirectory,
+      paths.backupDirectory,
+      job.installedAsset?.path,
+    ]) {
+      if (protectedPath) {
+        protectedPaths.add(
+          path.resolve(protectedPath)
+        );
+      }
+    }
+  }
+
+  return [...protectedPaths];
+}
+
+function isRuntimePathProtected(
+  candidatePath,
+  protectedPaths
+) {
+  const candidate = path.resolve(candidatePath);
+
+  return protectedPaths.some(
+    (protectedPath) =>
+      isPathInside(candidate, protectedPath) ||
+      isPathInside(protectedPath, candidate)
+  );
+}
+
+// LUKE_AI_RUNTIME_STORAGE_CLEANUP_PROTECTION_FIX_V1
+function isRuntimeCleanupRootBlocked(
+  cleanupRoot,
+  protectedPaths
+) {
+  const resolvedRoot = path.resolve(cleanupRoot);
+
+  return protectedPaths.some(
+    (protectedPath) =>
+      isPathInside(
+        path.resolve(protectedPath),
+        resolvedRoot
+      )
+  );
+}
+
+function inspectRuntimeStorageEntry(
+  entryPath,
+  protectedPaths
+) {
+  const resolvedPath = path.resolve(entryPath);
+
+  const result = {
+    path: resolvedPath,
+    exists: false,
+    type: "missing",
+    sizeBytes: 0,
+    fileCount: 0,
+    directoryCount: 0,
+    symlinkCount: 0,
+    protected: isRuntimeCleanupRootBlocked(
+      resolvedPath,
+      protectedPaths
+    ),
+    error: null,
+  };
+
+  if (!fs.existsSync(resolvedPath)) {
+    return result;
+  }
+
+  try {
+    const rootStat = fs.lstatSync(resolvedPath);
+
+    result.exists = true;
+
+    if (rootStat.isSymbolicLink()) {
+      result.type = "symlink";
+      result.symlinkCount = 1;
+      result.protected = true;
+      return result;
+    }
+
+    if (rootStat.isFile()) {
+      result.type = "file";
+      result.sizeBytes = rootStat.size;
+      result.fileCount = 1;
+      return result;
+    }
+
+    if (!rootStat.isDirectory()) {
+      result.type = "other";
+      result.protected = true;
+      return result;
+    }
+
+    result.type = "directory";
+
+    const stack = [resolvedPath];
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+
+      let entries = [];
+
+      try {
+        entries = fs.readdirSync(
+          current,
+          {
+            withFileTypes: true,
+          }
+        );
+      } catch (error) {
+        result.error =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        continue;
+      }
+
+      for (const entry of entries) {
+        const childPath = path.join(
+          current,
+          entry.name
+        );
+
+        let stat;
+
+        try {
+          stat = fs.lstatSync(childPath);
+        } catch {
+          continue;
+        }
+
+        if (stat.isSymbolicLink()) {
+          result.symlinkCount += 1;
+          continue;
+        }
+
+        if (stat.isDirectory()) {
+          result.directoryCount += 1;
+          stack.push(childPath);
+          continue;
+        }
+
+        if (stat.isFile()) {
+          result.fileCount += 1;
+          result.sizeBytes += stat.size;
+        }
+      }
+    }
+  } catch (error) {
+    result.error =
+      error instanceof Error
+        ? error.message
+        : String(error);
+  }
+
+  return result;
+}
+
+function buildRuntimeStorageUsage() {
+  const protectedPaths =
+    collectRuntimeProtectedPaths();
+
+  const categories = Object.entries(
+    runtimeCleanupCategories
+  ).map(([id, category]) => {
+    const categoryPath =
+      resolveRuntimeCleanupCategoryPath(
+        category
+      );
+
+    const usage = categoryPath
+      ? inspectRuntimeStorageEntry(
+          categoryPath,
+          protectedPaths
+        )
+      : {
+          path: null,
+          exists: false,
+          type: "missing",
+          sizeBytes: 0,
+          fileCount: 0,
+          directoryCount: 0,
+          symlinkCount: 0,
+          protected: false,
+          error: null,
+        };
+
+    return {
+      id,
+      label: category.label,
+      cleanupAllowed:
+        category.cleanupAllowed === true,
+      preserveDirectory:
+        category.preserveDirectory === true,
+      ...usage,
+    };
+  });
+
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    protectedPaths,
+    summary: {
+      totalBytes: categories.reduce(
+        (total, category) =>
+          total + category.sizeBytes,
+        0
+      ),
+      cleanableBytes: categories
+        .filter(
+          (category) =>
+            category.cleanupAllowed &&
+            !category.protected
+        )
+        .reduce(
+          (total, category) =>
+            total + category.sizeBytes,
+          0
+        ),
+      categoryCount: categories.length,
+      protectedCategoryCount:
+        categories.filter(
+          (category) => category.protected
+        ).length,
+    },
+    categories,
+  };
+}
+
+function removeRuntimeCleanupContents(
+  rootPath,
+  protectedPaths,
+  options = {}
+) {
+  const resolvedRoot = path.resolve(rootPath);
+
+  const result = {
+    deletedBytes: 0,
+    deletedFiles: 0,
+    deletedDirectories: 0,
+    skippedProtected: [],
+    skippedSymlinks: [],
+    errors: [],
+  };
+
+  if (!fs.existsSync(resolvedRoot)) {
+    return result;
+  }
+
+  const rootStat = fs.lstatSync(resolvedRoot);
+
+  if (
+    rootStat.isSymbolicLink() ||
+    !rootStat.isDirectory()
+  ) {
+    result.errors.push(
+      "Cleanup root must be a real directory."
+    );
+
+    return result;
+  }
+
+  function visit(directory) {
+    let entries = [];
+
+    try {
+      entries = fs.readdirSync(
+        directory,
+        {
+          withFileTypes: true,
+        }
+      );
+    } catch (error) {
+      result.errors.push(
+        error instanceof Error
+          ? error.message
+          : String(error)
+      );
+
+      return;
+    }
+
+    for (const entry of entries) {
+      const childPath = path.join(
+        directory,
+        entry.name
+      );
+
+      if (
+        !isPathInside(
+          resolvedRoot,
+          childPath
+        )
+      ) {
+        result.errors.push(
+          `Unsafe cleanup path rejected: ${childPath}`
+        );
+
+        continue;
+      }
+
+      let stat;
+
+      try {
+        stat = fs.lstatSync(childPath);
+      } catch {
+        continue;
+      }
+
+      if (stat.isSymbolicLink()) {
+        result.skippedSymlinks.push(
+          childPath
+        );
+
+        continue;
+      }
+
+      if (
+        isRuntimePathProtected(
+          childPath,
+          protectedPaths
+        )
+      ) {
+        result.skippedProtected.push(
+          childPath
+        );
+
+        continue;
+      }
+
+      if (stat.isDirectory()) {
+        visit(childPath);
+
+        if (options.dryRun !== true) {
+          try {
+            const remaining =
+              fs.readdirSync(childPath);
+
+            if (remaining.length === 0) {
+              fs.rmdirSync(childPath);
+              result.deletedDirectories += 1;
+            }
+          } catch (error) {
+            result.errors.push(
+              error instanceof Error
+                ? error.message
+                : String(error)
+            );
+          }
+        }
+
+        continue;
+      }
+
+      if (stat.isFile()) {
+        result.deletedBytes += stat.size;
+        result.deletedFiles += 1;
+
+        if (options.dryRun !== true) {
+          try {
+            fs.unlinkSync(childPath);
+          } catch (error) {
+            result.errors.push(
+              error instanceof Error
+                ? error.message
+                : String(error)
+            );
+          }
+        }
+      }
+    }
+  }
+
+  visit(resolvedRoot);
+
+  return result;
+}
+
+function cleanupRuntimeStorageCategory(
+  categoryId,
+  options = {}
+) {
+  const category =
+    runtimeCleanupCategories[categoryId];
+
+  if (!category) {
+    const error = new Error(
+      `Unknown cleanup category: ${categoryId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (category.cleanupAllowed !== true) {
+    const error = new Error(
+      `Cleanup is not allowed for ${categoryId}`
+    );
+
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const categoryPath =
+    resolveRuntimeCleanupCategoryPath(
+      category
+    );
+
+  if (!categoryPath) {
+    const error = new Error(
+      `Cleanup path is unavailable for ${categoryId}`
+    );
+
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const protectedPaths =
+    collectRuntimeProtectedPaths();
+
+  if (
+    isRuntimeCleanupRootBlocked(
+      categoryPath,
+      protectedPaths
+    )
+  ) {
+    const error = new Error(
+      `Cleanup category root is currently protected: ${categoryId}`
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const before =
+    inspectRuntimeStorageEntry(
+      categoryPath,
+      protectedPaths
+    );
+
+  const cleanup =
+    removeRuntimeCleanupContents(
+      categoryPath,
+      protectedPaths,
+      {
+        dryRun: options.dryRun === true,
+      }
+    );
+
+  const after =
+    options.dryRun === true
+      ? before
+      : inspectRuntimeStorageEntry(
+          categoryPath,
+          protectedPaths
+        );
+
+  return {
+    ok: cleanup.errors.length === 0,
+    categoryId,
+    dryRun: options.dryRun === true,
+    before,
+    after,
+    cleanup,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -7569,6 +8177,75 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         job,
       });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/runtime/storage/usage
+  if (
+    req.url === "/api/runtime/storage/usage" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildRuntimeStorageUsage()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/runtime/storage/cleanup
+  if (
+    req.url === "/api/runtime/storage/cleanup" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.categoryId !== "string" ||
+        !body.categoryId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "categoryId is required",
+        });
+      }
+
+      const result =
+        cleanupRuntimeStorageCategory(
+          body.categoryId.trim(),
+          {
+            dryRun: body.dryRun !== false,
+          }
+        );
+
+      return json(
+        res,
+        result.ok ? 200 : 500,
+        result
+      );
     } catch (error) {
       return json(
         res,

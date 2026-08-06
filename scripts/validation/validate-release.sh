@@ -138,3 +138,11 @@ else
   echo "FAIL: Node.js is required for runtime storage validation"
   exit 1
 fi
+
+# LUKE AI STUDIO runtime storage usage and cleanup validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-storage-cleanup.cjs
+else
+  echo "FAIL: Node.js is required for runtime storage cleanup validation"
+  exit 1
+fi
