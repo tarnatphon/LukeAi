@@ -217,6 +217,27 @@ export default function PersistentTextChat() {
     setRuntimeArgumentsText,
   ] = useState("");
 
+  // LUKE_AI_RUNTIME_DETECTION_DASHBOARD_UI_V1
+  const [
+    detectedTextRuntimes,
+    setDetectedTextRuntimes,
+  ] = useState([]);
+
+  const [
+    runtimeDetectionLoading,
+    setRuntimeDetectionLoading,
+  ] = useState(false);
+
+  const [
+    configuringRuntimeType,
+    setConfiguringRuntimeType,
+  ] = useState("");
+
+  const [
+    runtimeDetectionInfo,
+    setRuntimeDetectionInfo,
+  ] = useState(null);
+
   const [
     resettingCircuitModelId,
     setResettingCircuitModelId,
@@ -1204,6 +1225,132 @@ export default function PersistentTextChat() {
       ],
     );
 
+  const detectInstalledTextRuntimes =
+    useCallback(
+      async () => {
+        setRuntimeDetectionLoading(true);
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/detect",
+            );
+
+          setDetectedTextRuntimes(
+            Array.isArray(
+              data.detections,
+            )
+              ? data.detections
+              : [],
+          );
+
+          setRuntimeDetectionInfo({
+            platform:
+              data.platform || "",
+            architecture:
+              data.architecture || "",
+            appleSilicon:
+              data.appleSilicon === true,
+            installedCount:
+              data.installedCount || 0,
+            runningCount:
+              data.runningCount || 0,
+            detectedAt:
+              data.detectedAt || null,
+          });
+
+          setError("");
+        } catch (detectionError) {
+          setDetectedTextRuntimes([]);
+          setRuntimeDetectionInfo(null);
+
+          setError(
+            detectionError instanceof Error
+              ? detectionError.message
+              : String(detectionError),
+          );
+        } finally {
+          setRuntimeDetectionLoading(false);
+        }
+      },
+      [requestJson],
+    );
+
+  const configureDetectedTextRuntime =
+    useCallback(
+      async (runtimeType) => {
+        setConfiguringRuntimeType(
+          runtimeType,
+        );
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/configure-detected",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  runtimeType,
+                }),
+              },
+            );
+
+          if (data.policy) {
+            setRuntimeSupervisorPolicy(
+              data.policy,
+            );
+
+            setRuntimeArgumentsText(
+              JSON.stringify(
+                data.policy.runtime
+                  ?.arguments || [],
+                null,
+                2,
+              ),
+            );
+          }
+
+          if (data.supervisor) {
+            setRuntimeSupervisor(
+              data.supervisor,
+            );
+          }
+
+          await detectInstalledTextRuntimes();
+
+          if (
+            typeof loadRuntimeSupervisorPolicy ===
+            "function"
+          ) {
+            await loadRuntimeSupervisorPolicy();
+          }
+
+          if (
+            typeof refreshRuntimeSupervisor ===
+            "function"
+          ) {
+            await refreshRuntimeSupervisor();
+          }
+
+          setError("");
+        } catch (configureError) {
+          setError(
+            configureError instanceof Error
+              ? configureError.message
+              : String(configureError),
+          );
+        } finally {
+          setConfiguringRuntimeType("");
+        }
+      },
+      [
+        detectInstalledTextRuntimes,
+        loadRuntimeSupervisorPolicy,
+        refreshRuntimeSupervisor,
+        requestJson,
+      ],
+    );
+
   const refreshRuntimeSupervisor =
     useCallback(
       async () => {
@@ -1425,6 +1572,7 @@ export default function PersistentTextChat() {
   }, [
     loadRuntimeSupervisorPolicy,
     refreshRuntimeSupervisor,
+    detectInstalledTextRuntimes,
   ]);
 
   const refreshModelHealth =
@@ -2696,6 +2844,200 @@ export default function PersistentTextChat() {
             </article>
           )}
         </div>
+
+        <section className="persistent-chat-runtime-detection-panel">
+          <div className="persistent-chat-runtime-detection-heading">
+            <div>
+              <strong>
+                Runtime Auto-Detection
+              </strong>
+
+              <span>
+                ตรวจหา Ollama, llama.cpp และ MLX ที่ติดตั้งในเครื่อง
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="m3-btn m3-btn-outlined"
+              disabled={runtimeDetectionLoading}
+              onClick={
+                detectInstalledTextRuntimes
+              }
+            >
+              {runtimeDetectionLoading
+                ? "กำลังตรวจหา..."
+                : "ตรวจหา Runtime"}
+            </button>
+          </div>
+
+          {runtimeDetectionInfo && (
+            <div className="persistent-chat-runtime-detection-system">
+              <span>
+                {runtimeDetectionInfo.platform ||
+                  "unknown"}
+                {" · "}
+                {runtimeDetectionInfo.architecture ||
+                  "unknown"}
+              </span>
+
+              {runtimeDetectionInfo.appleSilicon && (
+                <strong>
+                  Apple Silicon
+                </strong>
+              )}
+
+              <span>
+                พบที่ติดตั้ง
+                {" "}
+                {runtimeDetectionInfo.installedCount}
+                {" "}
+                รายการ
+              </span>
+
+              <span>
+                กำลังทำงาน
+                {" "}
+                {runtimeDetectionInfo.runningCount}
+                {" "}
+                รายการ
+              </span>
+            </div>
+          )}
+
+          {runtimeDetectionLoading &&
+          detectedTextRuntimes.length === 0 ? (
+            <div className="persistent-chat-runtime-detection-empty">
+              กำลังตรวจสอบ Runtime ในเครื่อง...
+            </div>
+          ) : detectedTextRuntimes.length === 0 ? (
+            <div className="persistent-chat-runtime-detection-empty">
+              กด “ตรวจหา Runtime” เพื่อค้นหา Runtime ที่ติดตั้งในเครื่อง
+            </div>
+          ) : (
+            <div className="persistent-chat-runtime-detection-grid">
+              {detectedTextRuntimes.map(
+                (runtime) => (
+                  <article
+                    key={runtime.runtimeType}
+                    className={
+                      "persistent-chat-runtime-detection-card " +
+                      (
+                        runtime.installed
+                          ? "persistent-chat-runtime-installed"
+                          : "persistent-chat-runtime-not-installed"
+                      )
+                    }
+                  >
+                    <header>
+                      <div>
+                        <strong>
+                          {runtime.displayName ||
+                            runtime.runtimeType}
+                        </strong>
+
+                        <span>
+                          {runtime.runtimeType}
+                        </span>
+                      </div>
+
+                      <span
+                        className={
+                          "persistent-chat-runtime-state " +
+                          (
+                            runtime.running
+                              ? "persistent-chat-runtime-running"
+                              : runtime.installed
+                                ? "persistent-chat-runtime-available"
+                                : "persistent-chat-runtime-missing"
+                          )
+                        }
+                      >
+                        {runtime.running
+                          ? "Running"
+                          : runtime.installed
+                            ? "Installed"
+                            : "Not Installed"}
+                      </span>
+                    </header>
+
+                    <div className="persistent-chat-runtime-detection-detail">
+                      <span>
+                        Executable
+                      </span>
+
+                      <strong>
+                        {runtime.executable ||
+                          "ไม่พบในเครื่อง"}
+                      </strong>
+                    </div>
+
+                    <div className="persistent-chat-runtime-detection-detail">
+                      <span>
+                        Version
+                      </span>
+
+                      <strong>
+                        {runtime.version ||
+                          "ไม่ทราบเวอร์ชัน"}
+                      </strong>
+                    </div>
+
+                    <div className="persistent-chat-runtime-detection-detail">
+                      <span>
+                        Health
+                      </span>
+
+                      <strong>
+                        {runtime.health?.reachable
+                          ? `HTTP ${runtime.health.statusCode || 200}`
+                          : "Not reachable"}
+                      </strong>
+                    </div>
+
+                    {runtime.preset
+                      ?.requiresModelPath && (
+                      <div className="persistent-chat-runtime-detection-note">
+                        ต้องเลือก Model Path หลังจาก Configure
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className={
+                        runtime.installed
+                          ? "m3-btn m3-btn-filled"
+                          : "m3-btn m3-btn-outlined"
+                      }
+                      disabled={
+                        !runtime.installed ||
+                        Boolean(
+                          configuringRuntimeType,
+                        )
+                      }
+                      onClick={() =>
+                        configureDetectedTextRuntime(
+                          runtime.runtimeType,
+                        )
+                      }
+                    >
+                      {configuringRuntimeType ===
+                      runtime.runtimeType
+                        ? "กำลังตั้งค่า..."
+                        : runtime.installed
+                          ? "One-Click Configure"
+                          : "ยังไม่ได้ติดตั้ง"}
+                    </button>
+                  </article>
+                ),
+              )}
+            </div>
+          )}
+
+          <div className="persistent-chat-runtime-detection-warning">
+            ระบบจะไม่เปลี่ยนการตั้งค่า Runtime จนกว่าจะกด One-Click Configure
+          </div>
+        </section>
 
         <section className="persistent-chat-supervisor-panel">
           <div className="persistent-chat-supervisor-heading">

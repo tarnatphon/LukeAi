@@ -6702,3 +6702,208 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-column: auto;
   }
 }
+
+/* LUKE_AI_RUNTIME_DETECTION_DASHBOARD_STYLES_V1 */
+.persistent-chat-runtime-detection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 15px;
+  border-top:
+    1px solid var(--border-color-muted);
+  background:
+    var(--md-sys-color-surface-container-low);
+}
+
+.persistent-chat-runtime-detection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.persistent-chat-runtime-detection-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-runtime-detection-heading span,
+.persistent-chat-runtime-detection-empty {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.73rem;
+}
+
+.persistent-chat-runtime-detection-system {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.persistent-chat-runtime-detection-system span,
+.persistent-chat-runtime-detection-system strong {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background:
+    var(--md-sys-color-surface);
+  font-size: 0.68rem;
+}
+
+.persistent-chat-runtime-detection-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.persistent-chat-runtime-detection-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 12px;
+  background:
+    var(--md-sys-color-surface);
+}
+
+.persistent-chat-runtime-detection-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.persistent-chat-runtime-detection-card header > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-runtime-detection-card header > div span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.67rem;
+}
+
+.persistent-chat-runtime-state {
+  flex-shrink: 0;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 0.63rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.persistent-chat-runtime-running {
+  color:
+    var(--md-sys-color-success);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-success)
+      11%,
+      transparent
+    );
+}
+
+.persistent-chat-runtime-available {
+  color:
+    var(--md-sys-color-primary);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-primary)
+      10%,
+      transparent
+    );
+}
+
+.persistent-chat-runtime-missing {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  background:
+    var(--md-sys-color-surface-container-high);
+}
+
+.persistent-chat-runtime-installed {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-primary)
+      36%,
+      var(--border-color-muted)
+    );
+}
+
+.persistent-chat-runtime-not-installed {
+  opacity: 0.72;
+}
+
+.persistent-chat-runtime-detection-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-runtime-detection-detail span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.65rem;
+}
+
+.persistent-chat-runtime-detection-detail strong {
+  overflow: hidden;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persistent-chat-runtime-detection-note {
+  padding: 7px 8px;
+  border-radius: 8px;
+  color:
+    var(--md-sys-color-tertiary);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-tertiary)
+      9%,
+      transparent
+    );
+  font-size: 0.68rem;
+}
+
+.persistent-chat-runtime-detection-warning {
+  padding: 8px 10px;
+  border-radius: 9px;
+  color:
+    var(--md-sys-color-on-surface-variant);
+  background:
+    var(--md-sys-color-surface);
+  font-size: 0.7rem;
+}
+
+@media (max-width: 1100px) {
+  .persistent-chat-runtime-detection-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .persistent-chat-runtime-detection-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .persistent-chat-runtime-detection-grid {
+    grid-template-columns: 1fr;
+  }
+}
