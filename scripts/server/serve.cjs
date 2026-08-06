@@ -11695,6 +11695,826 @@ function getTextRuntimeSessionStatus(
   );
 }
 
+
+// LUKE_AI_TEXT_GENERATION_STREAMING_V1
+const textGenerationPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "generation-policy.json"
+);
+
+const activeTextGenerations = new Map();
+
+function readTextGenerationPolicy() {
+  return readJsonFileStrict(
+    textGenerationPolicyPath,
+    "Text generation policy"
+  );
+}
+
+function writeTextGenerationEvent(
+  response,
+  event,
+  data
+) {
+  if (
+    response.destroyed ||
+    response.writableEnded
+  ) {
+    return;
+  }
+
+  response.write(
+    `event: ${event}\n`
+  );
+
+  response.write(
+    `data: ${JSON.stringify(data)}\n\n`
+  );
+}
+
+function getTextGenerationMessages(
+  conversation
+) {
+  const policy =
+    readTextGenerationPolicy();
+
+  const messages = [];
+
+  if (
+    policy.conversation
+      ?.includeRestorePrompt !== false
+  ) {
+    const restorePrompt =
+      buildConversationRestorePrompt(
+        conversation
+      );
+
+    if (restorePrompt) {
+      messages.push({
+        role: "system",
+        content: restorePrompt,
+      });
+    }
+  } else if (
+    conversation.systemPrompt
+  ) {
+    messages.push({
+      role: "system",
+      content:
+        conversation.systemPrompt,
+    });
+  }
+
+  if (
+    policy.conversation
+      ?.includeRecentMessages !== false
+  ) {
+    const maximumRecentMessages =
+      Number(
+        policy.conversation
+          ?.maximumRecentMessages
+      ) || 20;
+
+    const recentMessages =
+      (
+        conversation.messages || []
+      )
+        .filter(
+          (message) =>
+            [
+              "user",
+              "assistant",
+              "system",
+            ].includes(message.role)
+        )
+        .slice(
+          -maximumRecentMessages
+        );
+
+    for (const message of recentMessages) {
+      messages.push({
+        role: message.role,
+        content: message.content,
+      });
+    }
+  }
+
+  return messages;
+}
+
+function getTextGenerationModelId(
+  conversation
+) {
+  if (conversation.modelId) {
+    return conversation.modelId;
+  }
+
+  try {
+    const registry =
+      readInstalledTextModels();
+
+    if (registry.activeModelId) {
+      return registry.activeModelId;
+    }
+
+    const latest =
+      [...(registry.models || [])]
+        .sort(
+          (left, right) =>
+            new Date(
+              right.installedAt || 0
+            ).getTime() -
+            new Date(
+              left.installedAt || 0
+            ).getTime()
+        )[0];
+
+    return (
+      latest?.modelId ||
+      "local-model"
+    );
+  } catch {
+    return "local-model";
+  }
+}
+
+function createTextGenerationPayload(
+  conversation,
+  overrides = {}
+) {
+  const policy =
+    readTextGenerationPolicy();
+
+  return {
+    model:
+      overrides.modelId ||
+      getTextGenerationModelId(
+        conversation
+      ),
+    messages:
+      getTextGenerationMessages(
+        conversation
+      ),
+    stream: true,
+    temperature:
+      Number(
+        overrides.temperature ??
+        conversation.settings
+          ?.temperature ??
+        policy.generation
+          ?.temperature
+      ) || 0.7,
+    top_p:
+      Number(
+        overrides.topP ??
+        policy.generation?.topP
+      ) || 0.9,
+    max_tokens:
+      Number(
+        overrides.maxTokens ??
+        policy.generation
+          ?.maxTokens
+      ) || 2048,
+    stop:
+      Array.isArray(
+        overrides.stop
+      )
+        ? overrides.stop
+        : (
+            policy.generation
+              ?.stopSequences || []
+          ),
+  };
+}
+
+function extractTextGenerationDelta(
+  payload
+) {
+  if (!payload) {
+    return "";
+  }
+
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  const openAiDelta =
+    payload.choices?.[0]
+      ?.delta?.content;
+
+  if (
+    typeof openAiDelta ===
+    "string"
+  ) {
+    return openAiDelta;
+  }
+
+  const openAiText =
+    payload.choices?.[0]
+      ?.text;
+
+  if (
+    typeof openAiText ===
+    "string"
+  ) {
+    return openAiText;
+  }
+
+  if (
+    typeof payload.content ===
+    "string"
+  ) {
+    return payload.content;
+  }
+
+  if (
+    typeof payload.token ===
+    "string"
+  ) {
+    return payload.token;
+  }
+
+  if (
+    typeof payload.response ===
+    "string"
+  ) {
+    return payload.response;
+  }
+
+  return "";
+}
+
+function appendAssistantGenerationMessage(
+  conversationId,
+  content,
+  {
+    modelId = null,
+    stopped = false,
+    generationId = null,
+  } = {}
+) {
+  const normalized =
+    String(content || "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return appendTextChatMessage(
+    conversationId,
+    {
+      role: "assistant",
+      content: normalized,
+      modelId,
+      metadata: {
+        source:
+          "text-runtime-stream",
+        stopped,
+        partial: stopped,
+        generationId,
+        autosaved: true,
+      },
+    }
+  );
+}
+
+async function streamTextRuntimeGeneration(
+  conversationId,
+  response,
+  options = {}
+) {
+  const policy =
+    readTextGenerationPolicy();
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    policy.conversation
+      ?.preventConcurrentGeneration !==
+      false &&
+    activeTextGenerations.has(
+      conversationId
+    )
+  ) {
+    const error = new Error(
+      "A response is already being generated for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const controller =
+    new AbortController();
+
+  const generationId =
+    createTextChatId(
+      "generation"
+    );
+
+  const runtimePolicy =
+    readTextRuntimeSessionPolicy();
+
+  const generationPath =
+    policy.runtime
+      ?.generationPath ||
+    "/v1/chat/completions";
+
+  const timeoutMs =
+    Number(
+      policy.runtime
+        ?.requestTimeoutMs
+    ) || 300000;
+
+  const timer =
+    setTimeout(
+      () => controller.abort(),
+      timeoutMs
+    );
+
+  const state = {
+    generationId,
+    conversationId,
+    controller,
+    status: "starting",
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    accumulatedText: "",
+    modelId:
+      getTextGenerationModelId(
+        conversation
+      ),
+    stopped: false,
+    error: null,
+  };
+
+  activeTextGenerations.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "start",
+    {
+      generationId,
+      conversationId,
+      modelId:
+        state.modelId,
+    }
+  );
+
+  try {
+    state.status = "streaming";
+
+    const runtimeResponse =
+      await fetch(
+        buildTextRuntimeUrl(
+          generationPath
+        ),
+        {
+          method: "POST",
+          headers: {
+            "content-type":
+              "application/json",
+            accept:
+              "text/event-stream, application/json",
+          },
+          body: JSON.stringify(
+            createTextGenerationPayload(
+              conversation,
+              options
+            )
+          ),
+          signal:
+            controller.signal,
+        }
+      );
+
+    if (!runtimeResponse.ok) {
+      const errorText =
+        await runtimeResponse.text();
+
+      throw new Error(
+        errorText ||
+        `Text runtime HTTP ${runtimeResponse.status}`
+      );
+    }
+
+    if (!runtimeResponse.body) {
+      throw new Error(
+        "Text runtime returned no response body."
+      );
+    }
+
+    const contentType =
+      String(
+        runtimeResponse.headers.get(
+          "content-type"
+        ) || ""
+      ).toLowerCase();
+
+    if (
+      contentType.includes(
+        "application/json"
+      )
+    ) {
+      const payload =
+        await runtimeResponse.json();
+
+      const content =
+        extractTextGenerationDelta(
+          payload
+        );
+
+      if (content) {
+        state.accumulatedText +=
+          content;
+
+        writeTextGenerationEvent(
+          response,
+          "delta",
+          {
+            generationId,
+            content,
+          }
+        );
+      }
+    } else {
+      const reader =
+        runtimeResponse.body
+          .getReader();
+
+      const decoder =
+        new TextDecoder();
+
+      let buffer = "";
+
+      while (true) {
+        const result =
+          await reader.read();
+
+        if (result.done) {
+          break;
+        }
+
+        buffer += decoder.decode(
+          result.value,
+          {
+            stream: true,
+          }
+        );
+
+        const lines =
+          buffer.split(/\r?\n/);
+
+        buffer =
+          lines.pop() || "";
+
+        for (const rawLine of lines) {
+          const line =
+            rawLine.trim();
+
+          if (
+            !line ||
+            line.startsWith(":")
+          ) {
+            continue;
+          }
+
+          let serialized = line;
+
+          if (
+            serialized.startsWith(
+              "data:"
+            )
+          ) {
+            serialized =
+              serialized
+                .slice(5)
+                .trim();
+          }
+
+          if (
+            serialized === "[DONE]"
+          ) {
+            continue;
+          }
+
+          let payload = null;
+
+          try {
+            payload =
+              JSON.parse(serialized);
+          } catch {
+            payload = serialized;
+          }
+
+          const content =
+            extractTextGenerationDelta(
+              payload
+            );
+
+          if (!content) {
+            continue;
+          }
+
+          state.accumulatedText +=
+            content;
+
+          writeTextGenerationEvent(
+            response,
+            "delta",
+            {
+              generationId,
+              content,
+            }
+          );
+        }
+      }
+
+      const remaining =
+        buffer.trim();
+
+      if (
+        remaining &&
+        remaining !== "[DONE]"
+      ) {
+        const serialized =
+          remaining.startsWith(
+            "data:"
+          )
+            ? remaining
+                .slice(5)
+                .trim()
+            : remaining;
+
+        let payload = null;
+
+        try {
+          payload =
+            JSON.parse(serialized);
+        } catch {
+          payload = serialized;
+        }
+
+        const content =
+          extractTextGenerationDelta(
+            payload
+          );
+
+        if (content) {
+          state.accumulatedText +=
+            content;
+
+          writeTextGenerationEvent(
+            response,
+            "delta",
+            {
+              generationId,
+              content,
+            }
+          );
+        }
+      }
+    }
+
+    state.status = "completed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    let savedMessage = null;
+
+    if (
+      policy.generation
+        ?.autosaveAssistantResponse !==
+        false
+    ) {
+      const saved =
+        appendAssistantGenerationMessage(
+          conversationId,
+          state.accumulatedText,
+          {
+            modelId:
+              state.modelId,
+            stopped: false,
+            generationId,
+          }
+        );
+
+      savedMessage =
+        saved?.message || null;
+    }
+
+    writeTextGenerationEvent(
+      response,
+      "complete",
+      {
+        generationId,
+        conversationId,
+        content:
+          state.accumulatedText,
+        message:
+          savedMessage,
+        autosaved:
+          Boolean(savedMessage),
+      }
+    );
+  } catch (error) {
+    const stopped =
+      error?.name ===
+        "AbortError" ||
+      state.stopped === true;
+
+    state.stopped = stopped;
+
+    state.status =
+      stopped
+        ? "stopped"
+        : "failed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    state.error =
+      stopped
+        ? null
+        : (
+            error instanceof Error
+              ? error.message
+              : String(error)
+          );
+
+    let savedMessage = null;
+
+    const minimumPartialCharacters =
+      Number(
+        policy.generation
+          ?.minimumPartialResponseCharacters
+      ) || 1;
+
+    if (
+      stopped &&
+      policy.generation
+        ?.savePartialResponseWhenStopped !==
+        false &&
+      state.accumulatedText
+        .trim().length >=
+        minimumPartialCharacters
+    ) {
+      const saved =
+        appendAssistantGenerationMessage(
+          conversationId,
+          state.accumulatedText,
+          {
+            modelId:
+              state.modelId,
+            stopped: true,
+            generationId,
+          }
+        );
+
+      savedMessage =
+        saved?.message || null;
+    }
+
+    if (stopped) {
+      writeTextGenerationEvent(
+        response,
+        "stopped",
+        {
+          generationId,
+          conversationId,
+          content:
+            state.accumulatedText,
+          message:
+            savedMessage,
+          autosaved:
+            Boolean(savedMessage),
+        }
+      );
+    } else {
+      writeTextGenerationEvent(
+        response,
+        "error",
+        {
+          generationId,
+          conversationId,
+          error:
+            state.error,
+        }
+      );
+    }
+  } finally {
+    clearTimeout(timer);
+
+    activeTextGenerations.delete(
+      conversationId
+    );
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopTextRuntimeGeneration(
+  conversationId
+) {
+  const state =
+    activeTextGenerations.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active generation.",
+    };
+  }
+
+  state.stopped = true;
+  state.status = "stopping";
+  state.controller.abort();
+
+  return {
+    stopped: true,
+    generationId:
+      state.generationId,
+  };
+}
+
+function getTextRuntimeGenerationStatus(
+  conversationId
+) {
+  const state =
+    activeTextGenerations.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      conversationId,
+      active: false,
+      status: "idle",
+      generationId: null,
+    };
+  }
+
+  return {
+    conversationId,
+    active: true,
+    status:
+      state.status,
+    generationId:
+      state.generationId,
+    startedAt:
+      state.startedAt,
+    accumulatedCharacters:
+      state.accumulatedText.length,
+    modelId:
+      state.modelId,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -12395,6 +13215,164 @@ const server = http.createServer(async (req, res) => {
         200,
         buildTextModelHardwareCompatibility()
       );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/generate-stream
+  if (
+    req.url === "/api/text-runtime/generate-stream" &&
+    req.method === "POST"
+  ) {
+    let body;
+
+    try {
+      body =
+        await readJsonRequestBody(req);
+    } catch (error) {
+      return json(res, 400, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+
+    if (
+      typeof body.conversationId !==
+        "string" ||
+      !body.conversationId.trim()
+    ) {
+      return json(res, 400, {
+        ok: false,
+        error:
+          "conversationId is required",
+      });
+    }
+
+    try {
+      await streamTextRuntimeGeneration(
+        body.conversationId.trim(),
+        res,
+        {
+          modelId:
+            body.modelId || null,
+          temperature:
+            body.temperature,
+          topP:
+            body.topP,
+          maxTokens:
+            body.maxTokens,
+          stop:
+            body.stop,
+        }
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/generation/stop
+  if (
+    req.url === "/api/text-runtime/generation/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopTextRuntimeGeneration(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/generation/status
+  if (
+    req.url === "/api/text-runtime/generation/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...getTextRuntimeGenerationStatus(
+          body.conversationId.trim()
+        ),
+      });
     } catch (error) {
       return json(res, 500, {
         ok: false,

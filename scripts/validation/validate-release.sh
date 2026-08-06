@@ -226,3 +226,11 @@ else
   echo "FAIL: Node.js is required for Text Runtime Session validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Text Generation Streaming validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-text-generation-streaming.cjs
+else
+  echo "FAIL: Node.js is required for Text Generation Streaming validation"
+  exit 1
+fi

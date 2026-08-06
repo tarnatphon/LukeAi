@@ -52,6 +52,20 @@ export default function PersistentTextChat() {
   const [saving, setSaving] =
     useState(false);
 
+  // LUKE_AI_TEXT_GENERATION_STREAMING_UI_V1
+  const [
+    generating,
+    setGenerating,
+  ] = useState(false);
+
+  const [
+    streamingResponse,
+    setStreamingResponse,
+  ] = useState("");
+
+  const generationAbortRef =
+    useRef(null);
+
   // LUKE_AI_TEXT_CHAT_MEMORY_UI_V1
   const [
     memoryStatus,
@@ -537,13 +551,238 @@ export default function PersistentTextChat() {
       [requestJson],
     );
 
+  const generateAssistantResponse =
+    useCallback(
+      async (
+        conversationId,
+      ) => {
+        setGenerating(true);
+        setStreamingResponse("");
+        setError("");
+
+        const controller =
+          new AbortController();
+
+        generationAbortRef.current =
+          controller;
+
+        try {
+          const response = await fetch(
+            "/api/text-runtime/generate-stream",
+            {
+              method: "POST",
+              headers: {
+                "content-type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                conversationId,
+              }),
+              signal:
+                controller.signal,
+            },
+          );
+
+          if (!response.ok) {
+            const errorText =
+              await response.text();
+
+            let message =
+              errorText ||
+              `HTTP ${response.status}`;
+
+            try {
+              const parsed =
+                JSON.parse(errorText);
+
+              message =
+                parsed.error ||
+                message;
+            } catch {}
+
+            throw new Error(message);
+          }
+
+          if (!response.body) {
+            throw new Error(
+              "Streaming response is unavailable.",
+            );
+          }
+
+          const reader =
+            response.body.getReader();
+
+          const decoder =
+            new TextDecoder();
+
+          let buffer = "";
+          let accumulated = "";
+
+          while (true) {
+            const result =
+              await reader.read();
+
+            if (result.done) {
+              break;
+            }
+
+            buffer += decoder.decode(
+              result.value,
+              {
+                stream: true,
+              },
+            );
+
+            const frames =
+              buffer.split("\\n\\n");
+
+            buffer =
+              frames.pop() || "";
+
+            for (const frame of frames) {
+              const lines =
+                frame.split(/\\r?\\n/);
+
+              let eventName =
+                "message";
+
+              let dataText = "";
+
+              for (const line of lines) {
+                if (
+                  line.startsWith(
+                    "event:",
+                  )
+                ) {
+                  eventName =
+                    line
+                      .slice(6)
+                      .trim();
+                }
+
+                if (
+                  line.startsWith(
+                    "data:",
+                  )
+                ) {
+                  dataText +=
+                    line
+                      .slice(5)
+                      .trim();
+                }
+              }
+
+              if (!dataText) {
+                continue;
+              }
+
+              let payload = null;
+
+              try {
+                payload =
+                  JSON.parse(dataText);
+              } catch {
+                continue;
+              }
+
+              if (
+                eventName === "delta" &&
+                typeof payload.content ===
+                  "string"
+              ) {
+                accumulated +=
+                  payload.content;
+
+                setStreamingResponse(
+                  accumulated,
+                );
+              }
+
+              if (
+                eventName === "error"
+              ) {
+                throw new Error(
+                  payload.error ||
+                  "Text generation failed.",
+                );
+              }
+            }
+          }
+
+          setStreamingResponse("");
+
+          await refresh();
+
+          await refreshMemoryStatus(
+            conversationId,
+          );
+        } catch (generationError) {
+          if (
+            generationError?.name !==
+            "AbortError"
+          ) {
+            setError(
+              generationError instanceof Error
+                ? generationError.message
+                : String(
+                    generationError,
+                  ),
+            );
+          }
+        } finally {
+          generationAbortRef.current =
+            null;
+
+          setGenerating(false);
+        }
+      },
+      [
+        refresh,
+        refreshMemoryStatus,
+      ],
+    );
+
+  const stopGeneration =
+    useCallback(
+      async () => {
+        if (!activeConversationId) {
+          return;
+        }
+
+        try {
+          await requestJson(
+            "/api/text-runtime/generation/stop",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                conversationId:
+                  activeConversationId,
+              }),
+            },
+          );
+        } catch {}
+
+        generationAbortRef.current
+          ?.abort();
+
+        setGenerating(false);
+      },
+      [
+        activeConversationId,
+        requestJson,
+      ],
+    );
+
   const sendMessage =
     useCallback(
       async () => {
         const content =
           draft.trim();
 
-        if (!content) {
+        if (
+          !content ||
+          generating
+        ) {
           return;
         }
 
@@ -607,13 +846,10 @@ export default function PersistentTextChat() {
 
           setDraft("");
 
-          window.setTimeout(
-            () => {
-              refreshMemoryStatus(
-                conversationId,
-              );
-            },
-            250,
+          setSaving(false);
+
+          await generateAssistantResponse(
+            conversationId,
           );
         } catch (sendError) {
           setError(
@@ -621,13 +857,15 @@ export default function PersistentTextChat() {
               ? sendError.message
               : String(sendError),
           );
-        } finally {
+
           setSaving(false);
         }
       },
       [
         activeConversationId,
         draft,
+        generateAssistantResponse,
+        generating,
         requestJson,
       ],
     );
@@ -1053,6 +1291,23 @@ export default function PersistentTextChat() {
               ระบบจะบันทึกประวัติให้อัตโนมัติ
             </div>
           )}
+
+          {generating && (
+            <article className="persistent-chat-message persistent-chat-message-assistant persistent-chat-message-streaming">
+              <div>
+                assistant
+              </div>
+
+              <p>
+                {streamingResponse ||
+                  "กำลังประมวลผล..."}
+
+                <span className="persistent-chat-streaming-cursor">
+                  ▍
+                </span>
+              </p>
+            </article>
+          )}
         </div>
 
         <div className="persistent-chat-composer">
@@ -1067,7 +1322,8 @@ export default function PersistentTextChat() {
             onKeyDown={(event) => {
               if (
                 event.key === "Enter" &&
-                !event.shiftKey
+                !event.shiftKey &&
+                !generating
               ) {
                 event.preventDefault();
                 sendMessage();
@@ -1081,18 +1337,28 @@ export default function PersistentTextChat() {
               Autosave เปิดใช้งาน
             </span>
 
-            <button
-              type="button"
-              className="m3-btn m3-btn-filled"
-              disabled={
-                saving ||
-                !draft.trim()
-              }
-              onClick={sendMessage}
-            >
-              <Send size={16} />
-              ส่งข้อความ
-            </button>
+            {generating ? (
+              <button
+                type="button"
+                className="m3-btn m3-btn-error"
+                onClick={stopGeneration}
+              >
+                หยุดการสร้างคำตอบ
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="m3-btn m3-btn-filled"
+                disabled={
+                  saving ||
+                  !draft.trim()
+                }
+                onClick={sendMessage}
+              >
+                <Send size={16} />
+                ส่งข้อความ
+              </button>
+            )}
           </div>
         </div>
       </div>

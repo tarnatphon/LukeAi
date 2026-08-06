@@ -5731,3 +5731,28 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-direction: column;
   }
 }
+
+/* LUKE_AI_TEXT_GENERATION_STREAMING_STYLES_V1 */
+.persistent-chat-message-streaming {
+  min-width: 160px;
+}
+
+.persistent-chat-streaming-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  animation:
+    persistent-chat-cursor-blink
+    0.8s steps(2, start)
+    infinite;
+}
+
+@keyframes persistent-chat-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.persistent-chat-composer textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
