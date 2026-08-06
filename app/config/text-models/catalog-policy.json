@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "luke-text-model-catalog",
+  "catalogMode": "signed",
+  "signatureRequired": true,
+  "downloadPolicy": {
+    "maximumBatchSelection": 3,
+    "maximumConcurrentDownloads": 1,
+    "autoStartNextQueueItem": true,
+    "allowPause": true,
+    "allowResume": true,
+    "allowCancel": true,
+    "allowRetry": true,
+    "allowSkip": true,
+    "allowQueueReordering": true,
+    "persistQueueAcrossRestarts": true
+  },
+  "installationPolicy": {
+    "verifySha256": true,
+    "verifyCatalogSignature": true,
+    "sideBySideInstallation": true,
+    "testBeforeActivation": true,
+    "keepPreviousVersionForRollback": true,
+    "confirmBeforeDeletingPreviousVersion": true
+  },
+  "storagePolicy": {
+    "usePreferredLocation": true,
+    "fallbackToLocalStaging": true,
+    "transferWhenPreferredLocationReturns": "ask",
+    "verifyTransferBeforeCleanup": true,
+    "confirmBeforeDeletingLocalCopy": true
+  },
+  "updatePolicy": {
+    "automaticCheck": true,
+    "automaticCheckIntervalHours": 24,
+    "automaticDownload": false,
+    "automaticActivation": false,
+    "showUpdateInsideModelCard": true
+  }
+}

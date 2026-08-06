@@ -146,3 +146,11 @@ else
   echo "FAIL: Node.js is required for runtime storage cleanup validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Text Model Manager foundation validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-text-model-manager-foundation.cjs
+else
+  echo "FAIL: Node.js is required for Text Model Manager validation"
+  exit 1
+fi
