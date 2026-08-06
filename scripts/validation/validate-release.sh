@@ -98,3 +98,11 @@ else
   echo "FAIL: Node.js is required for backend API smoke testing"
   exit 1
 fi
+
+# LUKE AI STUDIO runtime dependency catalog validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-dependencies.cjs
+else
+  echo "FAIL: Node.js is required for runtime dependency validation"
+  exit 1
+fi

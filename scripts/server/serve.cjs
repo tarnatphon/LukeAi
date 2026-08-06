@@ -5832,6 +5832,199 @@ function json(res, code, obj) {
 }
 
 // ── HTTP Server ───────────────────────────────────────────────────────────────
+
+// LUKE_AI_RUNTIME_DEPENDENCY_API_V2
+const runtimeDependencyCatalogPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "runtime-dependencies.json"
+);
+
+function readRuntimeDependencyCatalog() {
+  const raw = fs.readFileSync(
+    runtimeDependencyCatalogPath,
+    "utf8"
+  );
+
+  const catalog = JSON.parse(raw);
+
+  if (
+    !catalog ||
+    !Array.isArray(catalog.dependencies)
+  ) {
+    throw new Error(
+      "Runtime dependency catalog is invalid."
+    );
+  }
+
+  return catalog;
+}
+
+function resolveRuntimeDependencyPath(relativePath) {
+  return path.resolve(ROOT, relativePath);
+}
+
+function inspectRuntimeDependencyCheck(check) {
+  if (!check || typeof check !== "object") {
+    return {
+      ok: false,
+      error: "Invalid runtime dependency check",
+    };
+  }
+
+  if (
+    check.type === "file" ||
+    check.type === "executable"
+  ) {
+    const absolutePath =
+      resolveRuntimeDependencyPath(check.path);
+
+    const exists = fs.existsSync(absolutePath);
+    let executable = false;
+
+    if (exists && check.type === "executable") {
+      try {
+        fs.accessSync(
+          absolutePath,
+          fs.constants.X_OK
+        );
+
+        executable = true;
+      } catch {}
+    }
+
+    return {
+      type: check.type,
+      path: absolutePath,
+      exists,
+      executable:
+        check.type === "executable"
+          ? executable
+          : undefined,
+      ok:
+        check.type === "executable"
+          ? exists && executable
+          : exists,
+    };
+  }
+
+  if (check.type === "directory") {
+    const absolutePath =
+      resolveRuntimeDependencyPath(check.path);
+
+    const exists = fs.existsSync(absolutePath);
+    let directory = false;
+    let writable = false;
+
+    if (exists) {
+      try {
+        directory =
+          fs.statSync(absolutePath).isDirectory();
+
+        fs.accessSync(
+          absolutePath,
+          fs.constants.W_OK
+        );
+
+        writable = true;
+      } catch {}
+    }
+
+    return {
+      type: check.type,
+      path: absolutePath,
+      exists,
+      directory,
+      writable,
+      ok: exists && directory && writable,
+    };
+  }
+
+  if (check.type === "python-module") {
+    return {
+      type: check.type,
+      module: check.module,
+      status: "not-probed",
+      ok: false,
+    };
+  }
+
+  return {
+    type: check.type,
+    ok: false,
+    error: "Unsupported runtime dependency check",
+  };
+}
+
+function buildRuntimeDependencyStatus() {
+  const catalog = readRuntimeDependencyCatalog();
+
+  const dependencies = catalog.dependencies.map(
+    (dependency) => {
+      const checks = Array.isArray(dependency.checks)
+        ? dependency.checks.map(
+            inspectRuntimeDependencyCheck
+          )
+        : [];
+
+      const installed =
+        checks.length > 0 &&
+        checks.every(
+          (check) => check.ok === true
+        );
+
+      return {
+        id: dependency.id,
+        name: dependency.name,
+        category: dependency.category,
+        required: dependency.required === true,
+        platforms: dependency.platforms || [],
+        installed,
+        state: installed ? "ready" : "missing",
+        checks,
+        install: dependency.install || {},
+      };
+    }
+  );
+
+  const required = dependencies.filter(
+    (dependency) => dependency.required
+  );
+
+  const optional = dependencies.filter(
+    (dependency) => !dependency.required
+  );
+
+  return {
+    ok: required.every(
+      (dependency) => dependency.installed
+    ),
+    platform: `${process.platform}-${process.arch}`,
+    catalogVersion: catalog.catalogVersion,
+    defaultDownloadDirectory:
+      catalog.defaultDownloadDirectory,
+    fallbackDownloadDirectory:
+      catalog.fallbackDownloadDirectory,
+    summary: {
+      total: dependencies.length,
+      ready: dependencies.filter(
+        (dependency) => dependency.installed
+      ).length,
+      missing: dependencies.filter(
+        (dependency) => !dependency.installed
+      ).length,
+      requiredMissing: required.filter(
+        (dependency) => !dependency.installed
+      ).length,
+      optionalMissing: optional.filter(
+        (dependency) => !dependency.installed
+      ).length,
+    },
+    dependencies,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -5844,6 +6037,30 @@ const server = http.createServer(async (req, res) => {
   }
   // ── Management API ────────────────────────────────────────────────────────
   // GET /api/health
+  // GET /api/runtime/dependencies
+  if (
+    req.url === "/api/runtime/dependencies" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildRuntimeDependencyStatus()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+
+    return;
+  }
+
   if (req.url === "/api/health" && req.method === "GET") {
     return json(res, 200, await getHealth());
   }
