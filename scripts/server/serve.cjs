@@ -8832,31 +8832,36 @@ async function downloadTextModelQueueItem(item) {
     }
   );
 
-  updateTextModelQueueItem(
-    item.id,
-    {
-      state: "completed",
-      installedPath:
-        paths.completedFile,
-      checksum: {
-        algorithm: "sha256",
-        expected:
-          expectedSha256,
-        actual:
-          actualSha256,
-        verified: true,
-      },
-      completedAt:
-        new Date().toISOString(),
-      progress: {
-        percent: 100,
-        downloadedBytes,
-        totalBytes:
-          totalBytes ||
+  const completedItem =
+    updateTextModelQueueItem(
+      item.id,
+      {
+        state: "completed",
+        installedPath:
+          paths.completedFile,
+        checksum: {
+          algorithm: "sha256",
+          expected:
+            expectedSha256,
+          actual:
+            actualSha256,
+          verified: true,
+        },
+        completedAt:
+          new Date().toISOString(),
+        progress: {
+          percent: 100,
           downloadedBytes,
-        speedBytesPerSecond: 0,
-      },
-    }
+          totalBytes:
+            totalBytes ||
+            downloadedBytes,
+          speedBytesPerSecond: 0,
+        },
+      }
+    );
+
+  registerInstalledTextModel(
+    completedItem
   );
 }
 
@@ -9189,6 +9194,267 @@ function moveTextModelQueueItem(
   normalizeTextModelQueuePositions();
 
   return getTextModelQueueItem(itemId);
+}
+
+
+// LUKE_AI_TEXT_MODEL_UPDATE_MANAGER_V1
+const installedTextModelsPath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-models",
+  "installed-models.json"
+);
+
+function readInstalledTextModels() {
+  if (!fs.existsSync(installedTextModelsPath)) {
+    const initialState = {
+      schemaVersion: 1,
+      updatedAt: null,
+      activeModelId: null,
+      models: [],
+    };
+
+    writeJsonFileAtomic(
+      installedTextModelsPath,
+      initialState
+    );
+
+    return initialState;
+  }
+
+  const registry = readJsonFileStrict(
+    installedTextModelsPath,
+    "Installed text model registry"
+  );
+
+  if (!Array.isArray(registry.models)) {
+    throw new Error(
+      "Installed text model registry is invalid."
+    );
+  }
+
+  return registry;
+}
+
+function writeInstalledTextModels(registry) {
+  registry.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    installedTextModelsPath,
+    registry
+  );
+}
+
+function compareSemanticVersions(
+  leftVersion,
+  rightVersion
+) {
+  const normalize = (value) =>
+    String(value || "0")
+      .replace(/^v/i, "")
+      .split(/[.+-]/)
+      .slice(0, 3)
+      .map((part) => {
+        const numeric = Number.parseInt(
+          part,
+          10
+        );
+
+        return Number.isFinite(numeric)
+          ? numeric
+          : 0;
+      });
+
+  const left = normalize(leftVersion);
+  const right = normalize(rightVersion);
+
+  for (let index = 0; index < 3; index += 1) {
+    const difference =
+      (left[index] || 0) -
+      (right[index] || 0);
+
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return 0;
+}
+
+function registerInstalledTextModel(
+  queueItem
+) {
+  const registry =
+    readInstalledTextModels();
+
+  const existingIndex =
+    registry.models.findIndex(
+      (model) =>
+        model.modelId === queueItem.modelId &&
+        model.version === queueItem.version &&
+        model.variantId === queueItem.variantId
+    );
+
+  const installedRecord = {
+    id:
+      `${queueItem.modelId}@${queueItem.version}:${queueItem.variantId}`,
+    modelId: queueItem.modelId,
+    modelName: queueItem.modelName,
+    publisher: queueItem.publisher,
+    version: queueItem.version,
+    variantId: queueItem.variantId,
+    quantization: queueItem.quantization,
+    format: queueItem.format,
+    runtime: queueItem.runtime,
+    installedPath: queueItem.installedPath,
+    checksum: queueItem.checksum,
+    installedAt:
+      queueItem.completedAt ||
+      new Date().toISOString(),
+    active: false,
+    rollbackAvailable: false,
+  };
+
+  if (existingIndex >= 0) {
+    registry.models[existingIndex] = {
+      ...registry.models[existingIndex],
+      ...installedRecord,
+    };
+  } else {
+    const olderVersions =
+      registry.models.filter(
+        (model) =>
+          model.modelId === queueItem.modelId &&
+          model.variantId === queueItem.variantId
+      );
+
+    installedRecord.rollbackAvailable =
+      olderVersions.length > 0;
+
+    registry.models.push(
+      installedRecord
+    );
+
+    for (const olderModel of olderVersions) {
+      olderModel.rollbackAvailable = true;
+    }
+  }
+
+  writeInstalledTextModels(registry);
+
+  return installedRecord;
+}
+
+function buildTextModelUpdateStatus() {
+  const catalog =
+    readTextModelCatalog();
+
+  const registry =
+    readInstalledTextModels();
+
+  const models = catalog.models.map(
+    (catalogModel) => {
+      const installedVersions =
+        registry.models
+          .filter(
+            (installedModel) =>
+              installedModel.modelId ===
+              catalogModel.id
+          )
+          .sort(
+            (left, right) =>
+              compareSemanticVersions(
+                right.version,
+                left.version
+              )
+          );
+
+      const latestInstalled =
+        installedVersions[0] || null;
+
+      const updateAvailable =
+        Boolean(latestInstalled) &&
+        compareSemanticVersions(
+          catalogModel.version,
+          latestInstalled.version
+        ) > 0;
+
+      return {
+        modelId: catalogModel.id,
+        modelName:
+          catalogModel.name?.th ||
+          catalogModel.name?.en ||
+          catalogModel.id,
+        category:
+          catalogModel.category ||
+          "official",
+        installed:
+          installedVersions.length > 0,
+        installedVersion:
+          latestInstalled?.version || null,
+        installedVariantId:
+          latestInstalled?.variantId || null,
+        latestVersion:
+          catalogModel.version,
+        recommendedVariant:
+          catalogModel.recommendedVariant,
+        updateAvailable,
+        rollbackAvailable:
+          installedVersions.length > 1 ||
+          installedVersions.some(
+            (model) =>
+              model.rollbackAvailable === true
+          ),
+        installedVersions,
+        updateChannel:
+          catalogModel.updateChannel || null,
+      };
+    }
+  );
+
+  return {
+    ok: true,
+    checkedAt:
+      new Date().toISOString(),
+    automaticCheckIntervalHours:
+      Number(
+        readTextModelPolicy()
+          .updatePolicy
+          ?.automaticCheckIntervalHours
+      ) || 24,
+    summary: {
+      catalogModels: models.length,
+      installedModels:
+        models.filter(
+          (model) => model.installed
+        ).length,
+      updatesAvailable:
+        models.filter(
+          (model) => model.updateAvailable
+        ).length,
+      rollbackAvailable:
+        models.filter(
+          (model) =>
+            model.rollbackAvailable
+        ).length,
+    },
+    models,
+  };
+}
+
+function getTextModelUpdateStatus(
+  modelId
+) {
+  return (
+    buildTextModelUpdateStatus()
+      .models
+      .find(
+        (model) =>
+          model.modelId === modelId
+      ) || null
+  );
 }
 
 const server = http.createServer(async (req, res) => {
@@ -9646,6 +9912,224 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         item,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-models/installed
+  if (
+    req.url === "/api/text-models/installed" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        registry:
+          readInstalledTextModels(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-models/updates
+  if (
+    req.url === "/api/text-models/updates" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildTextModelUpdateStatus()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // LUKE_AI_TEXT_MODEL_STATIC_UPDATE_ENDPOINT_V1
+  // POST /api/text-models/update
+  if (
+    req.url === "/api/text-models/update" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.modelId !== "string" ||
+        !body.modelId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "modelId is required",
+        });
+      }
+
+      const modelId =
+        body.modelId.trim();
+
+      const updateStatus =
+        getTextModelUpdateStatus(
+          modelId
+        );
+
+      if (!updateStatus) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Text model was not found.",
+        });
+      }
+
+      if (!updateStatus.installed) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Model is not installed. Use Download instead.",
+        });
+      }
+
+      if (!updateStatus.updateAvailable) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "This model is already up to date.",
+        });
+      }
+
+      const item =
+        await enqueueTextModel(
+          modelId,
+          updateStatus.recommendedVariant
+        );
+
+      updateTextModelQueueItem(
+        item.id,
+        {
+          operation: "update",
+          previousVersion:
+            updateStatus.installedVersion,
+        }
+      );
+
+      return json(res, 202, {
+        ok: true,
+        item:
+          getTextModelQueueItem(item.id),
+        message:
+          "เพิ่มการอัปเดตโมเดลลงคิวแล้ว",
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const textModelUpdateMatch =
+    req.url.match(
+      /^\/api\/text-models\/([^/?]+)\/update$/
+    );
+
+  if (
+    textModelUpdateMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const modelId =
+        decodeURIComponent(
+          textModelUpdateMatch[1]
+        );
+
+      const updateStatus =
+        getTextModelUpdateStatus(
+          modelId
+        );
+
+      if (!updateStatus) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Text model was not found.",
+        });
+      }
+
+      if (!updateStatus.installed) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Model is not installed. Use Download instead.",
+        });
+      }
+
+      if (!updateStatus.updateAvailable) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "This model is already up to date.",
+        });
+      }
+
+      const item =
+        await enqueueTextModel(
+          modelId,
+          updateStatus.recommendedVariant
+        );
+
+      item.operation = "update";
+      item.previousVersion =
+        updateStatus.installedVersion;
+
+      updateTextModelQueueItem(
+        item.id,
+        {
+          operation: "update",
+          previousVersion:
+            updateStatus.installedVersion,
+        }
+      );
+
+      return json(res, 202, {
+        ok: true,
+        item:
+          getTextModelQueueItem(item.id),
+        message:
+          "เพิ่มการอัปเดตโมเดลลงคิวแล้ว",
       });
     } catch (error) {
       return json(

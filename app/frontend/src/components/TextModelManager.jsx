@@ -189,8 +189,10 @@ function DownloadProgress({ item }) {
 function ModelCard({
   model,
   queueItems,
+  updateInfo,
   busyId,
   onDownload,
+  onUpdate,
   onAction,
 }) {
   const variant =
@@ -253,20 +255,28 @@ function ModelCard({
           </div>
         </div>
 
-        <span
-          className={
-            "status-chip " +
-            (
-              model.category === "community"
-                ? "text-model-category-community"
-                : "text-model-category-official"
-            )
-          }
-        >
-          {model.category === "community"
-            ? "Community"
-            : "Official"}
-        </span>
+        <div className="text-model-card-statuses">
+          {updateInfo?.updateAvailable && (
+            <span className="status-chip text-model-update-available">
+              Update Available
+            </span>
+          )}
+
+          <span
+            className={
+              "status-chip " +
+              (
+                model.category === "community"
+                  ? "text-model-category-community"
+                  : "text-model-category-official"
+              )
+            }
+          >
+            {model.category === "community"
+              ? "Community"
+              : "Official"}
+          </span>
+        </div>
       </div>
 
       <p className="text-model-description">
@@ -274,6 +284,31 @@ function ModelCard({
           model.description?.en ||
           "โมเดลข้อความสำหรับใช้งานภายในเครื่อง"}
       </p>
+
+      {updateInfo?.installed && (
+        <div className="text-model-version-status">
+          <div>
+            <span>เวอร์ชันติดตั้ง</span>
+            <strong>
+              {updateInfo.installedVersion}
+            </strong>
+          </div>
+
+          <div>
+            <span>เวอร์ชันล่าสุด</span>
+            <strong>
+              {updateInfo.latestVersion}
+            </strong>
+          </div>
+
+          {updateInfo.rollbackAvailable && (
+            <span className="text-model-rollback-ready">
+              <RotateCcw size={14} />
+              Rollback พร้อม
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="text-model-meta-grid">
         <div>
@@ -373,7 +408,32 @@ function ModelCard({
       )}
 
       <div className="text-model-card-actions">
-        {!queueItem && variant && (
+        {!queueItem &&
+          updateInfo?.updateAvailable && (
+          <button
+            type="button"
+            className="m3-btn m3-btn-filled text-model-update-button"
+            disabled={busy}
+            onClick={() =>
+              onUpdate(model)
+            }
+          >
+            {busy
+              ? (
+                <LoaderCircle
+                  className="progress-spinner"
+                  size={15}
+                />
+              )
+              : <RefreshCw size={15} />}
+
+            อัปเดตทันที
+          </button>
+        )}
+
+        {!queueItem &&
+          !updateInfo?.installed &&
+          variant && (
           <button
             type="button"
             className="m3-btn m3-btn-filled"
@@ -540,6 +600,16 @@ export default function TextModelManager() {
   const [policy, setPolicy] =
     useState(null);
 
+  // LUKE_AI_TEXT_MODEL_UPDATE_UI_V1
+  const [updateStatus, setUpdateStatus] =
+    useState({
+      checkedAt: null,
+      summary: {
+        updatesAvailable: 0,
+      },
+      models: [],
+    });
+
   const [selectedCategory, setSelectedCategory] =
     useState("all");
 
@@ -614,12 +684,16 @@ export default function TextModelManager() {
         const [
           catalogData,
           queueData,
+          updateData,
         ] = await Promise.all([
           requestJson(
             "/api/text-models/catalog",
           ),
           requestJson(
             "/api/text-models/download-queue",
+          ),
+          requestJson(
+            "/api/text-models/updates",
           ),
         ]);
 
@@ -636,6 +710,15 @@ export default function TextModelManager() {
         );
         setPolicy(
           queueData.policy || null,
+        );
+        setUpdateStatus(
+          updateData || {
+            checkedAt: null,
+            summary: {
+              updatesAvailable: 0,
+            },
+            models: [],
+          },
         );
         setError("");
       } catch (refreshError) {
@@ -767,6 +850,42 @@ export default function TextModelManager() {
     ],
   );
 
+  const updateModel = useCallback(
+    async (model) => {
+      setBusyId(model.id);
+      setError("");
+
+      try {
+        // LUKE_AI_TEXT_MODEL_STATIC_UPDATE_UI_V1
+        await requestJson(
+          "/api/text-models/update",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              modelId: model.id,
+            }),
+          },
+        );
+
+        await refresh({
+          silent: true,
+        });
+      } catch (updateError) {
+        setError(
+          updateError instanceof Error
+            ? updateError.message
+            : String(updateError),
+        );
+      } finally {
+        setBusyId("");
+      }
+    },
+    [
+      refresh,
+      requestJson,
+    ],
+  );
+
   const queueAction = useCallback(
     async (
       item,
@@ -873,11 +992,10 @@ export default function TextModelManager() {
         </div>
 
         <div className="m3-card text-model-summary-card">
-          <span>กำลังทำงาน</span>
+          <span>มีอัปเดต</span>
           <strong>
-            {queue.activeItemId
-              ? "1"
-              : "0"}
+            {updateStatus.summary
+              ?.updatesAvailable || 0}
           </strong>
         </div>
       </div>
@@ -961,8 +1079,16 @@ export default function TextModelManager() {
                 key={model.id}
                 model={model}
                 queueItems={queue.items}
+                updateInfo={
+                  updateStatus.models?.find(
+                    (item) =>
+                      item.modelId ===
+                      model.id,
+                  ) || null
+                }
                 busyId={busyId}
                 onDownload={downloadModel}
+                onUpdate={updateModel}
                 onAction={queueAction}
               />
             ),
