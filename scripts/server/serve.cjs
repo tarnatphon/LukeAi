@@ -1,3 +1,8 @@
+// LUKE_AI_RUNTIME_SUPERVISOR_IMPORT_V3
+const {
+  TextRuntimeSupervisor,
+} = require("./text-runtime-supervisor.cjs");
+
 // serve.cjs — portable static file server + backend process manager
 // Serves app/dist/, manages sd-vulkan.exe lifecycle with correct CLI flags
 // serve.cjs — portable static file server + backend process manager
@@ -16831,7 +16836,152 @@ function getModelHealthSummary() {
   };
 }
 
+// LUKE_AI_RUNTIME_SUPERVISOR_BOOTSTRAP_V3
+const textRuntimeSupervisor =
+  new TextRuntimeSupervisor({
+    root: ROOT,
+    policyPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "text-chat",
+      "runtime-supervisor-policy.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "text-chat",
+      "runtime-supervisor.json"
+    ),
+  });
+
+textRuntimeSupervisor.startMonitoring();
+
 const server = http.createServer(async (req, res) => {
+  // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
+
+  if (
+    req.url === "/api/text-runtime/supervisor/status" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        supervisor:
+          textRuntimeSupervisor.getStatus(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/start" &&
+    req.method === "POST"
+  ) {
+    try {
+      const supervisor =
+        await textRuntimeSupervisor
+          .startRuntime({
+            reason: "api-request",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        supervisor,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const supervisor =
+        await textRuntimeSupervisor
+          .stopRuntime({
+            reason: "api-request",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        supervisor,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/restart" &&
+    req.method === "POST"
+  ) {
+    try {
+      const supervisor =
+        await textRuntimeSupervisor
+          .restartRuntime({
+            reason: "api-request",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        supervisor,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/reset" &&
+    req.method === "POST"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        supervisor:
+          textRuntimeSupervisor.resetSupervisor(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+
   // CORS preflight
   if (req.method === "OPTIONS") {
     res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST" });
@@ -20278,3 +20428,44 @@ server.listen(PORT_FRONTEND, "0.0.0.0", () => {
 // Graceful shutdown
 process.on("SIGINT",  async () => { await killBackend(); await killOpenVinoWorker(); await killLlm(); await stopSpeech(); await stopTts(); process.exit(0); });
 process.on("SIGTERM", async () => { await killBackend(); await killOpenVinoWorker(); await killLlm(); await stopSpeech(); await stopTts(); process.exit(0); });
+
+
+// LUKE_AI_RUNTIME_SUPERVISOR_SHUTDOWN_V3
+let runtimeSupervisorShutdownStarted =
+  false;
+
+async function shutdownRuntimeSupervisor() {
+  if (runtimeSupervisorShutdownStarted) {
+    return;
+  }
+
+  runtimeSupervisorShutdownStarted =
+    true;
+
+  try {
+    await textRuntimeSupervisor.shutdown();
+  } catch (error) {
+    console.error(
+      "[runtime-supervisor] shutdown failed:",
+      error instanceof Error
+        ? error.message
+        : String(error)
+    );
+  }
+}
+
+process.once(
+  "SIGINT",
+  async () => {
+    await shutdownRuntimeSupervisor();
+    process.exit(0);
+  }
+);
+
+process.once(
+  "SIGTERM",
+  async () => {
+    await shutdownRuntimeSupervisor();
+    process.exit(0);
+  }
+);
