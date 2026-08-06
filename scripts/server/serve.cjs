@@ -9815,6 +9815,390 @@ function getTextModelHardwareRecommendation(
   );
 }
 
+
+// LUKE_AI_PERSISTENT_TEXT_CHAT_V1
+const textChatStorePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-chat",
+  "conversations.json"
+);
+
+function createInitialTextChatStore() {
+  return {
+    schemaVersion: 1,
+    updatedAt: null,
+    lastOpenedConversationId: null,
+    conversations: [],
+  };
+}
+
+function readTextChatStore() {
+  if (!fs.existsSync(textChatStorePath)) {
+    const initialStore =
+      createInitialTextChatStore();
+
+    writeJsonFileAtomic(
+      textChatStorePath,
+      initialStore
+    );
+
+    return initialStore;
+  }
+
+  const store = readJsonFileStrict(
+    textChatStorePath,
+    "Text chat conversation store"
+  );
+
+  if (!Array.isArray(store.conversations)) {
+    throw new Error(
+      "Text chat conversation store is invalid."
+    );
+  }
+
+  return store;
+}
+
+function writeTextChatStore(store) {
+  store.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    textChatStorePath,
+    store
+  );
+}
+
+function createTextChatId(prefix) {
+  return (
+    `${prefix}-${Date.now()}-` +
+    Math.random()
+      .toString(16)
+      .slice(2, 10)
+  );
+}
+
+function normalizeTextChatTitle(value) {
+  const title =
+    String(value || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  if (!title) {
+    return "บทสนทนาใหม่";
+  }
+
+  return title.slice(0, 80);
+}
+
+function generateConversationTitle(message) {
+  return normalizeTextChatTitle(
+    String(message || "")
+      .replace(/\n+/g, " ")
+      .slice(0, 60)
+  );
+}
+
+function findTextChatConversation(
+  store,
+  conversationId
+) {
+  return store.conversations.find(
+    (conversation) =>
+      conversation.id === conversationId
+  ) || null;
+}
+
+function createTextChatConversation({
+  title,
+  modelId = null,
+  systemPrompt = "",
+} = {}) {
+  const store =
+    readTextChatStore();
+
+  const now =
+    new Date().toISOString();
+
+  const conversation = {
+    id:
+      createTextChatId("conversation"),
+    title:
+      normalizeTextChatTitle(title),
+    createdAt: now,
+    updatedAt: now,
+    pinned: false,
+    archived: false,
+    modelId,
+    systemPrompt:
+      String(systemPrompt || ""),
+    settings: {
+      temperature: 0.7,
+      contextLength: null,
+    },
+    memory: {
+      summary: "",
+      facts: [],
+      lastCompactedAt: null,
+    },
+    messages: [],
+  };
+
+  store.conversations.unshift(
+    conversation
+  );
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  return conversation;
+}
+
+function appendTextChatMessage(
+  conversationId,
+  {
+    role,
+    content,
+    modelId = null,
+    metadata = {},
+  }
+) {
+  const allowedRoles =
+    new Set([
+      "user",
+      "assistant",
+      "system",
+      "tool",
+    ]);
+
+  if (!allowedRoles.has(role)) {
+    const error = new Error(
+      "Invalid chat message role."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedContent =
+    String(content || "").trim();
+
+  if (!normalizedContent) {
+    const error = new Error(
+      "Chat message content is required."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const now =
+    new Date().toISOString();
+
+  const message = {
+    id:
+      createTextChatId("message"),
+    role,
+    content:
+      normalizedContent,
+    modelId,
+    createdAt: now,
+    metadata:
+      metadata &&
+      typeof metadata === "object"
+        ? metadata
+        : {},
+  };
+
+  conversation.messages.push(
+    message
+  );
+
+  if (
+    conversation.title ===
+      "บทสนทนาใหม่" &&
+    role === "user"
+  ) {
+    conversation.title =
+      generateConversationTitle(
+        normalizedContent
+      );
+  }
+
+  conversation.updatedAt = now;
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  return {
+    conversation,
+    message,
+  };
+}
+
+function updateTextChatConversation(
+  conversationId,
+  updates = {}
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "title"
+    )
+  ) {
+    conversation.title =
+      normalizeTextChatTitle(
+        updates.title
+      );
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "pinned"
+    )
+  ) {
+    conversation.pinned =
+      updates.pinned === true;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "archived"
+    )
+  ) {
+    conversation.archived =
+      updates.archived === true;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "modelId"
+    )
+  ) {
+    conversation.modelId =
+      updates.modelId || null;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "systemPrompt"
+    )
+  ) {
+    conversation.systemPrompt =
+      String(
+        updates.systemPrompt || ""
+      );
+  }
+
+  if (
+    updates.settings &&
+    typeof updates.settings === "object"
+  ) {
+    conversation.settings = {
+      ...(conversation.settings || {}),
+      ...updates.settings,
+    };
+  }
+
+  conversation.updatedAt =
+    new Date().toISOString();
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  return conversation;
+}
+
+function deleteTextChatConversation(
+  conversationId
+) {
+  const store =
+    readTextChatStore();
+
+  const index =
+    store.conversations.findIndex(
+      (conversation) =>
+        conversation.id ===
+        conversationId
+    );
+
+  if (index < 0) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const [removed] =
+    store.conversations.splice(
+      index,
+      1
+    );
+
+  if (
+    store.lastOpenedConversationId ===
+    conversationId
+  ) {
+    store.lastOpenedConversationId =
+      store.conversations[0]?.id ||
+      null;
+  }
+
+  writeTextChatStore(store);
+
+  return removed;
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -10523,6 +10907,233 @@ const server = http.createServer(async (req, res) => {
             ? error.message
             : String(error),
       });
+    }
+  }
+
+  // GET /api/text-chat/conversations
+  if (
+    req.url === "/api/text-chat/conversations" &&
+    req.method === "GET"
+  ) {
+    try {
+      const store =
+        readTextChatStore();
+
+      return json(res, 200, {
+        ok: true,
+        lastOpenedConversationId:
+          store.lastOpenedConversationId,
+        conversations:
+          store.conversations,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-chat/conversations
+  if (
+    req.url === "/api/text-chat/conversations" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const conversation =
+        createTextChatConversation(
+          body || {}
+        );
+
+      return json(res, 201, {
+        ok: true,
+        conversation,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const textChatConversationMatch =
+    req.url.match(
+      /^\/api\/text-chat\/conversations\/([^/?]+)$/
+    );
+
+  if (
+    textChatConversationMatch &&
+    req.method === "GET"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatConversationMatch[1]
+        );
+
+      const store =
+        readTextChatStore();
+
+      const conversation =
+        findTextChatConversation(
+          store,
+          conversationId
+        );
+
+      if (!conversation) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Conversation was not found.",
+        });
+      }
+
+      store.lastOpenedConversationId =
+        conversation.id;
+
+      writeTextChatStore(store);
+
+      return json(res, 200, {
+        ok: true,
+        conversation,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    textChatConversationMatch &&
+    req.method === "PATCH"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatConversationMatch[1]
+        );
+
+      const body =
+        await readJsonRequestBody(req);
+
+      const conversation =
+        updateTextChatConversation(
+          conversationId,
+          body || {}
+        );
+
+      return json(res, 200, {
+        ok: true,
+        conversation,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    textChatConversationMatch &&
+    req.method === "DELETE"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatConversationMatch[1]
+        );
+
+      const removed =
+        deleteTextChatConversation(
+          conversationId
+        );
+
+      return json(res, 200, {
+        ok: true,
+        removed,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const textChatMessageMatch =
+    req.url.match(
+      /^\/api\/text-chat\/conversations\/([^/?]+)\/messages$/
+    );
+
+  if (
+    textChatMessageMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatMessageMatch[1]
+        );
+
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        appendTextChatMessage(
+          conversationId,
+          body || {}
+        );
+
+      return json(res, 201, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
     }
   }
 

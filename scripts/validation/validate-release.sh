@@ -202,3 +202,11 @@ else
   echo "FAIL: Node.js is required for Text Model hardware validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Persistent Text Chat validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-persistent-text-chat.cjs
+else
+  echo "FAIL: Node.js is required for Persistent Text Chat validation"
+  exit 1
+fi

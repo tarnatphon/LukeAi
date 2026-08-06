@@ -16,6 +16,8 @@ import "./App.css";
 import RuntimeDownloadDashboard from "./components/RuntimeDownloadDashboard";
 // LUKE_AI_TEXT_MODEL_MANAGER_UI_V1
 import TextModelManager from "./components/TextModelManager";
+// LUKE_AI_PERSISTENT_TEXT_CHAT_UI_V1
+import PersistentTextChat from "./components/PersistentTextChat";
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -843,6 +845,7 @@ function App() {
           <div className="runtime-dashboard-shell">
   <RuntimeDownloadDashboard />
 <TextModelManager />
+<PersistentTextChat />
 </div>
 <Settings
             constraints={constraints}
