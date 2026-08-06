@@ -178,3 +178,11 @@ else
   echo "FAIL: Node.js is required for Text Model download validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Text Model Manager UI validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-text-model-manager-ui.cjs
+else
+  echo "FAIL: Node.js is required for Text Model Manager UI validation"
+  exit 1
+fi

@@ -14,6 +14,8 @@ import "./App.css";
 
 // LUKE_AI_RUNTIME_DASHBOARD_V1
 import RuntimeDownloadDashboard from "./components/RuntimeDownloadDashboard";
+// LUKE_AI_TEXT_MODEL_MANAGER_UI_V1
+import TextModelManager from "./components/TextModelManager";
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -840,6 +842,7 @@ function App() {
         <div style={{ display: activeTab === "settings" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <div className="runtime-dashboard-shell">
   <RuntimeDownloadDashboard />
+<TextModelManager />
 </div>
 <Settings
             constraints={constraints}
