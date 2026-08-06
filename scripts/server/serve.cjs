@@ -6346,6 +6346,701 @@ function readJsonRequestBody(req, limitBytes = 1048576) {
   });
 }
 
+
+// LUKE_AI_RUNTIME_SAFE_DOWNLOAD_WORKER_V1
+const runtimeDownloadControllers = new Map();
+
+function getRuntimeDownloadRoot(job) {
+  const catalog = readRuntimeDependencyCatalog();
+
+  const configuredDirectory =
+    typeof job.downloadDirectory === "string" &&
+    job.downloadDirectory.trim()
+      ? job.downloadDirectory.trim()
+      : catalog.defaultDownloadDirectory;
+
+  return path.resolve(
+    configuredDirectory.replace(
+      /^~(?=$|\/)/,
+      process.env.HOME || ROOT
+    )
+  );
+}
+
+function getRuntimeJobPaths(job) {
+  const root = getRuntimeDownloadRoot(job);
+  const jobRoot = path.join(
+    root,
+    ".luke-runtime",
+    job.id
+  );
+
+  return {
+    root,
+    jobRoot,
+    temporaryFile: path.join(
+      jobRoot,
+      "download.part"
+    ),
+    verifiedFile: path.join(
+      jobRoot,
+      "download.verified"
+    ),
+    installDirectory: path.join(
+      root,
+      "installed",
+      job.dependencyId
+    ),
+    backupDirectory: path.join(
+      root,
+      ".luke-runtime-backups",
+      `${job.dependencyId}-${job.id}`
+    ),
+  };
+}
+
+function ensureWritableDirectory(directory) {
+  fs.mkdirSync(directory, {
+    recursive: true,
+  });
+
+  fs.accessSync(
+    directory,
+    fs.constants.W_OK
+  );
+}
+
+function calculateFileSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = require("node:crypto").createHash("sha256");
+    const input = fs.createReadStream(filePath);
+
+    input.on("error", reject);
+
+    input.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+
+    input.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+  });
+}
+
+function removeRuntimePath(targetPath) {
+  if (!targetPath || !fs.existsSync(targetPath)) {
+    return;
+  }
+
+  fs.rmSync(targetPath, {
+    recursive: true,
+    force: true,
+  });
+}
+
+function copyRuntimePath(source, destination) {
+  if (!fs.existsSync(source)) {
+    return;
+  }
+
+  ensureWritableDirectory(
+    path.dirname(destination)
+  );
+
+  fs.cpSync(
+    source,
+    destination,
+    {
+      recursive: true,
+      force: true,
+    }
+  );
+}
+
+function updateRuntimeJobFields(
+  jobId,
+  fields = {}
+) {
+  const state = readRuntimeInstallState();
+
+  const job = state.jobs.find(
+    (item) => item.id === jobId
+  );
+
+  if (!job) {
+    const error = new Error(
+      `Runtime install job not found: ${jobId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  Object.assign(job, fields);
+  job.updatedAt = new Date().toISOString();
+
+  writeRuntimeInstallState(state);
+
+  return job;
+}
+
+function getRuntimeDependencyAsset(
+  dependencyId,
+  override = {}
+) {
+  const catalog = readRuntimeDependencyCatalog();
+
+  const dependency = catalog.dependencies.find(
+    (item) => item.id === dependencyId
+  );
+
+  if (!dependency) {
+    const error = new Error(
+      `Unknown runtime dependency: ${dependencyId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const source = {
+    ...(dependency.download || {}),
+    ...(override || {}),
+  };
+
+  if (
+    typeof source.url !== "string" ||
+    !source.url.trim()
+  ) {
+    const error = new Error(
+      `No download URL configured for ${dependencyId}`
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    typeof source.sha256 !== "string" ||
+    !/^[a-fA-F0-9]{64}$/.test(source.sha256)
+  ) {
+    const error = new Error(
+      `A valid SHA256 is required for ${dependencyId}`
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    dependency,
+    url: source.url.trim(),
+    sha256: source.sha256.toLowerCase(),
+    filename:
+      typeof source.filename === "string" &&
+      source.filename.trim()
+        ? path.basename(source.filename.trim())
+        : `${dependencyId}.package`,
+  };
+}
+
+async function downloadRuntimeAsset(
+  job,
+  asset,
+  controller
+) {
+  const paths = getRuntimeJobPaths(job);
+
+  ensureWritableDirectory(paths.jobRoot);
+
+  removeRuntimePath(paths.temporaryFile);
+  removeRuntimePath(paths.verifiedFile);
+
+  const response = await fetch(
+    asset.url,
+    {
+      redirect: "follow",
+      signal: controller.signal,
+    }
+  );
+
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `Runtime download failed with HTTP ${response.status}`
+    );
+  }
+
+  const totalBytesHeader =
+    response.headers.get("content-length");
+
+  const totalBytes =
+    totalBytesHeader &&
+    Number.isFinite(Number(totalBytesHeader))
+      ? Number(totalBytesHeader)
+      : null;
+
+  const output = fs.createWriteStream(
+    paths.temporaryFile,
+    {
+      flags: "wx",
+    }
+  );
+
+  const reader = response.body.getReader();
+  const startedAt = Date.now();
+  let downloadedBytes = 0;
+  let lastPersistedAt = 0;
+
+  try {
+    while (true) {
+      const result = await reader.read();
+
+      if (result.done) {
+        break;
+      }
+
+      const chunk = Buffer.from(result.value);
+
+      await new Promise((resolve, reject) => {
+        output.write(chunk, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+
+      downloadedBytes += chunk.length;
+
+      const now = Date.now();
+
+      if (
+        now - lastPersistedAt >= 250 ||
+        (
+          totalBytes &&
+          downloadedBytes >= totalBytes
+        )
+      ) {
+        const elapsedSeconds = Math.max(
+          0.001,
+          (now - startedAt) / 1000
+        );
+
+        const percent = totalBytes
+          ? Math.min(
+              99,
+              Math.floor(
+                downloadedBytes /
+                totalBytes *
+                100
+              )
+            )
+          : 0;
+
+        updateRuntimeInstallJob(
+          job.id,
+          undefined,
+          {
+            percent,
+            downloadedBytes,
+            totalBytes,
+            speedBytesPerSecond:
+              Math.floor(
+                downloadedBytes /
+                elapsedSeconds
+              ),
+          }
+        );
+
+        lastPersistedAt = now;
+      }
+    }
+  } finally {
+    await new Promise((resolve) => {
+      output.end(resolve);
+    });
+  }
+
+  return {
+    ...paths,
+    downloadedBytes,
+    totalBytes,
+  };
+}
+
+async function verifyRuntimeDownload(
+  job,
+  asset,
+  paths
+) {
+  const actualSha256 =
+    await calculateFileSha256(
+      paths.temporaryFile
+    );
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      checksum: {
+        algorithm: "sha256",
+        expected: asset.sha256,
+        actual: actualSha256,
+        verified:
+          actualSha256 === asset.sha256,
+      },
+    }
+  );
+
+  if (actualSha256 !== asset.sha256) {
+    const error = new Error(
+      "Runtime package SHA256 verification failed."
+    );
+
+    error.code = "CHECKSUM_MISMATCH";
+    throw error;
+  }
+
+  fs.renameSync(
+    paths.temporaryFile,
+    paths.verifiedFile
+  );
+
+  return actualSha256;
+}
+
+function prepareRuntimeRollback(job, paths) {
+  removeRuntimePath(paths.backupDirectory);
+
+  if (fs.existsSync(paths.installDirectory)) {
+    copyRuntimePath(
+      paths.installDirectory,
+      paths.backupDirectory
+    );
+  }
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      rollback: {
+        backupDirectory:
+          paths.backupDirectory,
+        previousInstallExisted:
+          fs.existsSync(
+            paths.backupDirectory
+          ),
+        restored: false,
+      },
+    }
+  );
+}
+
+function installRuntimePackage(job, asset, paths) {
+  ensureWritableDirectory(
+    paths.installDirectory
+  );
+
+  const destination = path.join(
+    paths.installDirectory,
+    asset.filename
+  );
+
+  fs.copyFileSync(
+    paths.verifiedFile,
+    destination
+  );
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      installedAsset: {
+        path: destination,
+        filename: asset.filename,
+        sha256: asset.sha256,
+      },
+    }
+  );
+
+  return destination;
+}
+
+function rollbackRuntimeInstallation(
+  job,
+  paths
+) {
+  removeRuntimePath(
+    paths.installDirectory
+  );
+
+  if (
+    fs.existsSync(
+      paths.backupDirectory
+    )
+  ) {
+    copyRuntimePath(
+      paths.backupDirectory,
+      paths.installDirectory
+    );
+  }
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      rollback: {
+        ...job.rollback,
+        restored: true,
+        restoredAt:
+          new Date().toISOString(),
+      },
+    }
+  );
+}
+
+async function runRuntimeInstallJob(
+  jobId,
+  assetOverride = {}
+) {
+  let job = getRuntimeInstallJob(jobId);
+
+  if (!job) {
+    throw new Error(
+      `Runtime install job not found: ${jobId}`
+    );
+  }
+
+  const controller = new AbortController();
+
+  runtimeDownloadControllers.set(
+    jobId,
+    controller
+  );
+
+  let paths = null;
+
+  try {
+    const asset = getRuntimeDependencyAsset(
+      job.dependencyId,
+      assetOverride
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "preparing",
+      {
+        percent: 1,
+      }
+    );
+
+    paths = getRuntimeJobPaths(job);
+
+    ensureWritableDirectory(paths.root);
+    ensureWritableDirectory(paths.jobRoot);
+
+    updateRuntimeJobFields(
+      jobId,
+      {
+        source: {
+          url: asset.url,
+          filename: asset.filename,
+        },
+        error: null,
+      }
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "downloading",
+      {
+        percent: 2,
+      }
+    );
+
+    paths = await downloadRuntimeAsset(
+      job,
+      asset,
+      controller
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "verifying",
+      {
+        percent: 99,
+        downloadedBytes:
+          paths.downloadedBytes,
+        totalBytes:
+          paths.totalBytes ||
+          paths.downloadedBytes,
+      }
+    );
+
+    await verifyRuntimeDownload(
+      job,
+      asset,
+      paths
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "installing",
+      {
+        percent: 99,
+      }
+    );
+
+    prepareRuntimeRollback(
+      job,
+      paths
+    );
+
+    installRuntimePackage(
+      job,
+      asset,
+      paths
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "completed",
+      {
+        percent: 100,
+      }
+    );
+
+    updateRuntimeJobFields(
+      jobId,
+      {
+        error: null,
+      }
+    );
+
+    removeRuntimePath(paths.jobRoot);
+
+    return getRuntimeInstallJob(jobId);
+  } catch (error) {
+    job = getRuntimeInstallJob(jobId);
+
+    const cancelled =
+      error &&
+      (
+        error.name === "AbortError" ||
+        error.code === "ABORT_ERR"
+      );
+
+    if (cancelled) {
+      if (
+        job &&
+        ![
+          "completed",
+          "cancelled",
+          "rolled-back",
+        ].includes(job.state)
+      ) {
+        updateRuntimeInstallJob(
+          jobId,
+          "cancelled"
+        );
+      }
+    } else {
+      if (
+        job &&
+        job.state === "installing"
+      ) {
+        updateRuntimeInstallJob(
+          jobId,
+          "rolling-back"
+        );
+
+        rollbackRuntimeInstallation(
+          getRuntimeInstallJob(jobId),
+          paths || getRuntimeJobPaths(job)
+        );
+
+        updateRuntimeInstallJob(
+          jobId,
+          "rolled-back"
+        );
+      } else if (
+        job &&
+        ![
+          "failed",
+          "cancelled",
+          "rolled-back",
+        ].includes(job.state)
+      ) {
+        updateRuntimeInstallJob(
+          jobId,
+          "failed"
+        );
+      }
+
+      updateRuntimeJobFields(
+        jobId,
+        {
+          error: {
+            message:
+              error instanceof Error
+                ? error.message
+                : String(error),
+            code:
+              error && error.code
+                ? String(error.code)
+                : null,
+            occurredAt:
+              new Date().toISOString(),
+          },
+        }
+      );
+    }
+
+    if (paths) {
+      removeRuntimePath(
+        paths.temporaryFile
+      );
+
+      removeRuntimePath(
+        paths.verifiedFile
+      );
+    }
+
+    throw error;
+  } finally {
+    runtimeDownloadControllers.delete(jobId);
+  }
+}
+
+function startRuntimeInstallJob(
+  jobId,
+  assetOverride = {}
+) {
+  setImmediate(() => {
+    runRuntimeInstallJob(
+      jobId,
+      assetOverride
+    ).catch((error) => {
+      console.error(
+        `[runtime] Install job ${jobId} failed:`,
+        error instanceof Error
+          ? error.message
+          : String(error)
+      );
+    });
+  });
+}
+
+function cancelRuntimeInstallWorker(jobId) {
+  const controller =
+    runtimeDownloadControllers.get(jobId);
+
+  if (controller) {
+    controller.abort();
+    return true;
+  }
+
+  return false;
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -6358,6 +7053,78 @@ const server = http.createServer(async (req, res) => {
   }
   // ── Management API ────────────────────────────────────────────────────────
   // GET /api/health
+  // POST /api/runtime/install/jobs/:jobId/start
+  const runtimeInstallStartMatch =
+    req.url.match(
+      /^\/api\/runtime\/install\/jobs\/([^/?]+)\/start$/
+    );
+
+  if (
+    runtimeInstallStartMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const jobId = decodeURIComponent(
+        runtimeInstallStartMatch[1]
+      );
+
+      const job = getRuntimeInstallJob(jobId);
+
+      if (!job) {
+        return json(res, 404, {
+          ok: false,
+          error: "Runtime install job not found",
+        });
+      }
+
+      if (job.state !== "queued") {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Only queued runtime jobs can start",
+        });
+      }
+
+      const body = await readJsonRequestBody(req);
+
+      startRuntimeInstallJob(
+        jobId,
+        {
+          url:
+            typeof body.url === "string"
+              ? body.url
+              : undefined,
+          sha256:
+            typeof body.sha256 === "string"
+              ? body.sha256
+              : undefined,
+          filename:
+            typeof body.filename === "string"
+              ? body.filename
+              : undefined,
+        }
+      );
+
+      return json(res, 202, {
+        ok: true,
+        jobId,
+        state: "queued",
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
   // GET /api/runtime/install/jobs
   if (
     req.url === "/api/runtime/install/jobs" &&
@@ -6490,12 +7257,41 @@ const server = http.createServer(async (req, res) => {
     req.method === "POST"
   ) {
     try {
-      const job = updateRuntimeInstallJob(
-        decodeURIComponent(
-          runtimeInstallCancelMatch[1]
-        ),
-        "cancelled"
+      const jobId = decodeURIComponent(
+        runtimeInstallCancelMatch[1]
       );
+
+      const activeWorkerCancelled =
+        cancelRuntimeInstallWorker(jobId);
+
+      const currentJob =
+        getRuntimeInstallJob(jobId);
+
+      if (!currentJob) {
+        return json(res, 404, {
+          ok: false,
+          error: "Runtime install job not found",
+        });
+      }
+
+      const job =
+        currentJob.state === "queued"
+          ? updateRuntimeInstallJob(
+              jobId,
+              "cancelled"
+            )
+          : currentJob;
+
+      if (
+        !activeWorkerCancelled &&
+        job.state !== "cancelled"
+      ) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Runtime install job is not cancellable",
+        });
+      }
 
       return json(res, 200, {
         ok: true,
