@@ -233,6 +233,25 @@ export default function PersistentTextChat() {
     setConfiguringRuntimeType,
   ] = useState("");
 
+  // LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_UI_FINAL_V1
+  const [
+    runtimeInstallQueue,
+    setRuntimeInstallQueue,
+  ] = useState({
+    activeJobId: null,
+    jobs: [],
+  });
+
+  const [
+    installingRuntimeType,
+    setInstallingRuntimeType,
+  ] = useState("");
+
+  const [
+    runtimeInstallBusy,
+    setRuntimeInstallBusy,
+  ] = useState(false);
+
   const [
     runtimeDetectionInfo,
     setRuntimeDetectionInfo,
@@ -1224,6 +1243,179 @@ export default function PersistentTextChat() {
         requestJson,
       ],
     );
+
+  const refreshRuntimeInstallQueue =
+    useCallback(
+      async () => {
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/install-queue",
+            );
+
+          const queue =
+            data.queue || {
+              activeJobId: null,
+              jobs: [],
+            };
+
+          setRuntimeInstallQueue(queue);
+
+          const activeJob =
+            (queue.jobs || []).find(
+              (job) =>
+                [
+                  "queued",
+                  "installing",
+                ].includes(job.status),
+            );
+
+          setInstallingRuntimeType(
+            activeJob?.runtimeType || "",
+          );
+        } catch {
+          setRuntimeInstallQueue({
+            activeJobId: null,
+            jobs: [],
+          });
+
+          setInstallingRuntimeType("");
+        }
+      },
+      [requestJson],
+    );
+
+  const installDetectedRuntime =
+    useCallback(
+      async (runtimeType) => {
+        setRuntimeInstallBusy(true);
+        setInstallingRuntimeType(
+          runtimeType,
+        );
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/install",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  runtimeType,
+                }),
+              },
+            );
+
+          setRuntimeInstallQueue(
+            data.queue || {
+              activeJobId: null,
+              jobs: [],
+            },
+          );
+
+          setError("");
+        } catch (installError) {
+          setInstallingRuntimeType("");
+
+          setError(
+            installError instanceof Error
+              ? installError.message
+              : String(installError),
+          );
+        } finally {
+          setRuntimeInstallBusy(false);
+        }
+      },
+      [requestJson],
+    );
+
+  const cancelRuntimeInstall =
+    useCallback(
+      async (jobId) => {
+        setRuntimeInstallBusy(true);
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/install-cancel",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  jobId,
+                }),
+              },
+            );
+
+          setRuntimeInstallQueue(
+            data.queue || {
+              activeJobId: null,
+              jobs: [],
+            },
+          );
+
+          setInstallingRuntimeType("");
+          setError("");
+        } catch (cancelError) {
+          setError(
+            cancelError instanceof Error
+              ? cancelError.message
+              : String(cancelError),
+          );
+        } finally {
+          setRuntimeInstallBusy(false);
+        }
+      },
+      [requestJson],
+    );
+
+  const clearRuntimeInstallHistory =
+    useCallback(
+      async () => {
+        setRuntimeInstallBusy(true);
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/install-clear",
+              {
+                method: "POST",
+                body: JSON.stringify({}),
+              },
+            );
+
+          setRuntimeInstallQueue(
+            data.queue || {
+              activeJobId: null,
+              jobs: [],
+            },
+          );
+
+          setError("");
+        } catch (clearError) {
+          setError(
+            clearError instanceof Error
+              ? clearError.message
+              : String(clearError),
+          );
+        } finally {
+          setRuntimeInstallBusy(false);
+        }
+      },
+      [requestJson],
+    );
+
+  useEffect(() => {
+    refreshRuntimeInstallQueue();
+
+    const interval =
+      window.setInterval(
+        refreshRuntimeInstallQueue,
+        2000,
+      );
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [refreshRuntimeInstallQueue]);
 
   const detectInstalledTextRuntimes =
     useCallback(
@@ -3002,41 +3194,180 @@ export default function PersistentTextChat() {
                       </div>
                     )}
 
-                    <button
-                      type="button"
-                      className={
-                        runtime.installed
-                          ? "m3-btn m3-btn-filled"
-                          : "m3-btn m3-btn-outlined"
-                      }
-                      disabled={
-                        !runtime.installed ||
-                        Boolean(
-                          configuringRuntimeType,
-                        )
-                      }
-                      onClick={() =>
-                        configureDetectedTextRuntime(
-                          runtime.runtimeType,
-                        )
-                      }
-                    >
-                      {configuringRuntimeType ===
-                      runtime.runtimeType
-                        ? "กำลังตั้งค่า..."
-                        : runtime.installed
-                          ? "One-Click Configure"
-                          : "ยังไม่ได้ติดตั้ง"}
-                    </button>
+                    {/* LUKE_AI_RUNTIME_INSTALL_BUTTON_FINAL_V1 */}
+                    {runtime.installed ? (
+                      <button
+                        type="button"
+                        className="m3-btn m3-btn-filled"
+                        disabled={
+                          Boolean(
+                            configuringRuntimeType,
+                          ) ||
+                          runtimeInstallBusy
+                        }
+                        onClick={() =>
+                          configureDetectedTextRuntime(
+                            runtime.runtimeType,
+                          )
+                        }
+                      >
+                        {configuringRuntimeType ===
+                        runtime.runtimeType
+                          ? "กำลังตั้งค่า..."
+                          : "One-Click Configure"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="m3-btn m3-btn-filled"
+                        disabled={
+                          runtimeInstallBusy ||
+                          Boolean(
+                            installingRuntimeType,
+                          )
+                        }
+                        onClick={() =>
+                          installDetectedRuntime(
+                            runtime.runtimeType,
+                          )
+                        }
+                      >
+                        {installingRuntimeType ===
+                        runtime.runtimeType
+                          ? "อยู่ในคิวติดตั้ง..."
+                          : "One-Click Install"}
+                      </button>
+                    )}
                   </article>
                 ),
               )}
             </div>
           )}
 
+          {/* LUKE_AI_RUNTIME_INSTALL_QUEUE_FINAL_V1 */}
           <div className="persistent-chat-runtime-detection-warning">
-            ระบบจะไม่เปลี่ยนการตั้งค่า Runtime จนกว่าจะกด One-Click Configure
+            ระบบจะไม่ติดตั้งหรือเปลี่ยนการตั้งค่า Runtime จนกว่าผู้ใช้จะกดปุ่ม
           </div>
+
+          {runtimeInstallQueue.jobs?.length > 0 && (
+            <div className="persistent-chat-runtime-install-queue">
+              <div className="persistent-chat-runtime-install-heading">
+                <div>
+                  <strong>
+                    Runtime Installation Queue
+                  </strong>
+
+                  <span>
+                    ระบบติดตั้งทีละรายการเพื่อรักษาความเร็วและความเสถียร
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="m3-btn m3-btn-outlined"
+                  disabled={
+                    runtimeInstallBusy ||
+                    runtimeInstallQueue.jobs.some(
+                      (job) =>
+                        [
+                          "queued",
+                          "installing",
+                        ].includes(job.status),
+                    )
+                  }
+                  onClick={
+                    clearRuntimeInstallHistory
+                  }
+                >
+                  Clear History
+                </button>
+              </div>
+
+              <div className="persistent-chat-runtime-install-jobs">
+                {runtimeInstallQueue.jobs
+                  .slice()
+                  .reverse()
+                  .map((job) => (
+                    <article
+                      key={job.id}
+                      className={
+                        "persistent-chat-runtime-install-job " +
+                        `persistent-chat-runtime-install-${job.status}`
+                      }
+                    >
+                      <header>
+                        <div>
+                          <strong>
+                            {job.displayName ||
+                              job.runtimeType}
+                          </strong>
+
+                          <span>
+                            {job.installationType ||
+                              "installer"}
+                          </span>
+                        </div>
+
+                        <span>
+                          {job.status}
+                        </span>
+                      </header>
+
+                      {job.error && (
+                        <div className="persistent-chat-runtime-install-error">
+                          {job.error}
+                        </div>
+                      )}
+
+                      {job.log && (
+                        <details>
+                          <summary>
+                            Install Log
+                          </summary>
+
+                          <pre>{job.log}</pre>
+                        </details>
+                      )}
+
+                      {[
+                        "queued",
+                        "installing",
+                      ].includes(
+                        job.status,
+                      ) && (
+                        <button
+                          type="button"
+                          className="m3-btn m3-btn-error"
+                          disabled={
+                            runtimeInstallBusy
+                          }
+                          onClick={() =>
+                            cancelRuntimeInstall(
+                              job.id,
+                            )
+                          }
+                        >
+                          Cancel Install
+                        </button>
+                      )}
+
+                      {job.status ===
+                        "completed" && (
+                        <button
+                          type="button"
+                          className="m3-btn m3-btn-filled"
+                          onClick={
+                            detectInstalledTextRuntimes
+                          }
+                        >
+                          ตรวจหา Runtime ใหม่
+                        </button>
+                      )}
+                    </article>
+                  ))}
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="persistent-chat-supervisor-panel">

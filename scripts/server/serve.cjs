@@ -1,3 +1,8 @@
+// LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_IMPORT_V2
+const {
+  RuntimeInstallQueue,
+} = require("./text-runtime-installer.cjs");
+
 // LUKE_AI_RUNTIME_AUTO_DETECTION_IMPORT_V3
 const {
   detectTextRuntimes,
@@ -17142,10 +17147,190 @@ function writeRuntimeSupervisorPolicy(
   return policy;
 }
 
+// LUKE_AI_RUNTIME_INSTALL_QUEUE_BOOTSTRAP_V2
+const runtimeInstallQueue =
+  new RuntimeInstallQueue({
+    root: ROOT,
+    policyPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "text-chat",
+      "runtime-install-policy.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "text-chat",
+      "runtime-install-queue.json"
+    ),
+  });
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
 
   // LUKE_AI_RUNTIME_AUTO_DETECTION_API_V3
+  // LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_API_V2
+
+  // GET /api/text-runtime/install-queue
+  if (
+    req.url === "/api/text-runtime/install-queue" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        queue:
+          runtimeInstallQueue.getSnapshot(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/install
+  if (
+    req.url === "/api/text-runtime/install" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const runtimeType =
+        String(
+          body.runtimeType || ""
+        ).trim();
+
+      if (!runtimeType) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "runtimeType is required",
+        });
+      }
+
+      const detection =
+        await detectTextRuntimes();
+
+      const selected =
+        detection.detections.find(
+          (runtime) =>
+            runtime.runtimeType ===
+            runtimeType
+        );
+
+      if (selected?.installed === true) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            `${runtimeType} is already installed.`,
+        });
+      }
+
+      const job =
+        runtimeInstallQueue.enqueue(
+          runtimeType
+        );
+
+      return json(res, 202, {
+        ok: true,
+        job,
+        queue:
+          runtimeInstallQueue.getSnapshot(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-runtime/install-cancel
+  if (
+    req.url === "/api/text-runtime/install-cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const jobId =
+        String(
+          body.jobId || ""
+        ).trim();
+
+      if (!jobId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "jobId is required",
+        });
+      }
+
+      const job =
+        runtimeInstallQueue.cancel(
+          jobId
+        );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+        queue:
+          runtimeInstallQueue.getSnapshot(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-runtime/install-clear
+  if (
+    req.url === "/api/text-runtime/install-clear" &&
+    req.method === "POST"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        queue:
+          runtimeInstallQueue.clearCompleted(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
   // GET /api/text-runtime/detect
   if (
     req.url === "/api/text-runtime/detect" &&

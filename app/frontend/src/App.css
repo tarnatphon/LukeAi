@@ -6907,3 +6907,145 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_RUNTIME_INSTALL_FINAL_STYLES_V1 */
+.persistent-chat-runtime-install-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 11px;
+  background: var(--md-sys-color-surface);
+}
+
+.persistent-chat-runtime-install-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.persistent-chat-runtime-install-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-runtime-install-heading span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+}
+
+.persistent-chat-runtime-install-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.persistent-chat-runtime-install-job {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.persistent-chat-runtime-install-job header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.persistent-chat-runtime-install-job header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.persistent-chat-runtime-install-job header span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.persistent-chat-runtime-install-job > header > span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.persistent-chat-runtime-install-installing,
+.persistent-chat-runtime-install-queued {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-primary) 38%,
+      var(--border-color-muted)
+    );
+}
+
+.persistent-chat-runtime-install-completed {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-success) 45%,
+      var(--border-color-muted)
+    );
+}
+
+.persistent-chat-runtime-install-failed,
+.persistent-chat-runtime-install-cancelled {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-error) 42%,
+      var(--border-color-muted)
+    );
+}
+
+.persistent-chat-runtime-install-error {
+  padding: 7px 8px;
+  border-radius: 8px;
+  color: var(--md-sys-color-error);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-error) 9%,
+      transparent
+    );
+  font-size: 0.7rem;
+}
+
+.persistent-chat-runtime-install-job details {
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+}
+
+.persistent-chat-runtime-install-job summary {
+  padding: 7px 8px;
+  cursor: pointer;
+  font-size: 0.69rem;
+  font-weight: 700;
+}
+
+.persistent-chat-runtime-install-job pre {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+  border-top: 1px solid var(--border-color-muted);
+  font-size: 0.64rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .persistent-chat-runtime-install-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
