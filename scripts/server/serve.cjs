@@ -13285,11 +13285,23 @@ async function streamMultiModelGeneration(
           result.content.trim()
       );
 
-    const evaluation =
+    const baseEvaluation =
       evaluateMultiModelResponses(
         completedResponses,
         prompt
       );
+
+    const adaptiveResponses =
+      applyAdaptiveFeedbackScores(
+        baseEvaluation.responses
+      );
+
+    const evaluation = {
+      winner:
+        adaptiveResponses[0] || null,
+      responses:
+        adaptiveResponses,
+    };
 
     const savedMessages = [];
 
@@ -14091,6 +14103,546 @@ function stopAiJudgeSynthesis(
   };
 }
 
+
+// LUKE_AI_TEXT_MODEL_FEEDBACK_V1
+const textModelFeedbackPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "feedback-policy.json"
+);
+
+const textModelFeedbackStorePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-chat",
+  "model-feedback.json"
+);
+
+function readTextModelFeedbackPolicy() {
+  return readJsonFileStrict(
+    textModelFeedbackPolicyPath,
+    "Text model feedback policy"
+  );
+}
+
+function createInitialTextModelFeedbackStore() {
+  return {
+    schemaVersion: 1,
+    updatedAt: null,
+    modelScores: {},
+    messageFeedback: {},
+    events: [],
+  };
+}
+
+function readTextModelFeedbackStore() {
+  if (!fs.existsSync(textModelFeedbackStorePath)) {
+    const initial =
+      createInitialTextModelFeedbackStore();
+
+    writeJsonFileAtomic(
+      textModelFeedbackStorePath,
+      initial
+    );
+
+    return initial;
+  }
+
+  return readJsonFileStrict(
+    textModelFeedbackStorePath,
+    "Text model feedback store"
+  );
+}
+
+function writeTextModelFeedbackStore(store) {
+  store.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    textModelFeedbackStorePath,
+    store
+  );
+}
+
+function findConversationMessage(
+  conversation,
+  messageId
+) {
+  return (
+    conversation.messages?.find(
+      (message) =>
+        message.id === messageId
+    ) || null
+  );
+}
+
+function getFeedbackPoints(
+  feedbackType
+) {
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  if (feedbackType === "like") {
+    return Number(
+      policy.scoring?.likePoints
+    ) || 1;
+  }
+
+  if (feedbackType === "dislike") {
+    return Number(
+      policy.scoring?.dislikePoints
+    ) || -1;
+  }
+
+  if (feedbackType === "preferred") {
+    return Number(
+      policy.scoring?.preferredPoints
+    ) || 3;
+  }
+
+  if (feedbackType === "regenerate") {
+    return Number(
+      policy.scoring?.regeneratePenalty
+    ) || -0.25;
+  }
+
+  return 0;
+}
+
+function clampFeedbackScore(value) {
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  const minimum =
+    Number(
+      policy.scoring
+        ?.minimumFeedbackScore
+    );
+
+  const maximum =
+    Number(
+      policy.scoring
+        ?.maximumFeedbackScore
+    );
+
+  return Math.max(
+    Number.isFinite(minimum)
+      ? minimum
+      : -10,
+    Math.min(
+      Number.isFinite(maximum)
+        ? maximum
+        : 10,
+      value
+    )
+  );
+}
+
+function calculateModelFeedbackSummary(
+  modelEntry
+) {
+  const likes =
+    Number(modelEntry.likes) || 0;
+
+  const dislikes =
+    Number(modelEntry.dislikes) || 0;
+
+  const preferred =
+    Number(modelEntry.preferred) || 0;
+
+  const regenerations =
+    Number(modelEntry.regenerations) || 0;
+
+  const total =
+    likes +
+    dislikes +
+    preferred +
+    regenerations;
+
+  const rawScore =
+    Number(modelEntry.rawScore) || 0;
+
+  const normalizedScore =
+    total > 0
+      ? Math.max(
+          -1,
+          Math.min(
+            1,
+            rawScore /
+            Math.max(1, total * 3)
+          )
+        )
+      : 0;
+
+  return {
+    ...modelEntry,
+    total,
+    normalizedScore:
+      Number(
+        normalizedScore.toFixed(4)
+      ),
+  };
+}
+
+function recordTextModelFeedback({
+  conversationId,
+  messageId,
+  feedbackType,
+}) {
+  const allowed =
+    new Set([
+      "like",
+      "dislike",
+      "preferred",
+      "regenerate",
+      "clear",
+    ]);
+
+  if (!allowed.has(feedbackType)) {
+    const error = new Error(
+      "Invalid feedback type."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const chatStore =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      chatStore,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const message =
+    findConversationMessage(
+      conversation,
+      messageId
+    );
+
+  if (
+    !message ||
+    message.role !== "assistant"
+  ) {
+    const error = new Error(
+      "Assistant message was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const modelId =
+    message.modelId ||
+    message.metadata?.judgeModelId ||
+    "unknown-model";
+
+  const feedbackStore =
+    readTextModelFeedbackStore();
+
+  const previous =
+    feedbackStore.messageFeedback[
+      messageId
+    ] || null;
+
+  const modelEntry =
+    feedbackStore.modelScores[
+      modelId
+    ] || {
+      modelId,
+      likes: 0,
+      dislikes: 0,
+      preferred: 0,
+      regenerations: 0,
+      rawScore: 0,
+    };
+
+  if (
+    previous &&
+    previous.feedbackType !== "clear"
+  ) {
+    const previousPoints =
+      getFeedbackPoints(
+        previous.feedbackType
+      );
+
+    modelEntry.rawScore =
+      Number(modelEntry.rawScore) -
+      previousPoints;
+
+    if (previous.feedbackType === "like") {
+      modelEntry.likes =
+        Math.max(
+          0,
+          Number(modelEntry.likes) - 1
+        );
+    }
+
+    if (previous.feedbackType === "dislike") {
+      modelEntry.dislikes =
+        Math.max(
+          0,
+          Number(modelEntry.dislikes) - 1
+        );
+    }
+
+    if (previous.feedbackType === "preferred") {
+      modelEntry.preferred =
+        Math.max(
+          0,
+          Number(modelEntry.preferred) - 1
+        );
+    }
+
+    if (previous.feedbackType === "regenerate") {
+      modelEntry.regenerations =
+        Math.max(
+          0,
+          Number(modelEntry.regenerations) - 1
+        );
+    }
+  }
+
+  if (feedbackType !== "clear") {
+    const points =
+      getFeedbackPoints(
+        feedbackType
+      );
+
+    modelEntry.rawScore =
+      clampFeedbackScore(
+        Number(modelEntry.rawScore) +
+        points
+      );
+
+    if (feedbackType === "like") {
+      modelEntry.likes =
+        Number(modelEntry.likes) + 1;
+    }
+
+    if (feedbackType === "dislike") {
+      modelEntry.dislikes =
+        Number(modelEntry.dislikes) + 1;
+    }
+
+    if (feedbackType === "preferred") {
+      modelEntry.preferred =
+        Number(modelEntry.preferred) + 1;
+    }
+
+    if (feedbackType === "regenerate") {
+      modelEntry.regenerations =
+        Number(modelEntry.regenerations) + 1;
+    }
+  }
+
+  const now =
+    new Date().toISOString();
+
+  feedbackStore.modelScores[
+    modelId
+  ] = calculateModelFeedbackSummary(
+    modelEntry
+  );
+
+  feedbackStore.messageFeedback[
+    messageId
+  ] = {
+    conversationId,
+    messageId,
+    modelId,
+    feedbackType,
+    updatedAt: now,
+  };
+
+  feedbackStore.events.push({
+    id:
+      createTextChatId(
+        "feedback"
+      ),
+    conversationId,
+    messageId,
+    modelId,
+    feedbackType,
+    previousFeedbackType:
+      previous?.feedbackType || null,
+    createdAt: now,
+  });
+
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  const maximumEvents =
+    Number(
+      policy.history
+        ?.maximumEvents
+    ) || 10000;
+
+  feedbackStore.events =
+    feedbackStore.events.slice(
+      -maximumEvents
+    );
+
+  message.metadata = {
+    ...(message.metadata || {}),
+    userFeedback:
+      feedbackType,
+    feedbackUpdatedAt:
+      now,
+  };
+
+  if (feedbackType === "preferred") {
+    for (
+      const candidate
+      of conversation.messages || []
+    ) {
+      if (
+        candidate.role === "assistant"
+      ) {
+        candidate.metadata = {
+          ...(candidate.metadata || {}),
+          userPreferred:
+            candidate.id === messageId,
+        };
+      }
+    }
+  }
+
+  conversation.updatedAt = now;
+
+  writeTextChatStore(chatStore);
+  writeTextModelFeedbackStore(
+    feedbackStore
+  );
+
+  return {
+    message,
+    feedback:
+      feedbackStore.messageFeedback[
+        messageId
+      ],
+    modelScore:
+      feedbackStore.modelScores[
+        modelId
+      ],
+  };
+}
+
+function getAdaptiveModelScore(
+  modelId
+) {
+  const store =
+    readTextModelFeedbackStore();
+
+  return (
+    store.modelScores?.[
+      modelId
+    ]?.normalizedScore || 0
+  );
+}
+
+function applyAdaptiveFeedbackScores(
+  responses
+) {
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  const baseWeight =
+    Number(
+      policy.scoring?.baseWeight
+    ) || 0.85;
+
+  const feedbackWeight =
+    Number(
+      policy.scoring
+        ?.feedbackWeight
+    ) || 0.15;
+
+  return responses
+    .map(
+      (response) => {
+        const feedbackScore =
+          getAdaptiveModelScore(
+            response.modelId
+          );
+
+        const adjustedScore =
+          response.score *
+            baseWeight +
+          (
+            (feedbackScore + 1) /
+            2
+          ) *
+            feedbackWeight;
+
+        return {
+          ...response,
+          originalScore:
+            response.score,
+          feedbackScore,
+          score:
+            Number(
+              adjustedScore.toFixed(4)
+            ),
+        };
+      }
+    )
+    .sort(
+      (left, right) =>
+        right.score -
+        left.score
+    )
+    .map(
+      (response, index) => ({
+        ...response,
+        rank: index + 1,
+        best: index === 0,
+      })
+    );
+}
+
+function getTextModelFeedbackSummary() {
+  const store =
+    readTextModelFeedbackStore();
+
+  return {
+    updatedAt:
+      store.updatedAt,
+    modelScores:
+      Object.values(
+        store.modelScores || {}
+      )
+        .map(
+          calculateModelFeedbackSummary
+        )
+        .sort(
+          (left, right) =>
+            right.normalizedScore -
+            left.normalizedScore
+        ),
+    feedbackCount:
+      Object.keys(
+        store.messageFeedback || {}
+      ).length,
+    eventCount:
+      store.events?.length || 0,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -14791,6 +15343,71 @@ const server = http.createServer(async (req, res) => {
         200,
         buildTextModelHardwareCompatibility()
       );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-chat/feedback
+  if (
+    req.url === "/api/text-chat/feedback" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        recordTextModelFeedback({
+          conversationId:
+            String(
+              body.conversationId || ""
+            ).trim(),
+          messageId:
+            String(
+              body.messageId || ""
+            ).trim(),
+          feedbackType:
+            String(
+              body.feedbackType || ""
+            ).trim(),
+        });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-chat/feedback/summary
+  if (
+    req.url === "/api/text-chat/feedback/summary" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        ...getTextModelFeedbackSummary(),
+      });
     } catch (error) {
       return json(res, 500, {
         ok: false,

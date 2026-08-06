@@ -250,3 +250,11 @@ else
   echo "FAIL: Node.js is required for AI Judge Synthesis validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Text Model Feedback validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-text-model-feedback.cjs
+else
+  echo "FAIL: Node.js is required for Text Model Feedback validation"
+  exit 1
+fi

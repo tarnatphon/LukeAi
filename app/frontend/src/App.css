@@ -6003,3 +6003,78 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-direction: column;
   }
 }
+
+/* LUKE_AI_TEXT_MODEL_FEEDBACK_STYLES_V1 */
+.persistent-chat-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top:
+    1px solid
+    color-mix(
+      in srgb,
+      var(--border-color-muted)
+      70%,
+      transparent
+    );
+}
+
+.persistent-chat-feedback-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 8px;
+  color:
+    var(--md-sys-color-on-surface-variant);
+  background:
+    transparent;
+  cursor: pointer;
+  font-size: 0.68rem;
+}
+
+.persistent-chat-feedback-actions button:hover {
+  color:
+    var(--md-sys-color-primary);
+  border-color:
+    var(--md-sys-color-primary);
+}
+
+.persistent-chat-feedback-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.persistent-chat-feedback-active {
+  color:
+    var(--md-sys-color-primary) !important;
+  border-color:
+    var(--md-sys-color-primary) !important;
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-primary)
+      10%,
+      transparent
+    ) !important;
+}
+
+.persistent-chat-feedback-preferred {
+  color:
+    var(--md-sys-color-success) !important;
+  border-color:
+    var(--md-sys-color-success) !important;
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-success)
+      10%,
+      transparent
+    ) !important;
+}

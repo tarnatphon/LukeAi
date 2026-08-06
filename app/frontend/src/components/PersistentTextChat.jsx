@@ -6,6 +6,10 @@ import {
   Search,
   Send,
   Trash2,
+  ThumbsDown,
+  ThumbsUp,
+  CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import {
   useCallback,
@@ -137,6 +141,12 @@ export default function PersistentTextChat() {
 
   const [error, setError] =
     useState("");
+
+  // LUKE_AI_TEXT_MODEL_FEEDBACK_UI_V1
+  const [
+    feedbackBusyId,
+    setFeedbackBusyId,
+  ] = useState("");
 
   const mountedRef = useRef(true);
 
@@ -1451,6 +1461,126 @@ export default function PersistentTextChat() {
       ],
     );
 
+  const submitMessageFeedback =
+    useCallback(
+      async (
+        message,
+        feedbackType,
+      ) => {
+        if (
+          !activeConversationId ||
+          !message?.id
+        ) {
+          return;
+        }
+
+        setFeedbackBusyId(
+          message.id,
+        );
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-chat/feedback",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  conversationId:
+                    activeConversationId,
+                  messageId:
+                    message.id,
+                  feedbackType,
+                }),
+              },
+            );
+
+          setConversations(
+            (current) =>
+              current.map(
+                (conversation) =>
+                  conversation.id ===
+                  activeConversationId
+                    ? {
+                        ...conversation,
+                        messages:
+                          conversation.messages.map(
+                            (candidate) =>
+                              candidate.id ===
+                              data.message.id
+                                ? data.message
+                                : (
+                                    feedbackType ===
+                                      "preferred" &&
+                                    candidate.role ===
+                                      "assistant"
+                                  )
+                                  ? {
+                                      ...candidate,
+                                      metadata: {
+                                        ...(candidate.metadata || {}),
+                                        userPreferred:
+                                          candidate.id ===
+                                          data.message.id,
+                                      },
+                                    }
+                                  : candidate,
+                          ),
+                      }
+                    : conversation,
+              ),
+          );
+
+          setError("");
+        } catch (feedbackError) {
+          setError(
+            feedbackError instanceof Error
+              ? feedbackError.message
+              : String(feedbackError),
+          );
+        } finally {
+          setFeedbackBusyId("");
+        }
+      },
+      [
+        activeConversationId,
+        requestJson,
+      ],
+    );
+
+  const regenerateMessage =
+    useCallback(
+      async (message) => {
+        if (
+          !activeConversationId ||
+          !message
+        ) {
+          return;
+        }
+
+        await submitMessageFeedback(
+          message,
+          "regenerate",
+        );
+
+        if (message.modelId) {
+          setSelectedModelIds([
+            message.modelId,
+          ]);
+
+          setMultiModelEnabled(false);
+        }
+
+        await generateAssistantResponse(
+          activeConversationId,
+        );
+      },
+      [
+        activeConversationId,
+        generateAssistantResponse,
+        submitMessageFeedback,
+      ],
+    );
+
   const togglePin = useCallback(
     async (conversation) => {
       try {
@@ -1863,6 +1993,119 @@ export default function PersistentTextChat() {
                       message.createdAt,
                     )}
                   </time>
+
+                  {message.role ===
+                    "assistant" && (
+                    <div className="persistent-chat-feedback-actions">
+                      <button
+                        type="button"
+                        title="ชอบคำตอบนี้"
+                        className={
+                          message.metadata
+                            ?.userFeedback ===
+                            "like"
+                            ? "persistent-chat-feedback-active"
+                            : ""
+                        }
+                        disabled={
+                          feedbackBusyId ===
+                          message.id
+                        }
+                        onClick={() =>
+                          submitMessageFeedback(
+                            message,
+                            message.metadata
+                              ?.userFeedback ===
+                              "like"
+                              ? "clear"
+                              : "like",
+                          )
+                        }
+                      >
+                        <ThumbsUp
+                          size={14}
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        title="ไม่ชอบคำตอบนี้"
+                        className={
+                          message.metadata
+                            ?.userFeedback ===
+                            "dislike"
+                            ? "persistent-chat-feedback-active"
+                            : ""
+                        }
+                        disabled={
+                          feedbackBusyId ===
+                          message.id
+                        }
+                        onClick={() =>
+                          submitMessageFeedback(
+                            message,
+                            message.metadata
+                              ?.userFeedback ===
+                              "dislike"
+                              ? "clear"
+                              : "dislike",
+                          )
+                        }
+                      >
+                        <ThumbsDown
+                          size={14}
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        title="เลือกเป็นคำตอบที่ต้องการ"
+                        className={
+                          message.metadata
+                            ?.userPreferred
+                            ? "persistent-chat-feedback-preferred"
+                            : ""
+                        }
+                        disabled={
+                          feedbackBusyId ===
+                          message.id
+                        }
+                        onClick={() =>
+                          submitMessageFeedback(
+                            message,
+                            "preferred",
+                          )
+                        }
+                      >
+                        <CheckCircle2
+                          size={14}
+                        />
+                        เลือกคำตอบนี้
+                      </button>
+
+                      <button
+                        type="button"
+                        title="สร้างคำตอบใหม่"
+                        disabled={
+                          generating ||
+                          multiGenerating ||
+                          judgeGenerating ||
+                          feedbackBusyId ===
+                            message.id
+                        }
+                        onClick={() =>
+                          regenerateMessage(
+                            message,
+                          )
+                        }
+                      >
+                        <RotateCcw
+                          size={14}
+                        />
+                        Regenerate
+                      </button>
+                    </div>
+                  )}
                 </article>
               ),
             )
