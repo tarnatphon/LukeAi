@@ -164,6 +164,22 @@ export default function PersistentTextChat() {
     setRoutingModel,
   ] = useState(false);
 
+  // LUKE_AI_RUNTIME_FAILURE_RECOVERY_UI_V1
+  const [
+    recoveryStatus,
+    setRecoveryStatus,
+  ] = useState(null);
+
+  const [
+    recoveryAttempts,
+    setRecoveryAttempts,
+  ] = useState([]);
+
+  const [
+    fallbackModelId,
+    setFallbackModelId,
+  ] = useState("");
+
   const mountedRef = useRef(true);
 
   const requestJson = useCallback(
@@ -1204,6 +1220,11 @@ export default function PersistentTextChat() {
       ) => {
         setGenerating(true);
         setStreamingResponse("");
+        setRecoveryStatus({
+          status: "starting",
+        });
+        setRecoveryAttempts([]);
+        setFallbackModelId("");
         setError("");
 
         const controller =
@@ -1214,7 +1235,7 @@ export default function PersistentTextChat() {
 
         try {
           const response = await fetch(
-            "/api/text-runtime/generate-stream",
+            "/api/text-runtime/generate-with-recovery",
             {
               method: "POST",
               headers: {
@@ -1252,7 +1273,7 @@ export default function PersistentTextChat() {
 
           if (!response.body) {
             throw new Error(
-              "Streaming response is unavailable.",
+              "Recovery stream is unavailable.",
             );
           }
 
@@ -1264,6 +1285,7 @@ export default function PersistentTextChat() {
 
           let buffer = "";
           let accumulated = "";
+          let completed = false;
 
           while (true) {
             const result =
@@ -1333,7 +1355,48 @@ export default function PersistentTextChat() {
               }
 
               if (
-                eventName === "delta" &&
+                eventName ===
+                "recovery-start"
+              ) {
+                setRecoveryStatus({
+                  status: "routing",
+                  modelOrder:
+                    payload.modelOrder ||
+                    [],
+                });
+              }
+
+              if (
+                eventName ===
+                "recovery-attempt"
+              ) {
+                accumulated = "";
+                setStreamingResponse("");
+
+                setRecoveryAttempts(
+                  (current) => [
+                    ...current,
+                    {
+                      ...payload,
+                      status:
+                        "generating",
+                    },
+                  ],
+                );
+
+                setRecoveryStatus({
+                  status:
+                    "generating",
+                  modelId:
+                    payload.modelId,
+                  attempt:
+                    payload.attempt,
+                });
+              }
+
+              if (
+                eventName ===
+                  "recovery-delta" &&
                 typeof payload.content ===
                   "string"
               ) {
@@ -1346,11 +1409,92 @@ export default function PersistentTextChat() {
               }
 
               if (
+                eventName ===
+                "recovery-failed-attempt"
+              ) {
+                setRecoveryAttempts(
+                  (current) =>
+                    current.map(
+                      (attempt) =>
+                        attempt.attempt ===
+                        payload.attempt
+                          ? {
+                              ...attempt,
+                              status:
+                                "failed",
+                              errorType:
+                                payload.errorType,
+                              error:
+                                payload.error,
+                            }
+                          : attempt,
+                    ),
+                );
+
+                setRecoveryStatus({
+                  status:
+                    payload.hasNextModel
+                      ? "switching"
+                      : "failed",
+                  failedModelId:
+                    payload.modelId,
+                  errorType:
+                    payload.errorType,
+                });
+              }
+
+              if (
+                eventName ===
+                "recovery-complete"
+              ) {
+                completed = true;
+
+                setRecoveryStatus({
+                  status:
+                    "completed",
+                  successfulModelId:
+                    payload
+                      .successfulModelId,
+                  fallbackUsed:
+                    payload
+                      .fallbackUsed,
+                  successfulAttempt:
+                    payload
+                      .successfulAttempt,
+                });
+
+                if (
+                  payload.fallbackUsed
+                ) {
+                  setFallbackModelId(
+                    payload
+                      .successfulModelId ||
+                    "",
+                  );
+                }
+              }
+
+              if (
+                eventName ===
+                "recovery-exhausted"
+              ) {
+                setRecoveryStatus({
+                  status:
+                    "exhausted",
+                });
+
+                throw new Error(
+                  payload.error ||
+                  "ทุกโมเดลสำรองทำงานไม่สำเร็จ",
+                );
+              }
+
+              if (
                 eventName === "error"
               ) {
                 throw new Error(
                   payload.error ||
-                  "Text generation failed.",
+                  "Runtime recovery failed.",
                 );
               }
             }
@@ -1358,11 +1502,13 @@ export default function PersistentTextChat() {
 
           setStreamingResponse("");
 
-          await refresh();
+          if (completed) {
+            await refresh();
 
-          await refreshMemoryStatus(
-            conversationId,
-          );
+            await refreshMemoryStatus(
+              conversationId,
+            );
+          }
         } catch (generationError) {
           if (
             generationError?.name !==
@@ -1398,7 +1544,7 @@ export default function PersistentTextChat() {
 
         try {
           await requestJson(
-            "/api/text-runtime/generation/stop",
+            "/api/text-runtime/recovery/stop",
             {
               method: "POST",
               body: JSON.stringify({
@@ -2209,6 +2355,76 @@ export default function PersistentTextChat() {
             </article>
           )}
         </div>
+
+        {(recoveryStatus ||
+          recoveryAttempts.length > 0) && (
+          <section className="persistent-chat-recovery-panel">
+            <div className="persistent-chat-recovery-heading">
+              <div>
+                <strong>
+                  Runtime Recovery
+                </strong>
+
+                <span>
+                  สลับโมเดลสำรองอัตโนมัติเมื่อโมเดลหลักทำงานไม่สำเร็จ
+                </span>
+              </div>
+
+              <strong
+                className={
+                  "persistent-chat-recovery-state " +
+                  `persistent-chat-recovery-state-${recoveryStatus?.status || "idle"}`
+                }
+              >
+                {recoveryStatus?.status ||
+                  "idle"}
+              </strong>
+            </div>
+
+            {recoveryAttempts.length > 0 && (
+              <div className="persistent-chat-recovery-attempts">
+                {recoveryAttempts.map(
+                  (attempt) => (
+                    <div
+                      key={`${attempt.attempt}-${attempt.modelId}`}
+                      className={
+                        "persistent-chat-recovery-attempt " +
+                        `persistent-chat-recovery-attempt-${attempt.status}`
+                      }
+                    >
+                      <span>
+                        ครั้งที่
+                        {" "}
+                        {attempt.attempt}
+                      </span>
+
+                      <strong>
+                        {attempt.modelId}
+                      </strong>
+
+                      <small>
+                        {attempt.status}
+                        {attempt.errorType
+                          ? ` · ${attempt.errorType}`
+                          : ""}
+                      </small>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+
+            {fallbackModelId && (
+              <div className="persistent-chat-fallback-success">
+                ใช้โมเดลสำรองสำเร็จ:
+                {" "}
+                <strong>
+                  {fallbackModelId}
+                </strong>
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="persistent-chat-router-panel">
           <div className="persistent-chat-router-heading">

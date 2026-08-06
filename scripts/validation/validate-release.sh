@@ -266,3 +266,11 @@ else
   echo "FAIL: Node.js is required for Automatic Model Router validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Runtime Failure Recovery validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-failure-recovery.cjs
+else
+  echo "FAIL: Node.js is required for Runtime Failure Recovery validation"
+  exit 1
+fi

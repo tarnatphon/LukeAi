@@ -30,6 +30,14 @@ const storeFile = path.join(
   "conversations.json"
 );
 
+const installedFile = path.join(
+  root,
+  "app",
+  "runtime-state",
+  "text-models",
+  "installed-models.json"
+);
+
 const componentFile = path.join(
   root,
   "app",
@@ -124,6 +132,34 @@ async function requestJson(
   };
 }
 
+async function readStream(response) {
+  const reader =
+    response.body.getReader();
+
+  const decoder =
+    new TextDecoder();
+
+  let text = "";
+
+  while (true) {
+    const result =
+      await reader.read();
+
+    if (result.done) {
+      break;
+    }
+
+    text += decoder.decode(
+      result.value,
+      {
+        stream: true,
+      }
+    );
+  }
+
+  return text;
+}
+
 async function stopProcess(child) {
   if (
     !child ||
@@ -179,46 +215,16 @@ async function waitForServer(
   );
 }
 
-async function readGenerationStream(
-  response
-) {
-  if (!response.body) {
-    throw new Error(
-      "Generation stream is missing."
-    );
-  }
-
-  const reader =
-    response.body.getReader();
-
-  const decoder =
-    new TextDecoder();
-
-  let raw = "";
-
-  while (true) {
-    const result =
-      await reader.read();
-
-    if (result.done) {
-      break;
-    }
-
-    raw += decoder.decode(
-      result.value,
-      {
-        stream: true,
-      }
-    );
-  }
-
-  return raw;
-}
-
 async function main() {
   const originalStore =
     fs.readFileSync(
       storeFile,
+      "utf8"
+    );
+
+  const originalInstalled =
+    fs.readFileSync(
+      installedFile,
       "utf8"
     );
 
@@ -238,11 +244,82 @@ async function main() {
     "utf8"
   );
 
+  fs.writeFileSync(
+    installedFile,
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        updatedAt:
+          new Date().toISOString(),
+        activeModelId:
+          "primary-model",
+        models: [
+          {
+            id:
+              "primary-model@1:q4",
+            modelId:
+              "primary-model",
+            modelName:
+              "Qwen Coder Primary",
+            installedPath:
+              "/tmp/primary.gguf",
+            contextLength:
+              32768,
+            capabilities: [
+              "coding",
+              "qwen",
+            ],
+            installedAt:
+              new Date().toISOString()
+          },
+          {
+            id:
+              "fallback-model@1:q4",
+            modelId:
+              "fallback-model",
+            modelName:
+              "DeepSeek Coder Fallback",
+            installedPath:
+              "/tmp/fallback.gguf",
+            contextLength:
+              32768,
+            capabilities: [
+              "coding",
+              "deepseek",
+            ],
+            installedAt:
+              new Date().toISOString()
+          },
+          {
+            id:
+              "third-model@1:q4",
+            modelId:
+              "third-model",
+            modelName:
+              "General Model",
+            installedPath:
+              "/tmp/third.gguf",
+            contextLength:
+              32768,
+            capabilities: [
+              "general",
+              "chat",
+            ],
+            installedAt:
+              new Date().toISOString()
+          }
+        ]
+      },
+      null,
+      2
+    ) + "\n",
+    "utf8"
+  );
+
   const runtimePort =
     await getFreePort();
 
-  let receivedGenerationBody =
-    null;
+  const calledModels = [];
 
   const runtimeServer =
     http.createServer(
@@ -258,73 +335,89 @@ async function main() {
             .toString("utf8");
 
         if (
-          req.url === "/health"
-        ) {
-          res.writeHead(
-            200,
-            {
-              "content-type":
-                "application/json",
-            }
-          );
-
-          res.end(
-            JSON.stringify({
-              ok: true,
-            })
-          );
-
-          return;
-        }
-
-        if (
           req.url ===
             "/v1/chat/completions" &&
           req.method === "POST"
         ) {
-          receivedGenerationBody =
+          const body =
             JSON.parse(rawBody);
 
-          res.writeHead(
-            200,
-            {
-              "content-type":
-                "text/event-stream",
-              "cache-control":
-                "no-cache",
-              connection:
-                "keep-alive",
-            }
+          calledModels.push(
+            body.model
           );
 
-          const parts = [
-            "สวัสดีครับ ",
-            "นี่คือคำตอบ",
-            "แบบ Streaming",
-          ];
-
-          for (const part of parts) {
-            res.write(
-              "data: " +
-              JSON.stringify({
-                choices: [
-                  {
-                    delta: {
-                      content: part,
-                    },
-                  },
-                ],
-              }) +
-              "\n\n"
+          if (
+            body.model ===
+            "primary-model"
+          ) {
+            res.writeHead(
+              500,
+              {
+                "content-type":
+                  "application/json",
+              }
             );
 
-            await delay(25);
+            res.end(
+              JSON.stringify({
+                error:
+                  "Primary runtime failed",
+              })
+            );
+
+            return;
           }
 
-          res.write(
-            "data: [DONE]\n\n"
-          );
+          if (
+            body.model ===
+            "fallback-model"
+          ) {
+            res.writeHead(
+              200,
+              {
+                "content-type":
+                  "text/event-stream",
+                "cache-control":
+                  "no-cache",
+              }
+            );
 
+            const answer =
+              "คำตอบนี้สร้างจากโมเดลสำรองหลังจากโมเดลหลักทำงานไม่สำเร็จ";
+
+            for (
+              const part
+              of [
+                answer.slice(0, 25),
+                answer.slice(25),
+              ]
+            ) {
+              res.write(
+                "data: " +
+                JSON.stringify({
+                  choices: [
+                    {
+                      delta: {
+                        content: part,
+                      },
+                    },
+                  ],
+                }) +
+                "\n\n"
+              );
+
+              await delay(20);
+            }
+
+            res.write(
+              "data: [DONE]\n\n"
+            );
+
+            res.end();
+            return;
+          }
+
+          res.writeHead(500);
           res.end();
           return;
         }
@@ -371,6 +464,10 @@ async function main() {
           String(appPort),
         LUKE_AI_TEXT_RUNTIME_BASE_URL:
           `http://127.0.0.1:${runtimePort}`,
+        LUKE_AI_TEST_TOTAL_RAM_BYTES:
+          String(32 * 1024 ** 3),
+        LUKE_AI_TEST_AVAILABLE_RAM_BYTES:
+          String(24 * 1024 ** 3),
       },
       stdio: [
         "ignore",
@@ -397,9 +494,7 @@ async function main() {
           method: "POST",
           body: {
             title:
-              "Streaming Test",
-            systemPrompt:
-              "ตอบเป็นภาษาไทย",
+              "Runtime Recovery Test",
           },
         }
       );
@@ -408,13 +503,7 @@ async function main() {
       created.data
         ?.conversation?.id;
 
-    if (!conversationId) {
-      throw new Error(
-        "Unable to create conversation."
-      );
-    }
-
-    const userMessage =
+    const savedUser =
       await requestJson(
         baseUrl,
         `/api/text-chat/conversations/${conversationId}/messages`,
@@ -423,12 +512,12 @@ async function main() {
           body: {
             role: "user",
             content:
-              "ช่วยตอบแบบ Streaming",
+              "ช่วยเขียน code และแก้ error",
           },
         }
       );
 
-    if (userMessage.status !== 201) {
+    if (savedUser.status !== 201) {
       throw new Error(
         "Unable to save user message."
       );
@@ -436,7 +525,7 @@ async function main() {
 
     const generationResponse =
       await fetch(
-        `${baseUrl}/api/text-runtime/generate-stream`,
+        `${baseUrl}/api/text-runtime/generate-with-recovery`,
         {
           method: "POST",
           headers: {
@@ -445,6 +534,8 @@ async function main() {
           },
           body: JSON.stringify({
             conversationId,
+            modelId:
+              "primary-model",
           }),
         }
       );
@@ -459,45 +550,36 @@ async function main() {
     }
 
     const streamText =
-      await readGenerationStream(
+      await readStream(
         generationResponse
       );
 
-    if (
-      !streamText.includes(
-        "event: delta"
-      ) ||
-      !streamText.includes(
-        "event: complete"
-      ) ||
-      !streamText.includes(
-        "แบบ Streaming"
-      )
-    ) {
-      throw new Error(
-        "Streaming events are incomplete."
-      );
+    for (const requirement of [
+      "event: recovery-start",
+      "event: recovery-attempt",
+      "event: recovery-failed-attempt",
+      "event: recovery-delta",
+      "event: recovery-complete",
+    ]) {
+      if (
+        !streamText.includes(
+          requirement
+        )
+      ) {
+        throw new Error(
+          `Recovery event missing: ${requirement}`
+        );
+      }
     }
 
     if (
-      !receivedGenerationBody ||
-      receivedGenerationBody
-        .stream !== true ||
-      !Array.isArray(
-        receivedGenerationBody.messages
-      ) ||
-      !receivedGenerationBody
-        .messages
-        .some(
-          (message) =>
-            message.content
-              ?.includes(
-                "ช่วยตอบแบบ Streaming"
-              )
-        )
+      calledModels[0] !==
+        "primary-model" ||
+      calledModels[1] !==
+        "fallback-model"
     ) {
       throw new Error(
-        "Runtime generation payload is invalid."
+        `Unexpected model order: ${calledModels.join(", ")}`
       );
     }
 
@@ -507,28 +589,53 @@ async function main() {
         `/api/text-chat/conversations/${conversationId}`
       );
 
-    const messages =
+    const assistantMessages =
       restored.data
         ?.conversation
-        ?.messages || [];
-
-    const assistant =
-      messages.find(
-        (message) =>
-          message.role ===
-          "assistant"
-      );
+        ?.messages
+        ?.filter(
+          (message) =>
+            message.role ===
+            "assistant"
+        ) || [];
 
     if (
-      messages.length !== 2 ||
-      !assistant ||
-      assistant.content !==
-        "สวัสดีครับ นี่คือคำตอบแบบ Streaming" ||
-      assistant.metadata
-        ?.autosaved !== true
+      assistantMessages.length !== 1
     ) {
       throw new Error(
-        "Assistant response was not autosaved correctly."
+        "Exactly one assistant response must be autosaved."
+      );
+    }
+
+    const assistant =
+      assistantMessages[0];
+
+    if (
+      assistant.modelId !==
+        "fallback-model" ||
+      assistant.metadata
+        ?.recoveryUsed !== true ||
+      assistant.metadata
+        ?.successfulAttempt !== 2 ||
+      assistant.metadata
+        ?.attemptHistory
+        ?.length !== 2
+    ) {
+      throw new Error(
+        "Recovery metadata is invalid."
+      );
+    }
+
+    if (
+      assistant.metadata
+        .attemptHistory[0]
+        .status !== "failed" ||
+      assistant.metadata
+        .attemptHistory[1]
+        .status !== "completed"
+    ) {
+      throw new Error(
+        "Attempt history statuses are invalid."
       );
     }
 
@@ -539,42 +646,48 @@ async function main() {
       );
 
     for (const requirement of [
-      // LUKE_AI_STREAMING_RECOVERY_COMPATIBILITY_V1
       "/api/text-runtime/generate-with-recovery",
       "/api/text-runtime/recovery/stop",
-      "streamingResponse",
-      "หยุดการสร้างคำตอบ",
-      "กำลังประมวลผล",
-      "TextDecoder",
+      "Runtime Recovery",
+      "recoveryAttempts",
+      "fallbackModelId",
+      "ใช้โมเดลสำรองสำเร็จ",
     ]) {
-      if (!component.includes(requirement)) {
+      if (
+        !component.includes(
+          requirement
+        )
+      ) {
         throw new Error(
-          `Streaming UI requirement missing: ${requirement}`
+          `Recovery UI requirement missing: ${requirement}`
         );
       }
     }
 
     console.log("");
     console.log(
-      "PASS: User message was saved before generation."
+      "PASS: Primary model was attempted first."
     );
     console.log(
-      "PASS: Runtime received an OpenAI-compatible streaming request."
+      "PASS: Primary model failure was detected."
     );
     console.log(
-      "PASS: Text tokens streamed incrementally."
+      "PASS: Automatic fallback model was selected."
     );
     console.log(
-      "PASS: Streaming completion event was emitted."
+      "PASS: Fallback response streamed successfully."
     );
     console.log(
-      "PASS: Assistant response was autosaved."
+      "PASS: Only the successful response was autosaved."
     );
     console.log(
-      "PASS: Conversation history contains user and assistant messages."
+      "PASS: Recovery attempt history was preserved."
     );
     console.log(
-      "PASS: Stop Generation UI is connected through Runtime Recovery."
+      "PASS: Successful fallback Model ID was stored."
+    );
+    console.log(
+      "PASS: Runtime Recovery UI is connected."
     );
   } finally {
     await stopProcess(child);
@@ -590,10 +703,16 @@ async function main() {
       originalStore,
       "utf8"
     );
+
+    fs.writeFileSync(
+      installedFile,
+      originalInstalled,
+      "utf8"
+    );
   }
 
   console.log(
-    "PASS: Text Generation Streaming validation completed."
+    "PASS: Runtime Failure Recovery validation completed."
   );
 }
 

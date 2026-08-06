@@ -15312,6 +15312,913 @@ function getConversationLatestUserPrompt(
   );
 }
 
+
+// LUKE_AI_RUNTIME_FAILURE_RECOVERY_V1
+const runtimeRecoveryPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "runtime-recovery-policy.json"
+);
+
+const activeRecoveryGenerations = new Map();
+
+function readRuntimeRecoveryPolicy() {
+  return readJsonFileStrict(
+    runtimeRecoveryPolicyPath,
+    "Runtime recovery policy"
+  );
+}
+
+function delayRuntimeRecovery(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function classifyRuntimeRecoveryError(error) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error);
+
+  if (
+    error?.name === "AbortError" ||
+    /timeout|timed out|aborted/i.test(message)
+  ) {
+    return "timeout";
+  }
+
+  if (
+    /fetch failed|ECONNREFUSED|ECONNRESET|socket|network|connection/i.test(
+      message
+    )
+  ) {
+    return "connection";
+  }
+
+  if (
+    /HTTP\s+[45]\d\d|runtime HTTP|returned HTTP/i.test(
+      message
+    )
+  ) {
+    return "http";
+  }
+
+  if (
+    /empty response|no response body|returned no response/i.test(
+      message
+    )
+  ) {
+    return "empty-response";
+  }
+
+  return "runtime-error";
+}
+
+function shouldContinueRuntimeRecovery(
+  errorType
+) {
+  const policy =
+    readRuntimeRecoveryPolicy();
+
+  if (errorType === "timeout") {
+    return (
+      policy.recovery
+        ?.continueOnTimeout !== false
+    );
+  }
+
+  if (errorType === "connection") {
+    return (
+      policy.recovery
+        ?.continueOnConnectionError !== false
+    );
+  }
+
+  if (errorType === "http") {
+    return (
+      policy.recovery
+        ?.continueOnHttpError !== false
+    );
+  }
+
+  if (errorType === "empty-response") {
+    return (
+      policy.recovery
+        ?.continueOnEmptyResponse !== false
+    );
+  }
+
+  return true;
+}
+
+function buildRuntimeRecoveryModelOrder({
+  conversation,
+  requestedModelId = null,
+} = {}) {
+  const policy =
+    readRuntimeRecoveryPolicy();
+
+  const latestPrompt =
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      )
+      ?.content || "";
+
+  let routing = null;
+
+  try {
+    routing =
+      routeTextModel({
+        prompt:
+          latestPrompt,
+        conversationId:
+          conversation.id,
+      });
+  } catch {}
+
+  const candidates = [];
+
+  if (
+    policy.routing
+      ?.respectManualModelFirst !== false &&
+    requestedModelId
+  ) {
+    candidates.push({
+      modelId:
+        requestedModelId,
+      source:
+        "manual",
+      routeScore:
+        null,
+    });
+  }
+
+  if (
+    routing?.selectedModel?.modelId
+  ) {
+    candidates.push({
+      modelId:
+        routing.selectedModel.modelId,
+      source:
+        "router-primary",
+      routeScore:
+        routing.selectedModel.routeScore,
+    });
+  }
+
+  if (
+    policy.routing
+      ?.useRouterFallbackOrder !== false
+  ) {
+    for (
+      const fallback
+      of routing?.fallbackModels || []
+    ) {
+      candidates.push({
+        modelId:
+          fallback.modelId,
+        source:
+          "router-fallback",
+        routeScore:
+          fallback.routeScore,
+      });
+    }
+  }
+
+  if (!candidates.length) {
+    candidates.push({
+      modelId:
+        getTextGenerationModelId(
+          conversation
+        ),
+      source:
+        "active-model",
+      routeScore:
+        null,
+    });
+  }
+
+  const unique = [];
+  const seen = new Set();
+
+  for (const candidate of candidates) {
+    const modelId =
+      String(
+        candidate.modelId || ""
+      ).trim();
+
+    if (
+      !modelId ||
+      seen.has(modelId)
+    ) {
+      continue;
+    }
+
+    seen.add(modelId);
+
+    unique.push({
+      ...candidate,
+      modelId,
+    });
+  }
+
+  const maximumAttempts =
+    Number(
+      policy.recovery
+        ?.maximumAttempts
+    ) || 3;
+
+  return {
+    routing,
+    models:
+      unique.slice(
+        0,
+        maximumAttempts
+      ),
+  };
+}
+
+async function readRuntimeRecoveryStream(
+  runtimeResponse,
+  {
+    modelId,
+    generationId,
+    response,
+    state,
+  }
+) {
+  if (!runtimeResponse.body) {
+    throw new Error(
+      `Model ${modelId} returned no response body.`
+    );
+  }
+
+  const contentType =
+    String(
+      runtimeResponse.headers.get(
+        "content-type"
+      ) || ""
+    ).toLowerCase();
+
+  let accumulatedText = "";
+
+  if (
+    contentType.includes(
+      "application/json"
+    )
+  ) {
+    const body =
+      await runtimeResponse.json();
+
+    const content =
+      extractTextGenerationDelta(
+        body
+      );
+
+    if (content) {
+      accumulatedText += content;
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-delta",
+        {
+          generationId,
+          modelId,
+          content,
+        }
+      );
+    }
+
+    return accumulatedText;
+  }
+
+  const reader =
+    runtimeResponse.body
+      .getReader();
+
+  const decoder =
+    new TextDecoder();
+
+  let buffer = "";
+
+  while (true) {
+    const result =
+      await reader.read();
+
+    if (result.done) {
+      break;
+    }
+
+    if (state.stopped) {
+      throw new DOMException(
+        "Generation stopped.",
+        "AbortError"
+      );
+    }
+
+    buffer += decoder.decode(
+      result.value,
+      {
+        stream: true,
+      }
+    );
+
+    const lines =
+      buffer.split(/\r?\n/);
+
+    buffer =
+      lines.pop() || "";
+
+    for (const rawLine of lines) {
+      let line =
+        rawLine.trim();
+
+      if (
+        !line ||
+        line.startsWith(":")
+      ) {
+        continue;
+      }
+
+      if (
+        line.startsWith("data:")
+      ) {
+        line =
+          line
+            .slice(5)
+            .trim();
+      }
+
+      if (
+        line === "[DONE]"
+      ) {
+        continue;
+      }
+
+      let payload = null;
+
+      try {
+        payload =
+          JSON.parse(line);
+      } catch {
+        payload = line;
+      }
+
+      const content =
+        extractTextGenerationDelta(
+          payload
+        );
+
+      if (!content) {
+        continue;
+      }
+
+      accumulatedText += content;
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-delta",
+        {
+          generationId,
+          modelId,
+          content,
+        }
+      );
+    }
+  }
+
+  return accumulatedText;
+}
+
+async function generateWithRuntimeRecovery(
+  conversationId,
+  response,
+  {
+    requestedModelId = null,
+    temperature = undefined,
+    topP = undefined,
+    maxTokens = undefined,
+  } = {}
+) {
+  if (
+    activeRecoveryGenerations.has(
+      conversationId
+    )
+  ) {
+    const error = new Error(
+      "A recovery generation is already active for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const policy =
+    readRuntimeRecoveryPolicy();
+
+  const generationPolicy =
+    readTextGenerationPolicy();
+
+  const generationId =
+    createTextChatId(
+      "recovery-generation"
+    );
+
+  const modelOrder =
+    buildRuntimeRecoveryModelOrder({
+      conversation,
+      requestedModelId,
+    });
+
+  if (!modelOrder.models.length) {
+    const error = new Error(
+      "No model is available for generation recovery."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const state = {
+    generationId,
+    conversationId,
+    status: "starting",
+    stopped: false,
+    activeController: null,
+    attempts: [],
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    successfulModelId: null,
+  };
+
+  activeRecoveryGenerations.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "recovery-start",
+    {
+      generationId,
+      conversationId,
+      modelOrder:
+        modelOrder.models,
+      taskDetection:
+        modelOrder.routing
+          ?.taskDetection ||
+        null,
+    }
+  );
+
+  try {
+    for (
+      let index = 0;
+      index < modelOrder.models.length;
+      index += 1
+    ) {
+      if (state.stopped) {
+        break;
+      }
+
+      const candidate =
+        modelOrder.models[index];
+
+      const controller =
+        new AbortController();
+
+      state.activeController =
+        controller;
+
+      const attempt = {
+        attempt:
+          index + 1,
+        modelId:
+          candidate.modelId,
+        source:
+          candidate.source,
+        routeScore:
+          candidate.routeScore,
+        status:
+          "starting",
+        startedAt:
+          new Date().toISOString(),
+        completedAt: null,
+        errorType: null,
+        error: null,
+        responseCharacters: 0,
+      };
+
+      state.attempts.push(
+        attempt
+      );
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-attempt",
+        {
+          generationId,
+          ...attempt,
+        }
+      );
+
+      const timeoutMs =
+        Number(
+          policy.recovery
+            ?.attemptTimeoutMs
+        ) || 120000;
+
+      const timeout =
+        setTimeout(
+          () => controller.abort(),
+          timeoutMs
+        );
+
+      try {
+        attempt.status =
+          "generating";
+
+        const runtimeResponse =
+          await fetch(
+            buildTextRuntimeUrl(
+              generationPolicy.runtime
+                ?.generationPath ||
+              "/v1/chat/completions"
+            ),
+            {
+              method: "POST",
+              headers: {
+                "content-type":
+                  "application/json",
+                accept:
+                  "text/event-stream, application/json",
+                "x-luke-model-id":
+                  candidate.modelId,
+                "x-luke-recovery-attempt":
+                  String(index + 1),
+              },
+              body:
+                JSON.stringify(
+                  createTextGenerationPayload(
+                    conversation,
+                    {
+                      modelId:
+                        candidate.modelId,
+                      autoRoute:
+                        false,
+                      temperature,
+                      topP,
+                      maxTokens,
+                    }
+                  )
+                ),
+              signal:
+                controller.signal,
+            }
+          );
+
+        if (!runtimeResponse.ok) {
+          const errorText =
+            await runtimeResponse.text();
+
+          throw new Error(
+            errorText ||
+            `Model ${candidate.modelId} returned HTTP ${runtimeResponse.status}`
+          );
+        }
+
+        const content =
+          await readRuntimeRecoveryStream(
+            runtimeResponse,
+            {
+              modelId:
+                candidate.modelId,
+              generationId,
+              response,
+              state,
+            }
+          );
+
+        const normalizedContent =
+          String(content || "")
+            .trim();
+
+        const minimumCharacters =
+          Number(
+            policy.response
+              ?.minimumResponseCharacters
+          ) || 1;
+
+        if (
+          normalizedContent.length <
+          minimumCharacters
+        ) {
+          throw new Error(
+            `Model ${candidate.modelId} returned an empty response.`
+          );
+        }
+
+        attempt.status =
+          "completed";
+
+        attempt.completedAt =
+          new Date().toISOString();
+
+        attempt.responseCharacters =
+          normalizedContent.length;
+
+        state.status =
+          "completed";
+
+        state.completedAt =
+          new Date().toISOString();
+
+        state.successfulModelId =
+          candidate.modelId;
+
+        const saved =
+          appendTextChatMessage(
+            conversationId,
+            {
+              role:
+                "assistant",
+              content:
+                normalizedContent,
+              modelId:
+                candidate.modelId,
+              metadata: {
+                source:
+                  "runtime-failure-recovery",
+                generationId,
+                autosaved: true,
+                recoveryUsed:
+                  index > 0,
+                successfulAttempt:
+                  index + 1,
+                primaryModelId:
+                  modelOrder.models[0]
+                    ?.modelId ||
+                  candidate.modelId,
+                successfulModelId:
+                  candidate.modelId,
+                attemptHistory:
+                  state.attempts.map(
+                    (item) => ({
+                      attempt:
+                        item.attempt,
+                      modelId:
+                        item.modelId,
+                      source:
+                        item.source,
+                      status:
+                        item.status,
+                      errorType:
+                        item.errorType,
+                      error:
+                        item.error,
+                      responseCharacters:
+                        item.responseCharacters,
+                    })
+                  ),
+              },
+            }
+          );
+
+        writeTextGenerationEvent(
+          response,
+          "recovery-complete",
+          {
+            generationId,
+            conversationId,
+            content:
+              normalizedContent,
+            successfulModelId:
+              candidate.modelId,
+            successfulAttempt:
+              index + 1,
+            fallbackUsed:
+              index > 0,
+            attempts:
+              state.attempts,
+            message:
+              saved?.message ||
+              null,
+          }
+        );
+
+        return;
+      } catch (error) {
+        const stopped =
+          state.stopped ||
+          error?.name ===
+            "AbortError" &&
+          state.stopped;
+
+        if (stopped) {
+          attempt.status =
+            "stopped";
+
+          attempt.completedAt =
+            new Date().toISOString();
+
+          break;
+        }
+
+        const errorType =
+          classifyRuntimeRecoveryError(
+            error
+          );
+
+        attempt.status =
+          "failed";
+
+        attempt.completedAt =
+          new Date().toISOString();
+
+        attempt.errorType =
+          errorType;
+
+        attempt.error =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        writeTextGenerationEvent(
+          response,
+          "recovery-failed-attempt",
+          {
+            generationId,
+            attempt:
+              attempt.attempt,
+            modelId:
+              attempt.modelId,
+            errorType:
+              attempt.errorType,
+            error:
+              attempt.error,
+            hasNextModel:
+              index + 1 <
+              modelOrder.models.length,
+          }
+        );
+
+        if (
+          !shouldContinueRuntimeRecovery(
+            errorType
+          )
+        ) {
+          break;
+        }
+
+        if (
+          index + 1 <
+          modelOrder.models.length
+        ) {
+          const retryDelayMs =
+            Number(
+              policy.recovery
+                ?.retryDelayMs
+            ) || 350;
+
+          if (retryDelayMs > 0) {
+            await delayRuntimeRecovery(
+              retryDelayMs
+            );
+          }
+        }
+      } finally {
+        clearTimeout(timeout);
+
+        state.activeController =
+          null;
+      }
+    }
+
+    if (state.stopped) {
+      state.status =
+        "stopped";
+
+      state.completedAt =
+        new Date().toISOString();
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-stopped",
+        {
+          generationId,
+          conversationId,
+          attempts:
+            state.attempts,
+        }
+      );
+
+      return;
+    }
+
+    state.status =
+      "failed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    writeTextGenerationEvent(
+      response,
+      "recovery-exhausted",
+      {
+        generationId,
+        conversationId,
+        error:
+          "All routed models failed.",
+        attempts:
+          state.attempts,
+      }
+    );
+  } finally {
+    activeRecoveryGenerations.delete(
+      conversationId
+    );
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopRuntimeRecoveryGeneration(
+  conversationId
+) {
+  const state =
+    activeRecoveryGenerations.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active recovery generation.",
+    };
+  }
+
+  state.stopped = true;
+  state.status =
+    "stopping";
+
+  state.activeController
+    ?.abort();
+
+  return {
+    stopped: true,
+    generationId:
+      state.generationId,
+    attempts:
+      state.attempts.length,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -16377,6 +17284,113 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         ...stopMultiModelGeneration(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/generate-with-recovery
+  if (
+    req.url === "/api/text-runtime/generate-with-recovery" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      await generateWithRuntimeRecovery(
+        body.conversationId.trim(),
+        res,
+        {
+          requestedModelId:
+            body.modelId ||
+            null,
+          temperature:
+            body.temperature,
+          topP:
+            body.topP,
+          maxTokens:
+            body.maxTokens,
+        }
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/recovery/stop
+  if (
+    req.url === "/api/text-runtime/recovery/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopRuntimeRecoveryGeneration(
           body.conversationId.trim()
         ),
       });
