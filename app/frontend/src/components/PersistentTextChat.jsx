@@ -63,6 +63,17 @@ export default function PersistentTextChat() {
     setOptimizingMemory,
   ] = useState(false);
 
+  // LUKE_AI_TEXT_RUNTIME_SESSION_UI_V1
+  const [
+    runtimeSession,
+    setRuntimeSession,
+  ] = useState(null);
+
+  const [
+    refreshingRuntime,
+    setRefreshingRuntime,
+  ] = useState(false);
+
   const [error, setError] =
     useState("");
 
@@ -221,6 +232,106 @@ export default function PersistentTextChat() {
       },
       [requestJson],
     );
+
+  const refreshRuntimeSession =
+    useCallback(
+      async ({
+        automatic = false,
+      } = {}) => {
+        if (!activeConversationId) {
+          return;
+        }
+
+        setRefreshingRuntime(true);
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/session/refresh",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  conversationId:
+                    activeConversationId,
+                  forceMemoryRefresh:
+                    true,
+                  reason:
+                    automatic
+                      ? "automatic-context-or-ram-threshold"
+                      : "manual-user-request",
+                }),
+              },
+            );
+
+          setRuntimeSession(data);
+
+          await refreshMemoryStatus(
+            activeConversationId,
+          );
+
+          await refresh();
+        } catch (runtimeError) {
+          setError(
+            runtimeError instanceof Error
+              ? runtimeError.message
+              : String(runtimeError),
+          );
+        } finally {
+          setRefreshingRuntime(false);
+        }
+      },
+      [
+        activeConversationId,
+        refresh,
+        refreshMemoryStatus,
+        requestJson,
+      ],
+    );
+
+  useEffect(() => {
+    if (
+      !activeConversationId ||
+      !memoryStatus
+    ) {
+      return;
+    }
+
+    const requiresRefresh =
+      memoryStatus.context?.action ===
+        "refresh" ||
+      [
+        "refresh",
+        "emergency-refresh",
+      ].includes(
+        memoryStatus.ram?.action,
+      );
+
+    const alreadyRefreshing =
+      refreshingRuntime ||
+      [
+        "preparing",
+        "unloading",
+        "loading",
+        "verifying",
+      ].includes(
+        runtimeSession?.status,
+      );
+
+    if (
+      requiresRefresh &&
+      !alreadyRefreshing
+    ) {
+      refreshRuntimeSession({
+        automatic: true,
+      });
+    }
+  }, [
+    activeConversationId,
+    memoryStatus,
+    refreshingRuntime,
+    refreshRuntimeSession,
+    runtimeSession?.status,
+  ]);
 
   const optimizeMemory =
     useCallback(
@@ -767,16 +878,33 @@ export default function PersistentTextChat() {
                 </span>
               </div>
 
-              <button
-                type="button"
-                className="m3-btn m3-btn-outlined"
-                disabled={optimizingMemory}
-                onClick={optimizeMemory}
-              >
-                {optimizingMemory
-                  ? "กำลังเพิ่มประสิทธิภาพ..."
-                  : "เพิ่มประสิทธิภาพตอนนี้"}
-              </button>
+              <div className="persistent-chat-memory-actions">
+                <button
+                  type="button"
+                  className="m3-btn m3-btn-outlined"
+                  disabled={optimizingMemory}
+                  onClick={optimizeMemory}
+                >
+                  {optimizingMemory
+                    ? "กำลังเพิ่มประสิทธิภาพ..."
+                    : "สร้าง Memory Snapshot"}
+                </button>
+
+                <button
+                  type="button"
+                  className="m3-btn m3-btn-filled"
+                  disabled={refreshingRuntime}
+                  onClick={() =>
+                    refreshRuntimeSession({
+                      automatic: false,
+                    })
+                  }
+                >
+                  {refreshingRuntime
+                    ? "กำลัง Reload Model..."
+                    : "Reload Model Runtime"}
+                </button>
+              </div>
             </div>
 
             <div className="persistent-chat-memory-grid">
@@ -850,6 +978,30 @@ export default function PersistentTextChat() {
                   ?.hasSummary
                   ? "สรุปบริบทพร้อมใช้งาน"
                   : "ยังไม่ต้องสรุปบริบท"}
+              </span>
+            </div>
+
+            <div className="persistent-chat-runtime-status">
+              <span>
+                Runtime:
+                {" "}
+                {runtimeSession?.status ||
+                  "idle"}
+              </span>
+
+              <span>
+                {runtimeSession?.runtimeOffline
+                  ? "Runtime Offline — Memory Prepared"
+                  : "Runtime Adapter พร้อมใช้งาน"}
+              </span>
+
+              <span>
+                Restore Prompt:
+                {" "}
+                {runtimeSession
+                  ?.restorePromptCharacters || 0}
+                {" "}
+                ตัวอักษร
               </span>
             </div>
           </section>

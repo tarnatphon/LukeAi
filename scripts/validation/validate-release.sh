@@ -218,3 +218,11 @@ else
   echo "FAIL: Node.js is required for Text Chat Memory validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Text Runtime Session Refresh validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-text-runtime-session-refresh.cjs
+else
+  echo "FAIL: Node.js is required for Text Runtime Session validation"
+  exit 1
+fi

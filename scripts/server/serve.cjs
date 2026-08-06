@@ -11021,6 +11021,680 @@ function autoOptimizeTextChatConversation(
   }
 }
 
+
+// LUKE_AI_TEXT_RUNTIME_SESSION_REFRESH_V1
+const textRuntimeSessionPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "runtime-session-policy.json"
+);
+
+const textRuntimeSessionState = new Map();
+
+function readTextRuntimeSessionPolicy() {
+  return readJsonFileStrict(
+    textRuntimeSessionPolicyPath,
+    "Text runtime session policy"
+  );
+}
+
+function getTextRuntimeBaseUrl() {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  return String(
+    process.env
+      .LUKE_AI_TEXT_RUNTIME_BASE_URL ||
+    policy.runtime?.baseUrl ||
+    "http://127.0.0.1:10086"
+  ).replace(/\/+$/, "");
+}
+
+function buildTextRuntimeUrl(pathname) {
+  const normalizedPath =
+    String(pathname || "")
+      .startsWith("/")
+      ? String(pathname)
+      : `/${String(pathname || "")}`;
+
+  return (
+    getTextRuntimeBaseUrl() +
+    normalizedPath
+  );
+}
+
+async function requestTextRuntime(
+  pathname,
+  {
+    method = "GET",
+    body = undefined,
+    timeoutMs = null,
+  } = {}
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  const controller =
+    new AbortController();
+
+  const effectiveTimeout =
+    Number(timeoutMs) ||
+    Number(
+      policy.runtime
+        ?.requestTimeoutMs
+    ) ||
+    15000;
+
+  const timer =
+    setTimeout(
+      () => controller.abort(),
+      effectiveTimeout
+    );
+
+  try {
+    const response =
+      await fetch(
+        buildTextRuntimeUrl(pathname),
+        {
+          method,
+          headers: {
+            "content-type":
+              "application/json",
+          },
+          body:
+            body === undefined
+              ? undefined
+              : JSON.stringify(body),
+          signal:
+            controller.signal,
+        }
+      );
+
+    const responseText =
+      await response.text();
+
+    let data = null;
+
+    if (responseText) {
+      try {
+        data =
+          JSON.parse(responseText);
+      } catch {
+        data = {
+          raw: responseText,
+        };
+      }
+    }
+
+    if (!response.ok) {
+      const error = new Error(
+        data?.error ||
+        data?.message ||
+        `Text runtime HTTP ${response.status}`
+      );
+
+      error.statusCode =
+        response.status;
+
+      error.runtimeData = data;
+      throw error;
+    }
+
+    return {
+      ok: true,
+      status:
+        response.status,
+      data,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getTextRuntimeHealth() {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  try {
+    const result =
+      await requestTextRuntime(
+        policy.runtime
+          ?.healthPath ||
+        "/health"
+      );
+
+    return {
+      reachable: true,
+      healthy: true,
+      response:
+        result.data,
+    };
+  } catch (error) {
+    return {
+      reachable: false,
+      healthy: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : String(error),
+    };
+  }
+}
+
+function formatRestorePromptSection(
+  heading,
+  values
+) {
+  const items =
+    Array.isArray(values)
+      ? values
+          .map(
+            (value) =>
+              String(value || "")
+                .trim()
+          )
+          .filter(Boolean)
+      : [];
+
+  if (!items.length) {
+    return "";
+  }
+
+  return (
+    `${heading}:\n` +
+    items
+      .map(
+        (value) =>
+          `- ${value}`
+      )
+      .join("\n")
+  );
+}
+
+function buildConversationRestorePrompt(
+  conversation
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  const restorePolicy =
+    policy.restorePrompt || {};
+
+  const memory =
+    conversation.memory || {};
+
+  const restoreContext =
+    conversation.session
+      ?.restoreContext || {};
+
+  const sections = [];
+
+  sections.push(
+    "คุณกำลังดำเนินบทสนทนาเดิมต่อจากเซสชันก่อนหน้า"
+  );
+
+  sections.push(
+    `Conversation ID: ${conversation.id}`
+  );
+
+  sections.push(
+    `ชื่อบทสนทนา: ${conversation.title}`
+  );
+
+  if (
+    restorePolicy
+      .includeSystemPrompt !== false &&
+    conversation.systemPrompt
+  ) {
+    sections.push(
+      "System Prompt เดิม:\n" +
+      conversation.systemPrompt
+    );
+  }
+
+  if (
+    restorePolicy
+      .includeSummary !== false &&
+    (
+      restoreContext.summary ||
+      memory.summary
+    )
+  ) {
+    sections.push(
+      "สรุปบริบทก่อนหน้า:\n" +
+      (
+        restoreContext.summary ||
+        memory.summary
+      )
+    );
+  }
+
+  if (
+    restorePolicy
+      .includeFacts !== false
+  ) {
+    const section =
+      formatRestorePromptSection(
+        "ข้อเท็จจริงที่ต้องจำ",
+        restoreContext.facts ||
+        memory.facts
+      );
+
+    if (section) {
+      sections.push(section);
+    }
+  }
+
+  if (
+    restorePolicy
+      .includeDecisions !== false
+  ) {
+    const section =
+      formatRestorePromptSection(
+        "การตัดสินใจที่ตกลงแล้ว",
+        restoreContext.decisions ||
+        memory.decisions
+      );
+
+    if (section) {
+      sections.push(section);
+    }
+  }
+
+  if (
+    restorePolicy
+      .includeTasks !== false
+  ) {
+    const section =
+      formatRestorePromptSection(
+        "งานที่ต้องดำเนินการต่อ",
+        restoreContext.tasks ||
+        memory.tasks
+      );
+
+    if (section) {
+      sections.push(section);
+    }
+  }
+
+  if (
+    restorePolicy
+      .includeRecentMessages !== false
+  ) {
+    const maximumRecentMessages =
+      Number(
+        restorePolicy
+          .maximumRecentMessages
+      ) || 20;
+
+    const recentMessages =
+      (
+        restoreContext.recentMessages ||
+        conversation.messages ||
+        []
+      ).slice(
+        -maximumRecentMessages
+      );
+
+    if (recentMessages.length) {
+      sections.push(
+        "ข้อความล่าสุด:\n" +
+        recentMessages
+          .map(
+            (message) =>
+              `[${message.role}] ${message.content}`
+          )
+          .join("\n")
+      );
+    }
+  }
+
+  sections.push(
+    "ตอบต่อเนื่องจากบริบทนี้ โดยไม่เริ่มบทสนทนาใหม่และไม่ถามข้อมูลที่มีอยู่แล้วซ้ำ"
+  );
+
+  const maximumCharacters =
+    Number(
+      restorePolicy
+        .maximumPromptCharacters
+    ) || 32000;
+
+  return sections
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(
+      0,
+      maximumCharacters
+    );
+}
+
+function getTextRuntimeModelLoadPayload(
+  conversation,
+  restorePrompt
+) {
+  const activeModelId =
+    conversation.modelId ||
+    readInstalledTextModels()
+      .activeModelId ||
+    null;
+
+  const installedRegistry =
+    readInstalledTextModels();
+
+  const installedModel =
+    installedRegistry.models
+      .filter(
+        (model) =>
+          !activeModelId ||
+          model.modelId ===
+          activeModelId
+      )
+      .sort(
+        (left, right) =>
+          new Date(
+            right.installedAt || 0
+          ).getTime() -
+          new Date(
+            left.installedAt || 0
+          ).getTime()
+      )[0] ||
+    null;
+
+  return {
+    modelId:
+      activeModelId ||
+      installedModel?.modelId ||
+      null,
+    modelPath:
+      installedModel
+        ?.installedPath ||
+      null,
+    runtime:
+      installedModel?.runtime ||
+      "llama.cpp",
+    variantId:
+      installedModel
+        ?.variantId ||
+      null,
+    quantization:
+      installedModel
+        ?.quantization ||
+      null,
+    contextLength:
+      getConversationContextLimit(
+        conversation
+      ),
+    systemPrompt:
+      restorePrompt,
+    conversationId:
+      conversation.id,
+    sessionId:
+      conversation.session?.id ||
+      null,
+  };
+}
+
+async function unloadTextRuntimeModel(
+  conversation
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  return requestTextRuntime(
+    policy.runtime
+      ?.unloadPath ||
+    "/v1/models/unload",
+    {
+      method: "POST",
+      body: {
+        conversationId:
+          conversation.id,
+        modelId:
+          conversation.modelId ||
+          null,
+      },
+    }
+  );
+}
+
+async function loadTextRuntimeModel(
+  conversation,
+  restorePrompt
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  return requestTextRuntime(
+    policy.runtime
+      ?.loadPath ||
+    "/v1/models/load",
+    {
+      method: "POST",
+      timeoutMs:
+        Number(
+          policy.runtime
+            ?.loadTimeoutMs
+        ) ||
+        120000,
+      body:
+        getTextRuntimeModelLoadPayload(
+          conversation,
+          restorePrompt
+        ),
+    }
+  );
+}
+
+async function refreshTextRuntimeSession(
+  conversationId,
+  {
+    forceMemoryRefresh = true,
+    reason =
+      "context-or-ram-threshold",
+  } = {}
+) {
+  const store =
+    readTextChatStore();
+
+  let conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (forceMemoryRefresh) {
+    optimizeTextChatConversation(
+      conversationId,
+      {
+        force: true,
+        reason,
+      }
+    );
+
+    const refreshedStore =
+      readTextChatStore();
+
+    conversation =
+      findTextChatConversation(
+        refreshedStore,
+        conversationId
+      );
+  }
+
+  const restorePrompt =
+    buildConversationRestorePrompt(
+      conversation
+    );
+
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  const beforeHealth =
+    policy.refresh
+      ?.healthCheckBeforeRefresh ===
+      false
+      ? null
+      : await getTextRuntimeHealth();
+
+  const state = {
+    conversationId,
+    status: "preparing",
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    reason,
+    beforeHealth,
+    unload: null,
+    load: null,
+    afterHealth: null,
+    restorePromptCharacters:
+      restorePrompt.length,
+    runtimeOffline: false,
+    error: null,
+  };
+
+  textRuntimeSessionState.set(
+    conversationId,
+    state
+  );
+
+  const runtimeReachable =
+    beforeHealth?.reachable !==
+    false;
+
+  if (
+    !runtimeReachable &&
+    policy.runtime
+      ?.allowOfflinePreparation ===
+      true
+  ) {
+    state.status =
+      "prepared-offline";
+
+    state.runtimeOffline = true;
+
+    state.completedAt =
+      new Date().toISOString();
+
+    textRuntimeSessionState.set(
+      conversationId,
+      state
+    );
+
+    return {
+      ...state,
+      restorePrompt,
+      conversation,
+    };
+  }
+
+  try {
+    if (
+      policy.refresh
+        ?.unloadBeforeReload !==
+        false
+    ) {
+      state.status =
+        "unloading";
+
+      state.unload =
+        await unloadTextRuntimeModel(
+          conversation
+        );
+    }
+
+    state.status = "loading";
+
+    state.load =
+      await loadTextRuntimeModel(
+        conversation,
+        restorePrompt
+      );
+
+    if (
+      policy.refresh
+        ?.healthCheckAfterReload !==
+        false
+    ) {
+      state.status =
+        "verifying";
+
+      state.afterHealth =
+        await getTextRuntimeHealth();
+
+      if (
+        state.afterHealth
+          ?.healthy !== true
+      ) {
+        throw new Error(
+          "Text runtime did not become healthy after reload."
+        );
+      }
+    }
+
+    state.status = "ready";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    textRuntimeSessionState.set(
+      conversationId,
+      state
+    );
+
+    return {
+      ...state,
+      restorePrompt,
+      conversation,
+    };
+  } catch (error) {
+    state.status = "failed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    state.error =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    textRuntimeSessionState.set(
+      conversationId,
+      state
+    );
+
+    throw error;
+  }
+}
+
+function getTextRuntimeSessionStatus(
+  conversationId
+) {
+  return (
+    textRuntimeSessionState.get(
+      conversationId
+    ) || {
+      conversationId,
+      status: "idle",
+      startedAt: null,
+      completedAt: null,
+      runtimeOffline: false,
+      error: null,
+    }
+  );
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -11721,6 +12395,147 @@ const server = http.createServer(async (req, res) => {
         200,
         buildTextModelHardwareCompatibility()
       );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/session/refresh
+  if (
+    req.url === "/api/text-runtime/session/refresh" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      const result =
+        await refreshTextRuntimeSession(
+          body.conversationId.trim(),
+          {
+            forceMemoryRefresh:
+              body.forceMemoryRefresh !==
+              false,
+            reason:
+              String(
+                body.reason ||
+                "manual-runtime-refresh"
+              ),
+          }
+        );
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-runtime/session/status
+  if (
+    req.url === "/api/text-runtime/session/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...getTextRuntimeSessionStatus(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/restore-prompt
+  if (
+    req.url === "/api/text-runtime/restore-prompt" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const store =
+        readTextChatStore();
+
+      const conversation =
+        findTextChatConversation(
+          store,
+          String(
+            body.conversationId || ""
+          )
+        );
+
+      if (!conversation) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Conversation was not found.",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        conversationId:
+          conversation.id,
+        restorePrompt:
+          buildConversationRestorePrompt(
+            conversation
+          ),
+      });
     } catch (error) {
       return json(res, 500, {
         ok: false,

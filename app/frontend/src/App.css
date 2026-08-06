@@ -5694,3 +5694,40 @@ html[data-theme^="dark"] .settings-subsection:hover {
       repeat(2, minmax(0, 1fr));
   }
 }
+
+/* LUKE_AI_TEXT_RUNTIME_SESSION_STYLES_V1 */
+.persistent-chat-memory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.persistent-chat-runtime-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color-muted);
+}
+
+.persistent-chat-runtime-status span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--md-sys-color-tertiary);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-tertiary) 10%,
+      transparent
+    );
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+@media (max-width: 650px) {
+  .persistent-chat-memory-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
