@@ -6166,7 +6166,11 @@ function createRuntimeInstallJob(
     },
     downloadDirectory:
       downloadDirectory ||
-      catalog.defaultDownloadDirectory,
+      resolveRuntimeStorageDirectory({
+        create: true,
+        createFallback: true,
+      }).selectedDirectory ||
+      catalog.fallbackDownloadDirectory,
     checksum: {
       algorithm: "sha256",
       expected: null,
@@ -6351,20 +6355,36 @@ function readJsonRequestBody(req, limitBytes = 1048576) {
 const runtimeDownloadControllers = new Map();
 
 function getRuntimeDownloadRoot(job) {
-  const catalog = readRuntimeDependencyCatalog();
-
-  const configuredDirectory =
+  if (
     typeof job.downloadDirectory === "string" &&
     job.downloadDirectory.trim()
-      ? job.downloadDirectory.trim()
-      : catalog.defaultDownloadDirectory;
+  ) {
+    return expandRuntimeHomePath(
+      job.downloadDirectory
+    );
+  }
 
-  return path.resolve(
-    configuredDirectory.replace(
-      /^~(?=$|\/)/,
-      process.env.HOME || ROOT
-    )
-  );
+  const storage =
+    resolveRuntimeStorageDirectory({
+      create: true,
+      createFallback: true,
+    });
+
+  if (
+    !storage.ok ||
+    !storage.selectedDirectory
+  ) {
+    const error = new Error(
+      "No writable runtime download directory is available."
+    );
+
+    error.code =
+      "RUNTIME_STORAGE_UNAVAILABLE";
+
+    throw error;
+  }
+
+  return storage.selectedDirectory;
 }
 
 function getRuntimeJobPaths(job) {
@@ -7041,6 +7061,258 @@ function cancelRuntimeInstallWorker(jobId) {
   return false;
 }
 
+
+// LUKE_AI_RUNTIME_STORAGE_AVAILABILITY_V1
+function expandRuntimeHomePath(value) {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return "";
+  }
+
+  const homeDirectory =
+    process.env.HOME ||
+    process.env.USERPROFILE ||
+    ROOT;
+
+  return path.resolve(
+    value.trim().replace(
+      /^~(?=$|\/)/,
+      homeDirectory
+    )
+  );
+}
+
+function inspectRuntimeStorageDirectory(
+  directory,
+  options = {}
+) {
+  const resolvedPath =
+    expandRuntimeHomePath(directory);
+
+  const result = {
+    path: resolvedPath,
+    exists: false,
+    directory: false,
+    writable: false,
+    created: false,
+    freeBytes: null,
+    totalBytes: null,
+    error: null,
+  };
+
+  if (!resolvedPath) {
+    result.error =
+      "Runtime storage path is empty.";
+
+    return result;
+  }
+
+  try {
+    if (
+      !fs.existsSync(resolvedPath) &&
+      options.create === true
+    ) {
+      fs.mkdirSync(
+        resolvedPath,
+        {
+          recursive: true,
+        }
+      );
+
+      result.created = true;
+    }
+
+    result.exists =
+      fs.existsSync(resolvedPath);
+
+    if (!result.exists) {
+      return result;
+    }
+
+    result.directory =
+      fs.statSync(resolvedPath).isDirectory();
+
+    if (!result.directory) {
+      result.error =
+        "Runtime storage path is not a directory.";
+
+      return result;
+    }
+
+    fs.accessSync(
+      resolvedPath,
+      fs.constants.W_OK
+    );
+
+    result.writable = true;
+
+    if (typeof fs.statfsSync === "function") {
+      const stats =
+        fs.statfsSync(resolvedPath);
+
+      result.freeBytes =
+        Number(stats.bavail) *
+        Number(stats.bsize);
+
+      result.totalBytes =
+        Number(stats.blocks) *
+        Number(stats.bsize);
+    }
+  } catch (error) {
+    result.error =
+      error instanceof Error
+        ? error.message
+        : String(error);
+  }
+
+  return result;
+}
+
+function resolveRuntimeStorageDirectory(
+  options = {}
+) {
+  const catalog =
+    readRuntimeDependencyCatalog();
+
+  const policy =
+    catalog.storagePolicy || {};
+
+  const minimumFreeBytes =
+    Number.isFinite(
+      Number(policy.minimumFreeBytes)
+    )
+      ? Number(policy.minimumFreeBytes)
+      : 0;
+
+  // LUKE_AI_RUNTIME_STORAGE_MOUNT_GUARD_V1
+  const preferredDirectory =
+    expandRuntimeHomePath(
+      catalog.defaultDownloadDirectory
+    );
+
+  const configuredExternalRoot =
+    expandRuntimeHomePath(
+      policy.externalVolumeRoot || ""
+    );
+
+  const externalRootMounted =
+    Boolean(configuredExternalRoot) &&
+    fs.existsSync(configuredExternalRoot) &&
+    fs.statSync(configuredExternalRoot).isDirectory();
+
+  const preferredIsInsideExternalRoot =
+    externalRootMounted &&
+    (
+      preferredDirectory === configuredExternalRoot ||
+      preferredDirectory.startsWith(
+        `${configuredExternalRoot}${path.sep}`
+      )
+    );
+
+  const mayCreateExternalDirectory =
+    options.create === true &&
+    policy.createDirectoryWhenWritable === true &&
+    preferredIsInsideExternalRoot;
+
+  const external =
+    inspectRuntimeStorageDirectory(
+      preferredDirectory,
+      {
+        create: mayCreateExternalDirectory,
+      }
+    );
+
+  external.volumeRoot =
+    configuredExternalRoot || null;
+
+  external.volumeMounted =
+    externalRootMounted;
+
+  external.creationAllowed =
+    mayCreateExternalDirectory;
+
+  const externalHasSpace =
+    external.freeBytes === null ||
+    external.freeBytes >= minimumFreeBytes;
+
+  const externalAvailable =
+    external.exists &&
+    external.directory &&
+    external.writable &&
+    externalHasSpace;
+
+  const fallback =
+    inspectRuntimeStorageDirectory(
+      catalog.fallbackDownloadDirectory,
+      {
+        create:
+          options.createFallback !== false,
+      }
+    );
+
+  const fallbackHasSpace =
+    fallback.freeBytes === null ||
+    fallback.freeBytes >= minimumFreeBytes;
+
+  const fallbackAvailable =
+    fallback.exists &&
+    fallback.directory &&
+    fallback.writable &&
+    fallbackHasSpace;
+
+  let selected = null;
+  let usingFallback = false;
+  let reason = null;
+
+  if (externalAvailable) {
+    selected = external;
+  } else if (
+    policy.fallbackWhenUnavailable !== false &&
+    fallbackAvailable
+  ) {
+    selected = fallback;
+    usingFallback = true;
+
+    if (!external.exists) {
+      reason = "external-drive-not-mounted";
+    } else if (!external.directory) {
+      reason = "external-path-not-directory";
+    } else if (!external.writable) {
+      reason = "external-path-not-writable";
+    } else if (!externalHasSpace) {
+      reason = "external-drive-low-space";
+    } else {
+      reason = "external-drive-unavailable";
+    }
+  } else {
+    reason = "no-writable-storage";
+  }
+
+  return {
+    ok: Boolean(selected),
+    preferredDirectory,
+    externalVolumeRoot:
+      configuredExternalRoot || null,
+    externalVolumeMounted:
+      externalRootMounted,
+    externalDirectoryCreationAllowed:
+      mayCreateExternalDirectory,
+    fallbackDirectory:
+      expandRuntimeHomePath(
+        catalog.fallbackDownloadDirectory
+      ),
+    selectedDirectory:
+      selected?.path || null,
+    usingFallback,
+    reason,
+    minimumFreeBytes,
+    external,
+    fallback,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -7309,6 +7581,59 @@ const server = http.createServer(async (req, res) => {
               : String(error),
         }
       );
+    }
+  }
+
+  // GET /api/runtime/storage
+  if (
+    req.url === "/api/runtime/storage" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        })
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/runtime/storage/resolve
+  if (
+    req.url === "/api/runtime/storage/resolve" &&
+    req.method === "POST"
+  ) {
+    try {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: true,
+          createFallback: true,
+        });
+
+      return json(
+        res,
+        storage.ok ? 200 : 503,
+        storage
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
     }
   }
 

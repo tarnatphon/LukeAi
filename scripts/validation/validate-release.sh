@@ -130,3 +130,11 @@ else
   echo "FAIL: Node.js is required for runtime dashboard validation"
   exit 1
 fi
+
+# LUKE AI STUDIO external drive availability validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-storage-availability.cjs
+else
+  echo "FAIL: Node.js is required for runtime storage validation"
+  exit 1
+fi

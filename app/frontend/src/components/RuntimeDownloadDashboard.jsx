@@ -270,6 +270,8 @@ export default function RuntimeDownloadDashboard() {
   const [summary, setSummary] = useState(null);
   const [downloadDirectory, setDownloadDirectory] = useState("");
   const [fallbackDirectory, setFallbackDirectory] = useState("");
+  // LUKE_AI_RUNTIME_STORAGE_DASHBOARD_V1
+  const [storageStatus, setStorageStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyDependencyId, setBusyDependencyId] = useState("");
@@ -315,9 +317,14 @@ export default function RuntimeDownloadDashboard() {
     }
 
     try {
-      const [dependencyData, jobData] = await Promise.all([
+      const [
+        dependencyData,
+        jobData,
+        storageData,
+      ] = await Promise.all([
         requestJson("/api/runtime/dependencies"),
         requestJson("/api/runtime/install/jobs"),
+        requestJson("/api/runtime/storage"),
       ]);
 
       if (!mountedRef.current) {
@@ -333,6 +340,7 @@ export default function RuntimeDownloadDashboard() {
         dependencyData.fallbackDownloadDirectory || "",
       );
       setJobs(jobData.jobs || []);
+      setStorageStatus(storageData || null);
       setError("");
     } catch (requestError) {
       if (mountedRef.current) {
@@ -494,20 +502,77 @@ export default function RuntimeDownloadDashboard() {
         </div>
       </div>
 
-      <div className="m3-card runtime-storage-panel">
+      <div
+        className={
+          "m3-card runtime-storage-panel " +
+          (
+            storageStatus?.usingFallback
+              ? "runtime-storage-fallback-active"
+              : storageStatus?.ok
+                ? "runtime-storage-external-ready"
+                : "runtime-storage-unavailable"
+          )
+        }
+      >
         <div className="runtime-storage-icon">
           <HardDrive size={22} />
         </div>
 
-        <div>
-          <strong>ตำแหน่งดาวน์โหลดหลัก</strong>
-          <div className="runtime-storage-path">
-            {downloadDirectory || "กำลังตรวจสอบ..."}
+        <div className="runtime-storage-content">
+          <div className="runtime-storage-heading">
+            <strong>
+              {storageStatus?.usingFallback
+                ? "กำลังใช้โฟลเดอร์สำรอง"
+                : "ตำแหน่งดาวน์โหลดหลัก"}
+            </strong>
+
+            <span
+              className={
+                "status-chip " +
+                (
+                  storageStatus?.usingFallback
+                    ? "runtime-status-missing"
+                    : storageStatus?.ok
+                      ? "runtime-status-ready"
+                      : "runtime-status-error"
+                )
+              }
+            >
+              {storageStatus?.usingFallback
+                ? "External Drive ไม่พร้อม"
+                : storageStatus?.ok
+                  ? "External Drive พร้อม"
+                  : "Storage ไม่พร้อม"}
+            </span>
           </div>
+
+          <div className="runtime-storage-path">
+            {storageStatus?.selectedDirectory ||
+              downloadDirectory ||
+              "กำลังตรวจสอบ..."}
+          </div>
+
+          {storageStatus?.usingFallback && (
+            <div className="runtime-storage-warning">
+              <AlertTriangle size={15} />
+              <span>
+                ระบบเลือก Safe Fallback อัตโนมัติ
+                เพราะไม่พบหรือไม่สามารถเขียนลง External Drive ได้
+              </span>
+            </div>
+          )}
+
+          {storageStatus?.external?.freeBytes != null && (
+            <div className="runtime-storage-free-space">
+              พื้นที่ว่าง External Drive:
+              {" "}
+              {formatBytes(storageStatus.external.freeBytes)}
+            </div>
+          )}
 
           {fallbackDirectory && (
             <div className="runtime-storage-fallback">
-              สำรองเมื่อ External Drive ไม่พร้อม: {fallbackDirectory}
+              โฟลเดอร์สำรอง: {fallbackDirectory}
             </div>
           )}
         </div>

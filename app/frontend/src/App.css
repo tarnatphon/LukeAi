@@ -4632,3 +4632,64 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-wrap: wrap;
   }
 }
+
+/* LUKE_AI_RUNTIME_STORAGE_STYLES_V1 */
+.runtime-storage-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.runtime-storage-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtime-storage-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 9px;
+  color: var(--md-sys-color-error);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.runtime-storage-free-space {
+  margin-top: 7px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.78rem;
+}
+
+.runtime-storage-external-ready {
+  border-color: color-mix(
+    in srgb,
+    var(--md-sys-color-success) 38%,
+    transparent
+  );
+}
+
+.runtime-storage-fallback-active {
+  border-color: color-mix(
+    in srgb,
+    var(--md-sys-color-error) 34%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--md-sys-color-error) 5%,
+    var(--md-sys-color-surface)
+  );
+}
+
+.runtime-storage-unavailable {
+  border-color: var(--md-sys-color-error);
+}
+
+@media (max-width: 650px) {
+  .runtime-storage-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
