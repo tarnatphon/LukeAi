@@ -234,3 +234,11 @@ else
   echo "FAIL: Node.js is required for Text Generation Streaming validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Multi-Model Parallel Generation validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-multi-model-parallel-generation.cjs
+else
+  echo "FAIL: Node.js is required for Multi-Model Generation validation"
+  exit 1
+fi

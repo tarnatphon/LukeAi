@@ -63,6 +63,37 @@ export default function PersistentTextChat() {
     setStreamingResponse,
   ] = useState("");
 
+  // LUKE_AI_MULTI_MODEL_GENERATION_UI_V1
+  const [
+    availableModels,
+    setAvailableModels,
+  ] = useState([]);
+
+  const [
+    selectedModelIds,
+    setSelectedModelIds,
+  ] = useState([]);
+
+  const [
+    multiModelEnabled,
+    setMultiModelEnabled,
+  ] = useState(false);
+
+  const [
+    multiGenerating,
+    setMultiGenerating,
+  ] = useState(false);
+
+  const [
+    multiResponses,
+    setMultiResponses,
+  ] = useState({});
+
+  const [
+    multiEvaluation,
+    setMultiEvaluation,
+  ] = useState(null);
+
   const generationAbortRef =
     useRef(null);
 
@@ -203,6 +234,66 @@ export default function PersistentTextChat() {
       mountedRef.current = false;
     };
   }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadModels = async () => {
+      try {
+        const data =
+          await requestJson(
+            "/api/text-runtime/models/available",
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        const models =
+          data.models || [];
+
+        setAvailableModels(models);
+
+        setSelectedModelIds(
+          (current) => {
+            const existing =
+              current.filter(
+                (modelId) =>
+                  models.some(
+                    (model) =>
+                      model.modelId ===
+                      modelId,
+                  ),
+              );
+
+            if (existing.length) {
+              return existing.slice(
+                0,
+                data.maximumSelection || 3,
+              );
+            }
+
+            return models
+              .slice(0, 1)
+              .map(
+                (model) =>
+                  model.modelId,
+              );
+          },
+        );
+      } catch {
+        if (!cancelled) {
+          setAvailableModels([]);
+        }
+      }
+    };
+
+    loadModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requestJson]);
 
   const activeConversation = useMemo(
     () =>
@@ -551,6 +642,246 @@ export default function PersistentTextChat() {
       [requestJson],
     );
 
+  const generateMultiModelResponses =
+    useCallback(
+      async (
+        conversationId,
+      ) => {
+        const modelIds =
+          selectedModelIds
+            .slice(0, 3);
+
+        if (!modelIds.length) {
+          setError(
+            "กรุณาเลือกโมเดลอย่างน้อย 1 โมเดล",
+          );
+          return;
+        }
+
+        setMultiGenerating(true);
+        setMultiResponses({});
+        setMultiEvaluation(null);
+        setError("");
+
+        const controller =
+          new AbortController();
+
+        generationAbortRef.current =
+          controller;
+
+        try {
+          const response = await fetch(
+            "/api/text-runtime/multi-generate-stream",
+            {
+              method: "POST",
+              headers: {
+                "content-type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                conversationId,
+                modelIds,
+              }),
+              signal:
+                controller.signal,
+            },
+          );
+
+          if (!response.ok) {
+            const message =
+              await response.text();
+
+            throw new Error(
+              message ||
+              `HTTP ${response.status}`,
+            );
+          }
+
+          if (!response.body) {
+            throw new Error(
+              "Multi-model stream is unavailable.",
+            );
+          }
+
+          const reader =
+            response.body.getReader();
+
+          const decoder =
+            new TextDecoder();
+
+          let buffer = "";
+
+          while (true) {
+            const result =
+              await reader.read();
+
+            if (result.done) {
+              break;
+            }
+
+            buffer += decoder.decode(
+              result.value,
+              {
+                stream: true,
+              },
+            );
+
+            const frames =
+              buffer.split("\n\n");
+
+            buffer =
+              frames.pop() || "";
+
+            for (const frame of frames) {
+              const lines =
+                frame.split(/\r?\n/);
+
+              let eventName =
+                "message";
+
+              let dataText = "";
+
+              for (const line of lines) {
+                if (
+                  line.startsWith(
+                    "event:",
+                  )
+                ) {
+                  eventName =
+                    line
+                      .slice(6)
+                      .trim();
+                }
+
+                if (
+                  line.startsWith(
+                    "data:",
+                  )
+                ) {
+                  dataText +=
+                    line
+                      .slice(5)
+                      .trim();
+                }
+              }
+
+              if (!dataText) {
+                continue;
+              }
+
+              let payload = null;
+
+              try {
+                payload =
+                  JSON.parse(dataText);
+              } catch {
+                continue;
+              }
+
+              if (
+                eventName ===
+                  "model-delta" &&
+                payload.modelId &&
+                typeof payload.content ===
+                  "string"
+              ) {
+                setMultiResponses(
+                  (current) => ({
+                    ...current,
+                    [payload.modelId]:
+                      (
+                        current[
+                          payload.modelId
+                        ] || ""
+                      ) +
+                      payload.content,
+                  }),
+                );
+              }
+
+              if (
+                eventName ===
+                "multi-complete"
+              ) {
+                setMultiEvaluation(
+                  payload,
+                );
+              }
+
+              if (
+                eventName === "error"
+              ) {
+                throw new Error(
+                  payload.error ||
+                  "Multi-model generation failed.",
+                );
+              }
+            }
+          }
+
+          await refresh();
+
+          await refreshMemoryStatus(
+            conversationId,
+          );
+        } catch (generationError) {
+          if (
+            generationError?.name !==
+            "AbortError"
+          ) {
+            setError(
+              generationError instanceof Error
+                ? generationError.message
+                : String(
+                    generationError,
+                  ),
+            );
+          }
+        } finally {
+          generationAbortRef.current =
+            null;
+
+          setMultiGenerating(false);
+        }
+      },
+      [
+        refresh,
+        refreshMemoryStatus,
+        selectedModelIds,
+      ],
+    );
+
+  const stopMultiModelGeneration =
+    useCallback(
+      async () => {
+        if (!activeConversationId) {
+          return;
+        }
+
+        try {
+          await requestJson(
+            "/api/text-runtime/multi-generation/stop",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                conversationId:
+                  activeConversationId,
+              }),
+            },
+          );
+        } catch {}
+
+        generationAbortRef.current
+          ?.abort();
+
+        setMultiGenerating(false);
+      },
+      [
+        activeConversationId,
+        requestJson,
+      ],
+    );
+
   const generateAssistantResponse =
     useCallback(
       async (
@@ -848,9 +1179,18 @@ export default function PersistentTextChat() {
 
           setSaving(false);
 
-          await generateAssistantResponse(
-            conversationId,
-          );
+          if (
+            multiModelEnabled &&
+            selectedModelIds.length > 0
+          ) {
+            await generateMultiModelResponses(
+              conversationId,
+            );
+          } else {
+            await generateAssistantResponse(
+              conversationId,
+            );
+          }
         } catch (sendError) {
           setError(
             sendError instanceof Error
@@ -865,7 +1205,10 @@ export default function PersistentTextChat() {
         activeConversationId,
         draft,
         generateAssistantResponse,
+        generateMultiModelResponses,
         generating,
+        multiModelEnabled,
+        selectedModelIds,
         requestJson,
       ],
     );
@@ -1310,6 +1653,208 @@ export default function PersistentTextChat() {
           )}
         </div>
 
+        <section className="persistent-chat-multi-model-panel">
+          <div className="persistent-chat-multi-model-heading">
+            <div>
+              <strong>
+                Multi-Model Comparison
+              </strong>
+
+              <span>
+                เลือกได้สูงสุด 3 โมเดล
+                และประมวลผลพร้อมกัน
+              </span>
+            </div>
+
+            <label className="persistent-chat-multi-model-toggle">
+              <input
+                type="checkbox"
+                checked={multiModelEnabled}
+                disabled={
+                  generating ||
+                  multiGenerating
+                }
+                onChange={(event) =>
+                  setMultiModelEnabled(
+                    event.target.checked,
+                  )
+                }
+              />
+
+              เปิดใช้งาน
+            </label>
+          </div>
+
+          {multiModelEnabled && (
+            <>
+              <div className="persistent-chat-model-selector">
+                {availableModels.map(
+                  (model) => {
+                    const selected =
+                      selectedModelIds.includes(
+                        model.modelId,
+                      );
+
+                    const selectionFull =
+                      selectedModelIds.length >=
+                        3 &&
+                      !selected;
+
+                    return (
+                      <label
+                        key={
+                          model.modelId
+                        }
+                        className={
+                          "persistent-chat-model-option " +
+                          (
+                            selected
+                              ? "persistent-chat-model-option-selected"
+                              : ""
+                          )
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={
+                            selectionFull ||
+                            generating ||
+                            multiGenerating
+                          }
+                          onChange={() =>
+                            setSelectedModelIds(
+                              (current) =>
+                                selected
+                                  ? current.filter(
+                                      (
+                                        modelId,
+                                      ) =>
+                                        modelId !==
+                                        model.modelId,
+                                    )
+                                  : [
+                                      ...current,
+                                      model.modelId,
+                                    ].slice(
+                                      0,
+                                      3,
+                                    ),
+                            )
+                          }
+                        />
+
+                        <span>
+                          <strong>
+                            {model.modelName ||
+                              model.modelId}
+                          </strong>
+
+                          <small>
+                            {model.quantization ||
+                              model.variantId ||
+                              model.version}
+                          </small>
+                        </span>
+                      </label>
+                    );
+                  },
+                )}
+              </div>
+
+              {(multiGenerating ||
+                Object.keys(
+                  multiResponses,
+                ).length > 0) && (
+                <div className="persistent-chat-multi-results">
+                  {selectedModelIds.map(
+                    (modelId) => {
+                      const model =
+                        availableModels.find(
+                          (item) =>
+                            item.modelId ===
+                            modelId,
+                        );
+
+                      const evaluated =
+                        multiEvaluation
+                          ?.responses?.find(
+                            (item) =>
+                              item.modelId ===
+                              modelId,
+                          );
+
+                      return (
+                        <article
+                          key={modelId}
+                          className={
+                            "persistent-chat-model-result " +
+                            (
+                              evaluated?.best
+                                ? "persistent-chat-model-result-best"
+                                : ""
+                            )
+                          }
+                        >
+                          <header>
+                            <div>
+                              <strong>
+                                {model?.modelName ||
+                                  modelId}
+                              </strong>
+
+                              <span>
+                                {model?.quantization ||
+                                  ""}
+                              </span>
+                            </div>
+
+                            {evaluated?.best && (
+                              <span className="persistent-chat-best-chip">
+                                Best Response
+                              </span>
+                            )}
+                          </header>
+
+                          <p>
+                            {multiResponses[
+                              modelId
+                            ] ||
+                              (
+                                multiGenerating
+                                  ? "กำลังประมวลผล..."
+                                  : "ไม่มีคำตอบ"
+                              )}
+                          </p>
+
+                          {evaluated && (
+                            <footer>
+                              <span>
+                                คะแนน:
+                                {" "}
+                                {(
+                                  evaluated.score *
+                                  100
+                                ).toFixed(1)}
+                              </span>
+
+                              <span>
+                                อันดับ:
+                                {" "}
+                                {evaluated.rank}
+                              </span>
+                            </footer>
+                          )}
+                        </article>
+                      );
+                    },
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
         <div className="persistent-chat-composer">
           <textarea
             value={draft}
@@ -1337,7 +1882,17 @@ export default function PersistentTextChat() {
               Autosave เปิดใช้งาน
             </span>
 
-            {generating ? (
+            {multiGenerating ? (
+              <button
+                type="button"
+                className="m3-btn m3-btn-error"
+                onClick={
+                  stopMultiModelGeneration
+                }
+              >
+                หยุดทุกโมเดล
+              </button>
+            ) : generating ? (
               <button
                 type="button"
                 className="m3-btn m3-btn-error"
@@ -1351,7 +1906,14 @@ export default function PersistentTextChat() {
                 className="m3-btn m3-btn-filled"
                 disabled={
                   saving ||
-                  !draft.trim()
+                  generating ||
+                  multiGenerating ||
+                  !draft.trim() ||
+                  (
+                    multiModelEnabled &&
+                    selectedModelIds.length ===
+                      0
+                  )
                 }
                 onClick={sendMessage}
               >

@@ -12515,6 +12515,898 @@ function getTextRuntimeGenerationStatus(
   };
 }
 
+
+// LUKE_AI_MULTI_MODEL_PARALLEL_GENERATION_V1
+const multiModelPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "multi-model-policy.json"
+);
+
+const activeMultiModelGenerations =
+  new Map();
+
+function readMultiModelPolicy() {
+  return readJsonFileStrict(
+    multiModelPolicyPath,
+    "Multi-model generation policy"
+  );
+}
+
+function normalizeSelectedModelIds(
+  modelIds
+) {
+  const policy =
+    readMultiModelPolicy();
+
+  const maximumModels =
+    Number(
+      policy.selection
+        ?.maximumModels
+    ) || 3;
+
+  const normalized = [
+    ...new Set(
+      (
+        Array.isArray(modelIds)
+          ? modelIds
+          : []
+      )
+        .map(
+          (modelId) =>
+            String(modelId || "")
+              .trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+
+  if (!normalized.length) {
+    const error = new Error(
+      "Select at least one text model."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    normalized.length >
+    maximumModels
+  ) {
+    const error = new Error(
+      `Select no more than ${maximumModels} models.`
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalized;
+}
+
+function tokenizeForSimilarity(
+  value
+) {
+  return new Set(
+    String(value || "")
+      .toLowerCase()
+      .replace(
+        /[^\p{L}\p{N}\s]/gu,
+        " "
+      )
+      .split(/\s+/)
+      .map(
+        (token) =>
+          token.trim()
+      )
+      .filter(
+        (token) =>
+          token.length > 1
+      )
+  );
+}
+
+function calculateJaccardSimilarity(
+  left,
+  right
+) {
+  const leftTokens =
+    tokenizeForSimilarity(left);
+
+  const rightTokens =
+    tokenizeForSimilarity(right);
+
+  if (
+    !leftTokens.size &&
+    !rightTokens.size
+  ) {
+    return 1;
+  }
+
+  const intersection =
+    [...leftTokens]
+      .filter(
+        (token) =>
+          rightTokens.has(token)
+      )
+      .length;
+
+  const union =
+    new Set([
+      ...leftTokens,
+      ...rightTokens,
+    ]).size;
+
+  return union > 0
+    ? intersection / union
+    : 0;
+}
+
+function calculateResponseMetrics(
+  response,
+  prompt,
+  allResponses
+) {
+  const content =
+    String(response.content || "")
+      .trim();
+
+  const promptTokens =
+    tokenizeForSimilarity(prompt);
+
+  const responseTokens =
+    tokenizeForSimilarity(content);
+
+  const overlappingPromptTokens =
+    [...promptTokens]
+      .filter(
+        (token) =>
+          responseTokens.has(token)
+      )
+      .length;
+
+  const relevance =
+    promptTokens.size > 0
+      ? Math.min(
+          1,
+          overlappingPromptTokens /
+          Math.max(
+            1,
+            promptTokens.size
+          )
+        )
+      : 0.5;
+
+  const characterCount =
+    content.length;
+
+  const sentenceCount =
+    content
+      .split(/[.!?。！？\n]+/)
+      .map(
+        (value) =>
+          value.trim()
+      )
+      .filter(Boolean)
+      .length;
+
+  const completeness =
+    Math.min(
+      1,
+      characterCount / 700
+    );
+
+  const clarity =
+    sentenceCount > 0
+      ? Math.min(
+          1,
+          1 -
+          Math.abs(
+            characterCount /
+            sentenceCount -
+            110
+          ) /
+          300
+        )
+      : 0;
+
+  const detail =
+    Math.min(
+      1,
+      responseTokens.size / 120
+    );
+
+  const similarities =
+    allResponses
+      .filter(
+        (candidate) =>
+          candidate.modelId !==
+          response.modelId
+      )
+      .map(
+        (candidate) =>
+          calculateJaccardSimilarity(
+            content,
+            candidate.content
+          )
+      );
+
+  const maximumSimilarity =
+    similarities.length
+      ? Math.max(
+          ...similarities
+        )
+      : 0;
+
+  const uniqueness =
+    Math.max(
+      0,
+      1 - maximumSimilarity
+    );
+
+  return {
+    relevance:
+      Number(
+        relevance.toFixed(4)
+      ),
+    completeness:
+      Number(
+        completeness.toFixed(4)
+      ),
+    clarity:
+      Number(
+        Math.max(
+          0,
+          clarity
+        ).toFixed(4)
+      ),
+    detail:
+      Number(
+        detail.toFixed(4)
+      ),
+    uniqueness:
+      Number(
+        uniqueness.toFixed(4)
+      ),
+    characterCount,
+    sentenceCount,
+    maximumSimilarity:
+      Number(
+        maximumSimilarity.toFixed(4)
+      ),
+  };
+}
+
+function evaluateMultiModelResponses(
+  responses,
+  prompt
+) {
+  const policy =
+    readMultiModelPolicy();
+
+  const weights =
+    policy.evaluation
+      ?.weights || {};
+
+  const evaluated =
+    responses.map(
+      (response) => {
+        const metrics =
+          calculateResponseMetrics(
+            response,
+            prompt,
+            responses
+          );
+
+        const score =
+          metrics.relevance *
+            Number(
+              weights.relevance ??
+              0.35
+            ) +
+          metrics.completeness *
+            Number(
+              weights.completeness ??
+              0.3
+            ) +
+          metrics.clarity *
+            Number(
+              weights.clarity ??
+              0.2
+            ) +
+          metrics.detail *
+            Number(
+              weights.detail ??
+              0.1
+            ) +
+          metrics.uniqueness *
+            Number(
+              weights.uniqueness ??
+              0.05
+            );
+
+        return {
+          ...response,
+          metrics,
+          score:
+            Number(
+              score.toFixed(4)
+            ),
+        };
+      }
+    )
+      .sort(
+        (left, right) =>
+          right.score -
+          left.score
+      )
+      .map(
+        (response, index) => ({
+          ...response,
+          rank:
+            index + 1,
+          best:
+            index === 0,
+        })
+      );
+
+  return {
+    winner:
+      evaluated[0] || null,
+    responses:
+      evaluated,
+  };
+}
+
+function getInstalledTextModelsForSelection() {
+  try {
+    const registry =
+      readInstalledTextModels();
+
+    return (
+      registry.models || []
+    )
+      .filter(
+        (model) =>
+          model.installedPath
+      )
+      .map(
+        (model) => ({
+          modelId:
+            model.modelId,
+          modelName:
+            model.modelName ||
+            model.modelId,
+          version:
+            model.version,
+          variantId:
+            model.variantId,
+          quantization:
+            model.quantization,
+          runtime:
+            model.runtime,
+          installedPath:
+            model.installedPath,
+          active:
+            registry.activeModelId ===
+            model.modelId,
+        })
+      );
+  } catch {
+    return [];
+  }
+}
+
+async function requestSingleModelGeneration(
+  conversation,
+  modelId,
+  prompt,
+  controller,
+  onDelta
+) {
+  const policy =
+    readTextGenerationPolicy();
+
+  const generationPath =
+    policy.runtime
+      ?.generationPath ||
+    "/v1/chat/completions";
+
+  const payload =
+    createTextGenerationPayload(
+      conversation,
+      {
+        modelId,
+      }
+    );
+
+  const runtimeResponse =
+    await fetch(
+      buildTextRuntimeUrl(
+        generationPath
+      ),
+      {
+        method: "POST",
+        headers: {
+          "content-type":
+            "application/json",
+          accept:
+            "text/event-stream, application/json",
+          "x-luke-model-id":
+            modelId,
+        },
+        body:
+          JSON.stringify(payload),
+        signal:
+          controller.signal,
+      }
+    );
+
+  if (!runtimeResponse.ok) {
+    const errorText =
+      await runtimeResponse.text();
+
+    throw new Error(
+      errorText ||
+      `Model ${modelId} returned HTTP ${runtimeResponse.status}`
+    );
+  }
+
+  if (!runtimeResponse.body) {
+    throw new Error(
+      `Model ${modelId} returned no response body.`
+    );
+  }
+
+  const contentType =
+    String(
+      runtimeResponse.headers.get(
+        "content-type"
+      ) || ""
+    ).toLowerCase();
+
+  let accumulatedText = "";
+
+  if (
+    contentType.includes(
+      "application/json"
+    )
+  ) {
+    const body =
+      await runtimeResponse.json();
+
+    const delta =
+      extractTextGenerationDelta(
+        body
+      );
+
+    if (delta) {
+      accumulatedText += delta;
+
+      onDelta(delta);
+    }
+  } else {
+    const reader =
+      runtimeResponse.body
+        .getReader();
+
+    const decoder =
+      new TextDecoder();
+
+    let buffer = "";
+
+    while (true) {
+      const result =
+        await reader.read();
+
+      if (result.done) {
+        break;
+      }
+
+      buffer += decoder.decode(
+        result.value,
+        {
+          stream: true,
+        }
+      );
+
+      const lines =
+        buffer.split(/\r?\n/);
+
+      buffer =
+        lines.pop() || "";
+
+      for (const rawLine of lines) {
+        let line =
+          rawLine.trim();
+
+        if (
+          !line ||
+          line.startsWith(":")
+        ) {
+          continue;
+        }
+
+        if (
+          line.startsWith("data:")
+        ) {
+          line =
+            line
+              .slice(5)
+              .trim();
+        }
+
+        if (
+          line === "[DONE]"
+        ) {
+          continue;
+        }
+
+        let eventPayload = null;
+
+        try {
+          eventPayload =
+            JSON.parse(line);
+        } catch {
+          eventPayload = line;
+        }
+
+        const delta =
+          extractTextGenerationDelta(
+            eventPayload
+          );
+
+        if (!delta) {
+          continue;
+        }
+
+        accumulatedText += delta;
+
+        onDelta(delta);
+      }
+    }
+  }
+
+  return {
+    modelId,
+    content:
+      accumulatedText.trim(),
+    status:
+      "completed",
+    error:
+      null,
+  };
+}
+
+async function streamMultiModelGeneration(
+  conversationId,
+  modelIds,
+  response
+) {
+  const selectedModelIds =
+    normalizeSelectedModelIds(
+      modelIds
+    );
+
+  if (
+    activeMultiModelGenerations
+      .has(conversationId)
+  ) {
+    const error = new Error(
+      "Multi-model generation is already running for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const lastUserMessage =
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      );
+
+  const prompt =
+    lastUserMessage?.content || "";
+
+  const generationId =
+    createTextChatId(
+      "multi-generation"
+    );
+
+  const controllers =
+    new Map();
+
+  const state = {
+    generationId,
+    conversationId,
+    modelIds:
+      selectedModelIds,
+    status:
+      "running",
+    startedAt:
+      new Date().toISOString(),
+    stopped:
+      false,
+    controllers,
+  };
+
+  activeMultiModelGenerations.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "multi-start",
+    {
+      generationId,
+      conversationId,
+      modelIds:
+        selectedModelIds,
+      modelCount:
+        selectedModelIds.length,
+    }
+  );
+
+  try {
+    const tasks =
+      selectedModelIds.map(
+        async (modelId) => {
+          const controller =
+            new AbortController();
+
+          controllers.set(
+            modelId,
+            controller
+          );
+
+          try {
+            const result =
+              await requestSingleModelGeneration(
+                conversation,
+                modelId,
+                prompt,
+                controller,
+                (delta) => {
+                  writeTextGenerationEvent(
+                    response,
+                    "model-delta",
+                    {
+                      generationId,
+                      modelId,
+                      content:
+                        delta,
+                    }
+                  );
+                }
+              );
+
+            writeTextGenerationEvent(
+              response,
+              "model-complete",
+              {
+                generationId,
+                modelId,
+                content:
+                  result.content,
+              }
+            );
+
+            return result;
+          } catch (error) {
+            const stopped =
+              state.stopped ||
+              error?.name ===
+                "AbortError";
+
+            const result = {
+              modelId,
+              content: "",
+              status:
+                stopped
+                  ? "stopped"
+                  : "failed",
+              error:
+                stopped
+                  ? null
+                  : (
+                      error instanceof Error
+                        ? error.message
+                        : String(error)
+                    ),
+            };
+
+            writeTextGenerationEvent(
+              response,
+              stopped
+                ? "model-stopped"
+                : "model-error",
+              {
+                generationId,
+                ...result,
+              }
+            );
+
+            return result;
+          }
+        }
+      );
+
+    const rawResults =
+      await Promise.all(tasks);
+
+    const completedResponses =
+      rawResults.filter(
+        (result) =>
+          result.status ===
+            "completed" &&
+          result.content.trim()
+      );
+
+    const evaluation =
+      evaluateMultiModelResponses(
+        completedResponses,
+        prompt
+      );
+
+    const savedMessages = [];
+
+    for (
+      const evaluated
+      of evaluation.responses
+    ) {
+      const saved =
+        appendTextChatMessage(
+          conversationId,
+          {
+            role:
+              "assistant",
+            content:
+              evaluated.content,
+            modelId:
+              evaluated.modelId,
+            metadata: {
+              source:
+                "multi-model-generation",
+              generationId,
+              multiModel: true,
+              score:
+                evaluated.score,
+              rank:
+                evaluated.rank,
+              best:
+                evaluated.best,
+              metrics:
+                evaluated.metrics,
+              autosaved:
+                true,
+            },
+          }
+        );
+
+      if (saved?.message) {
+        savedMessages.push(
+          saved.message
+        );
+      }
+    }
+
+    state.status =
+      state.stopped
+        ? "stopped"
+        : "completed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    writeTextGenerationEvent(
+      response,
+      "multi-complete",
+      {
+        generationId,
+        conversationId,
+        stopped:
+          state.stopped,
+        winnerModelId:
+          evaluation.winner
+            ?.modelId ||
+          null,
+        winnerScore:
+          evaluation.winner
+            ?.score ||
+          null,
+        responses:
+          evaluation.responses,
+        savedMessages,
+      }
+    );
+  } finally {
+    activeMultiModelGenerations
+      .delete(conversationId);
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopMultiModelGeneration(
+  conversationId
+) {
+  const state =
+    activeMultiModelGenerations
+      .get(conversationId);
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active multi-model generation.",
+    };
+  }
+
+  state.stopped = true;
+  state.status =
+    "stopping";
+
+  for (
+    const controller
+    of state.controllers.values()
+  ) {
+    controller.abort();
+  }
+
+  return {
+    stopped: true,
+    generationId:
+      state.generationId,
+    modelIds:
+      state.modelIds,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -13215,6 +14107,131 @@ const server = http.createServer(async (req, res) => {
         200,
         buildTextModelHardwareCompatibility()
       );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-runtime/models/available
+  if (
+    req.url === "/api/text-runtime/models/available" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        maximumSelection:
+          Number(
+            readMultiModelPolicy()
+              .selection
+              ?.maximumModels
+          ) || 3,
+        models:
+          getInstalledTextModelsForSelection(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/multi-generate-stream
+  if (
+    req.url === "/api/text-runtime/multi-generate-stream" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      await streamMultiModelGeneration(
+        body.conversationId.trim(),
+        body.modelIds,
+        res
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/multi-generation/stop
+  if (
+    req.url === "/api/text-runtime/multi-generation/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopMultiModelGeneration(
+          body.conversationId.trim()
+        ),
+      });
     } catch (error) {
       return json(res, 500, {
         ok: false,
