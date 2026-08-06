@@ -6025,6 +6025,327 @@ function buildRuntimeDependencyStatus() {
   };
 }
 
+
+// LUKE_AI_RUNTIME_INSTALL_STATE_MACHINE_V1
+const runtimeInstallStatePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "install-jobs.json"
+);
+
+const runtimeInstallTransitions = {
+  queued: ["preparing", "cancelled"],
+  preparing: ["downloading", "failed", "cancelled"],
+  downloading: ["verifying", "failed", "cancelled"],
+  verifying: ["installing", "failed", "cancelled"],
+  installing: ["completed", "rolling-back", "failed"],
+  "rolling-back": ["rolled-back", "failed"],
+  completed: [],
+  failed: ["rolling-back"],
+  cancelled: [],
+  "rolled-back": [],
+};
+
+function ensureRuntimeInstallStateFile() {
+  fs.mkdirSync(
+    path.dirname(runtimeInstallStatePath),
+    {
+      recursive: true,
+    }
+  );
+
+  if (!fs.existsSync(runtimeInstallStatePath)) {
+    fs.writeFileSync(
+      runtimeInstallStatePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          updatedAt: null,
+          jobs: [],
+        },
+        null,
+        2
+      ) + "\n",
+      "utf8"
+    );
+  }
+}
+
+function readRuntimeInstallState() {
+  ensureRuntimeInstallStateFile();
+
+  const raw = fs.readFileSync(
+    runtimeInstallStatePath,
+    "utf8"
+  );
+
+  const state = JSON.parse(raw);
+
+  if (!state || !Array.isArray(state.jobs)) {
+    throw new Error(
+      "Runtime install state is invalid."
+    );
+  }
+
+  return state;
+}
+
+function writeRuntimeInstallState(state) {
+  state.updatedAt = new Date().toISOString();
+
+  const temporaryPath =
+    `${runtimeInstallStatePath}.tmp`;
+
+  fs.writeFileSync(
+    temporaryPath,
+    JSON.stringify(state, null, 2) + "\n",
+    "utf8"
+  );
+
+  fs.renameSync(
+    temporaryPath,
+    runtimeInstallStatePath
+  );
+}
+
+function createRuntimeInstallJob(
+  dependencyId,
+  downloadDirectory
+) {
+  const catalog = readRuntimeDependencyCatalog();
+
+  const dependency = catalog.dependencies.find(
+    (item) => item.id === dependencyId
+  );
+
+  if (!dependency) {
+    const error = new Error(
+      `Unknown runtime dependency: ${dependencyId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const state = readRuntimeInstallState();
+
+  const activeJob = state.jobs.find(
+    (job) =>
+      job.dependencyId === dependencyId &&
+      ![
+        "completed",
+        "failed",
+        "cancelled",
+        "rolled-back",
+      ].includes(job.state)
+  );
+
+  if (activeJob) {
+    const error = new Error(
+      `An install job is already active for ${dependencyId}`
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const now = new Date().toISOString();
+
+  const job = {
+    id:
+      `runtime-${Date.now()}-` +
+      Math.random().toString(16).slice(2, 10),
+    dependencyId,
+    state: "queued",
+    progress: {
+      percent: 0,
+      downloadedBytes: 0,
+      totalBytes: null,
+      speedBytesPerSecond: 0,
+    },
+    downloadDirectory:
+      downloadDirectory ||
+      catalog.defaultDownloadDirectory,
+    checksum: {
+      algorithm: "sha256",
+      expected: null,
+      actual: null,
+      verified: false,
+    },
+    error: null,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+  };
+
+  state.jobs.unshift(job);
+
+  state.jobs = state.jobs.slice(0, 100);
+
+  writeRuntimeInstallState(state);
+
+  return job;
+}
+
+function updateRuntimeInstallJob(
+  jobId,
+  nextState,
+  progress = {}
+) {
+  const state = readRuntimeInstallState();
+
+  const job = state.jobs.find(
+    (item) => item.id === jobId
+  );
+
+  if (!job) {
+    const error = new Error(
+      `Runtime install job not found: ${jobId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    nextState &&
+    nextState !== job.state
+  ) {
+    const allowed =
+      runtimeInstallTransitions[job.state] || [];
+
+    if (!allowed.includes(nextState)) {
+      const error = new Error(
+        `Invalid runtime install transition: ` +
+        `${job.state} -> ${nextState}`
+      );
+
+      error.statusCode = 409;
+      throw error;
+    }
+
+    job.state = nextState;
+  }
+
+  if (
+    progress &&
+    typeof progress === "object"
+  ) {
+    if (
+      Number.isFinite(progress.percent)
+    ) {
+      job.progress.percent = Math.max(
+        0,
+        Math.min(100, progress.percent)
+      );
+    }
+
+    if (
+      Number.isFinite(progress.downloadedBytes)
+    ) {
+      job.progress.downloadedBytes =
+        Math.max(0, progress.downloadedBytes);
+    }
+
+    if (
+      Number.isFinite(progress.totalBytes)
+    ) {
+      job.progress.totalBytes =
+        Math.max(0, progress.totalBytes);
+    }
+
+    if (
+      Number.isFinite(progress.speedBytesPerSecond)
+    ) {
+      job.progress.speedBytesPerSecond =
+        Math.max(
+          0,
+          progress.speedBytesPerSecond
+        );
+    }
+  }
+
+  if (job.state === "completed") {
+    job.progress.percent = 100;
+    job.completedAt = new Date().toISOString();
+  }
+
+  if (
+    ["failed", "cancelled", "rolled-back"].includes(
+      job.state
+    )
+  ) {
+    job.completedAt = new Date().toISOString();
+  }
+
+  job.updatedAt = new Date().toISOString();
+
+  writeRuntimeInstallState(state);
+
+  return job;
+}
+
+function getRuntimeInstallJob(jobId) {
+  const state = readRuntimeInstallState();
+
+  return state.jobs.find(
+    (job) => job.id === jobId
+  ) || null;
+}
+
+function listRuntimeInstallJobs() {
+  return readRuntimeInstallState().jobs;
+}
+
+function readJsonRequestBody(req, limitBytes = 1048576) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+
+    req.on("data", (chunk) => {
+      size += chunk.length;
+
+      if (size > limitBytes) {
+        const error = new Error(
+          "Request body is too large."
+        );
+
+        error.statusCode = 413;
+        reject(error);
+        req.destroy();
+        return;
+      }
+
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      if (chunks.length === 0) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(
+          JSON.parse(
+            Buffer.concat(chunks).toString("utf8")
+          )
+        );
+      } catch {
+        const error = new Error(
+          "Invalid JSON request body."
+        );
+
+        error.statusCode = 400;
+        reject(error);
+      }
+    });
+
+    req.on("error", reject);
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -6037,6 +6358,164 @@ const server = http.createServer(async (req, res) => {
   }
   // ── Management API ────────────────────────────────────────────────────────
   // GET /api/health
+  // GET /api/runtime/install/jobs
+  if (
+    req.url === "/api/runtime/install/jobs" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      jobs: listRuntimeInstallJobs(),
+    });
+  }
+
+  // POST /api/runtime/install/jobs
+  if (
+    req.url === "/api/runtime/install/jobs" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body = await readJsonRequestBody(req);
+
+      if (
+        typeof body.dependencyId !== "string" ||
+        !body.dependencyId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "dependencyId is required",
+        });
+      }
+
+      const job = createRuntimeInstallJob(
+        body.dependencyId.trim(),
+        typeof body.downloadDirectory === "string"
+          ? body.downloadDirectory.trim()
+          : undefined
+      );
+
+      return json(res, 201, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const runtimeInstallJobMatch =
+    req.url.match(
+      /^\/api\/runtime\/install\/jobs\/([^/?]+)$/
+    );
+
+  // GET /api/runtime/install/jobs/:jobId
+  if (
+    runtimeInstallJobMatch &&
+    req.method === "GET"
+  ) {
+    const job = getRuntimeInstallJob(
+      decodeURIComponent(
+        runtimeInstallJobMatch[1]
+      )
+    );
+
+    if (!job) {
+      return json(res, 404, {
+        ok: false,
+        error: "Runtime install job not found",
+      });
+    }
+
+    return json(res, 200, {
+      ok: true,
+      job,
+    });
+  }
+
+  // PATCH /api/runtime/install/jobs/:jobId
+  if (
+    runtimeInstallJobMatch &&
+    req.method === "PATCH"
+  ) {
+    try {
+      const body = await readJsonRequestBody(req);
+
+      const job = updateRuntimeInstallJob(
+        decodeURIComponent(
+          runtimeInstallJobMatch[1]
+        ),
+        typeof body.state === "string"
+          ? body.state
+          : undefined,
+        body.progress
+      );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/runtime/install/jobs/:jobId/cancel
+  const runtimeInstallCancelMatch =
+    req.url.match(
+      /^\/api\/runtime\/install\/jobs\/([^/?]+)\/cancel$/
+    );
+
+  if (
+    runtimeInstallCancelMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const job = updateRuntimeInstallJob(
+        decodeURIComponent(
+          runtimeInstallCancelMatch[1]
+        ),
+        "cancelled"
+      );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
   // GET /api/runtime/dependencies
   if (
     req.url === "/api/runtime/dependencies" &&

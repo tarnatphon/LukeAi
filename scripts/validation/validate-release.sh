@@ -106,3 +106,11 @@ else
   echo "FAIL: Node.js is required for runtime dependency validation"
   exit 1
 fi
+
+# LUKE AI STUDIO runtime install state machine validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-install-state.cjs
+else
+  echo "FAIL: Node.js is required for runtime install state validation"
+  exit 1
+fi
