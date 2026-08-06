@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_DESTINATION_MANAGER_IMPORT_V2
+const {
+  StorageDestinationManager,
+} = require("./storage-destination-manager.cjs");
+
 // LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_IMPORT_V2
 const {
   RuntimeInstallQueue,
@@ -17167,6 +17172,26 @@ const runtimeInstallQueue =
     ),
   });
 
+// LUKE_AI_STORAGE_DESTINATION_BOOTSTRAP_V2
+const storageDestinationManager =
+  new StorageDestinationManager({
+    root: ROOT,
+    policyPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-destination-policy.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-destination-state.json"
+    ),
+  });
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
 
@@ -17174,6 +17199,206 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_API_V2
 
   // LUKE_AI_RUNTIME_INSTALL_PREFLIGHT_API_V2
+  // LUKE_AI_STORAGE_DESTINATION_MANAGER_API_V2
+
+  // GET /api/storage/status
+  if (
+    req.url === "/api/storage/status" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        storage:
+          storageDestinationManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/resolve
+  if (
+    req.url === "/api/storage/resolve" &&
+    req.method === "POST"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        storage:
+          storageDestinationManager
+            .resolveActiveDestination(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/transfer
+  if (
+    req.url === "/api/storage/transfer" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const sourcePath =
+        String(
+          body.sourcePath || ""
+        ).trim();
+
+      if (!sourcePath) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "sourcePath is required",
+        });
+      }
+
+      const result =
+        await storageDestinationManager
+          .transferLocalFile({
+            sourcePath,
+            relativePath:
+              body.relativePath ||
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/confirm-local-deletion
+  if (
+    req.url === "/api/storage/confirm-local-deletion" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const confirmationId =
+        String(
+          body.confirmationId || ""
+        ).trim();
+
+      if (!confirmationId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "confirmationId is required",
+        });
+      }
+
+      const result =
+        await storageDestinationManager
+          .confirmLocalDeletion({
+            confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/cancel-local-deletion
+  if (
+    req.url === "/api/storage/cancel-local-deletion" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const confirmationId =
+        String(
+          body.confirmationId || ""
+        ).trim();
+
+      if (!confirmationId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "confirmationId is required",
+        });
+      }
+
+      const result =
+        storageDestinationManager
+          .cancelLocalDeletion({
+            confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
   // POST /api/text-runtime/install-preflight
   if (
     req.url === "/api/text-runtime/install-preflight" &&
