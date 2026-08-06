@@ -1,3 +1,10 @@
+// LUKE_AI_RUNTIME_AUTO_DETECTION_IMPORT_V3
+const {
+  detectTextRuntimes,
+  createPreset:
+    createTextRuntimePreset,
+} = require("./text-runtime-detector.cjs");
+
 // LUKE_AI_RUNTIME_SUPERVISOR_IMPORT_V3
 const {
   TextRuntimeSupervisor,
@@ -17137,6 +17144,149 @@ function writeRuntimeSupervisorPolicy(
 
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
+
+  // LUKE_AI_RUNTIME_AUTO_DETECTION_API_V3
+  // GET /api/text-runtime/detect
+  if (
+    req.url === "/api/text-runtime/detect" &&
+    req.method === "GET"
+  ) {
+    try {
+      const detection =
+        await detectTextRuntimes();
+
+      return json(res, 200, {
+        ok: true,
+        ...detection,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/configure-detected
+  if (
+    req.url === "/api/text-runtime/configure-detected" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const runtimeType =
+        String(
+          body.runtimeType || ""
+        ).trim();
+
+      const supportedTypes =
+        new Set([
+          "ollama",
+          "llama.cpp",
+          "mlx",
+        ]);
+
+      if (
+        !supportedTypes.has(
+          runtimeType
+        )
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "Unsupported runtime type.",
+        });
+      }
+
+      const detection =
+        await detectTextRuntimes();
+
+      const selected =
+        detection.detections.find(
+          (runtime) =>
+            runtime.runtimeType ===
+            runtimeType
+        );
+
+      if (
+        !selected ||
+        selected.installed !== true
+      ) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            `${runtimeType} was not detected on this computer.`,
+        });
+      }
+
+      const preset =
+        createTextRuntimePreset(
+          runtimeType,
+          selected.executable
+        );
+
+      const currentPolicy =
+        readJsonFileStrict(
+          runtimeSupervisorPolicyPath,
+          "Runtime supervisor policy"
+        );
+
+      const nextPolicy =
+        normalizeRuntimeSupervisorPolicy({
+          ...currentPolicy,
+          runtime: {
+            ...(currentPolicy.runtime || {}),
+            command:
+              preset.command,
+            arguments:
+              preset.arguments,
+            workingDirectory:
+              preset.workingDirectory,
+            healthUrl:
+              preset.healthUrl,
+            environment:
+              preset.environment || {},
+          },
+        });
+
+      writeRuntimeSupervisorPolicy(
+        nextPolicy
+      );
+
+      textRuntimeSupervisor
+        .reloadPolicy?.();
+
+      return json(res, 200, {
+        ok: true,
+        runtimeType,
+        detection:
+          selected,
+        preset,
+        policy:
+          nextPolicy,
+        supervisor:
+          textRuntimeSupervisor
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   // GET /api/text-runtime/supervisor/settings
   if (

@@ -298,3 +298,11 @@ else
   echo "FAIL: Node.js is required for Runtime Supervisor Dashboard validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Runtime Auto-Detection validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-auto-detection.cjs
+else
+  echo "FAIL: Node.js is required for Runtime Auto-Detection validation"
+  exit 1
+fi
