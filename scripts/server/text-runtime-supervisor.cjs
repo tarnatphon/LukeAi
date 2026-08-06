@@ -177,6 +177,57 @@ class TextRuntimeSupervisor {
     );
   }
 
+  // LUKE_AI_RUNTIME_SUPERVISOR_POLICY_RELOAD_V1
+  reloadPolicy() {
+    if (this.monitorTimer) {
+      clearInterval(
+        this.monitorTimer
+      );
+
+      this.monitorTimer = null;
+    }
+
+    if (this.started) {
+      const policy =
+        this.readPolicy();
+
+      const interval =
+        Number(
+          policy.supervision
+            ?.healthCheckIntervalMs
+        ) || 5000;
+
+      this.monitorTimer =
+        setInterval(
+          () => {
+            this.monitorOnce()
+              .catch(
+                (error) => {
+                  this.addEvent(
+                    "monitor-error",
+                    {
+                      error:
+                        error instanceof Error
+                          ? error.message
+                          : String(error),
+                    }
+                  );
+                }
+              );
+          },
+          interval
+        );
+
+      this.monitorTimer.unref?.();
+    }
+
+    this.addEvent(
+      "supervisor-policy-reloaded"
+    );
+
+    return this.getStatus();
+  }
+
   getStatus() {
     const state =
       this.readState();

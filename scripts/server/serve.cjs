@@ -16858,8 +16858,352 @@ const textRuntimeSupervisor =
 
 textRuntimeSupervisor.startMonitoring();
 
+
+// LUKE_AI_RUNTIME_SUPERVISOR_SETTINGS_API_V1
+const runtimeSupervisorPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "runtime-supervisor-policy.json"
+);
+
+function normalizeRuntimeSupervisorPolicy(
+  input
+) {
+  const current =
+    readJsonFileStrict(
+      runtimeSupervisorPolicyPath,
+      "Runtime supervisor policy"
+    );
+
+  const source =
+    input &&
+    typeof input === "object"
+      ? input
+      : {};
+
+  const runtime =
+    source.runtime &&
+    typeof source.runtime === "object"
+      ? source.runtime
+      : {};
+
+  const supervision =
+    source.supervision &&
+    typeof source.supervision === "object"
+      ? source.supervision
+      : {};
+
+  const restart =
+    source.restart &&
+    typeof source.restart === "object"
+      ? source.restart
+      : {};
+
+  const command =
+    String(
+      runtime.command ??
+      current.runtime?.command ??
+      ""
+    ).trim();
+
+  const workingDirectory =
+    String(
+      runtime.workingDirectory ??
+      current.runtime
+        ?.workingDirectory ??
+      "."
+    ).trim() || ".";
+
+  const healthUrl =
+    String(
+      runtime.healthUrl ??
+      current.runtime?.healthUrl ??
+      ""
+    ).trim();
+
+  const argumentsValue =
+    Array.isArray(runtime.arguments)
+      ? runtime.arguments
+          .map(
+            (value) =>
+              String(value)
+          )
+      : (
+          current.runtime
+            ?.arguments || []
+        );
+
+  if (
+    command.includes("\n") ||
+    command.includes("\r") ||
+    command.includes("\0")
+  ) {
+    const error = new Error(
+      "Runtime command contains invalid characters."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    healthUrl &&
+    !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/.*)?$/i
+      .test(healthUrl)
+  ) {
+    const error = new Error(
+      "Health URL must use localhost or 127.0.0.1."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const clampNumber = (
+    value,
+    fallback,
+    minimum,
+    maximum
+  ) => {
+    const parsed =
+      Number(value);
+
+    if (!Number.isFinite(parsed)) {
+      return fallback;
+    }
+
+    return Math.max(
+      minimum,
+      Math.min(
+        maximum,
+        Math.round(parsed)
+      )
+    );
+  };
+
+  return {
+    ...current,
+    enabled:
+      source.enabled !==
+      undefined
+        ? Boolean(source.enabled)
+        : current.enabled !== false,
+    supervision: {
+      ...(current.supervision || {}),
+      autoStart:
+        supervision.autoStart !==
+        undefined
+          ? Boolean(
+              supervision.autoStart
+            )
+          : Boolean(
+              current.supervision
+                ?.autoStart
+            ),
+      autoRestart:
+        supervision.autoRestart !==
+        undefined
+          ? Boolean(
+              supervision.autoRestart
+            )
+          : current.supervision
+              ?.autoRestart !== false,
+      healthCheckIntervalMs:
+        clampNumber(
+          supervision
+            .healthCheckIntervalMs,
+          Number(
+            current.supervision
+              ?.healthCheckIntervalMs
+          ) || 5000,
+          1000,
+          300000
+        ),
+      healthCheckTimeoutMs:
+        clampNumber(
+          supervision
+            .healthCheckTimeoutMs,
+          Number(
+            current.supervision
+              ?.healthCheckTimeoutMs
+          ) || 3000,
+          500,
+          60000
+        ),
+      maximumConsecutiveFailures:
+        clampNumber(
+          supervision
+            .maximumConsecutiveFailures,
+          Number(
+            current.supervision
+              ?.maximumConsecutiveFailures
+          ) || 5,
+          1,
+          50
+        ),
+      suspendDurationMs:
+        clampNumber(
+          supervision
+            .suspendDurationMs,
+          Number(
+            current.supervision
+              ?.suspendDurationMs
+          ) || 600000,
+          1000,
+          86400000
+        ),
+    },
+    restart: {
+      ...(current.restart || {}),
+      initialDelayMs:
+        clampNumber(
+          restart.initialDelayMs,
+          Number(
+            current.restart
+              ?.initialDelayMs
+          ) || 1000,
+          100,
+          60000
+        ),
+      maximumDelayMs:
+        clampNumber(
+          restart.maximumDelayMs,
+          Number(
+            current.restart
+              ?.maximumDelayMs
+          ) || 30000,
+          1000,
+          600000
+        ),
+      backoffMultiplier:
+        Math.max(
+          1,
+          Math.min(
+            10,
+            Number(
+              restart
+                .backoffMultiplier ??
+              current.restart
+                ?.backoffMultiplier ??
+              2
+            )
+          )
+        ),
+    },
+    runtime: {
+      ...(current.runtime || {}),
+      healthUrl,
+      workingDirectory,
+      command,
+      arguments:
+        argumentsValue,
+      environment:
+        current.runtime
+          ?.environment || {},
+      inheritEnvironment:
+        runtime.inheritEnvironment !==
+        undefined
+          ? Boolean(
+              runtime.inheritEnvironment
+            )
+          : current.runtime
+              ?.inheritEnvironment !==
+              false,
+    },
+    security: {
+      ...(current.security || {}),
+      terminateOnlyOwnedProcess:
+        true,
+      allowShellCommand:
+        false,
+      writePidToState:
+        true,
+    },
+  };
+}
+
+function writeRuntimeSupervisorPolicy(
+  policy
+) {
+  writeJsonFileAtomic(
+    runtimeSupervisorPolicyPath,
+    policy
+  );
+
+  return policy;
+}
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
+
+  // GET /api/text-runtime/supervisor/settings
+  if (
+    req.url === "/api/text-runtime/supervisor/settings" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        policy:
+          readJsonFileStrict(
+            runtimeSupervisorPolicyPath,
+            "Runtime supervisor policy"
+          ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // PUT /api/text-runtime/supervisor/settings
+  if (
+    req.url === "/api/text-runtime/supervisor/settings" &&
+    req.method === "PUT"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const policy =
+        normalizeRuntimeSupervisorPolicy(
+          body.policy
+        );
+
+      writeRuntimeSupervisorPolicy(
+        policy
+      );
+
+      textRuntimeSupervisor
+        .reloadPolicy?.();
+
+      return json(res, 200, {
+        ok: true,
+        policy,
+        supervisor:
+          textRuntimeSupervisor.getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   if (
     req.url === "/api/text-runtime/supervisor/status" &&

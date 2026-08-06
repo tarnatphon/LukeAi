@@ -6507,3 +6507,198 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-direction: column;
   }
 }
+
+/* LUKE_AI_RUNTIME_SUPERVISOR_DASHBOARD_STYLES_V1 */
+.persistent-chat-supervisor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 15px;
+  border-top:
+    1px solid var(--border-color-muted);
+  background:
+    var(--md-sys-color-surface-container-low);
+}
+
+.persistent-chat-supervisor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.persistent-chat-supervisor-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-supervisor-heading span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.73rem;
+}
+
+.persistent-chat-supervisor-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.persistent-chat-supervisor-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 10px;
+  background:
+    var(--md-sys-color-surface);
+}
+
+.persistent-chat-supervisor-summary span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.67rem;
+}
+
+.persistent-chat-supervisor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.persistent-chat-supervisor-error {
+  padding: 9px 10px;
+  border-radius: 9px;
+  color:
+    var(--md-sys-color-error);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-error)
+      9%,
+      transparent
+    );
+  font-size: 0.74rem;
+}
+
+.persistent-chat-supervisor-settings {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 11px;
+  padding: 13px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 12px;
+  background:
+    var(--md-sys-color-surface);
+}
+
+.persistent-chat-supervisor-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.persistent-chat-supervisor-settings label > span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.persistent-chat-supervisor-settings input[type="text"],
+.persistent-chat-supervisor-settings input[type="number"],
+.persistent-chat-supervisor-settings textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 9px;
+  color:
+    var(--md-sys-color-on-surface);
+  background:
+    var(--md-sys-color-surface-container-lowest);
+  font: inherit;
+}
+
+.persistent-chat-supervisor-settings-wide,
+.persistent-chat-supervisor-settings-actions {
+  grid-column: 1 / -1;
+}
+
+.persistent-chat-supervisor-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+}
+
+.persistent-chat-supervisor-settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.persistent-chat-supervisor-events {
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 10px;
+  background:
+    var(--md-sys-color-surface);
+}
+
+.persistent-chat-supervisor-events summary {
+  padding: 10px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.persistent-chat-supervisor-events > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.persistent-chat-supervisor-events article {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background:
+    var(--md-sys-color-surface-container-low);
+}
+
+.persistent-chat-supervisor-events span,
+.persistent-chat-supervisor-events small {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.65rem;
+}
+
+.persistent-chat-supervisor-events small {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .persistent-chat-supervisor-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .persistent-chat-supervisor-summary,
+  .persistent-chat-supervisor-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .persistent-chat-supervisor-settings-wide,
+  .persistent-chat-supervisor-settings-actions {
+    grid-column: auto;
+  }
+}

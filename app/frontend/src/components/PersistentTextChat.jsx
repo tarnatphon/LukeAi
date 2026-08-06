@@ -191,6 +191,32 @@ export default function PersistentTextChat() {
     setModelHealthLoading,
   ] = useState(false);
 
+  // LUKE_AI_RUNTIME_SUPERVISOR_DASHBOARD_UI_V1
+  const [
+    runtimeSupervisor,
+    setRuntimeSupervisor,
+  ] = useState(null);
+
+  const [
+    runtimeSupervisorPolicy,
+    setRuntimeSupervisorPolicy,
+  ] = useState(null);
+
+  const [
+    runtimeSupervisorBusy,
+    setRuntimeSupervisorBusy,
+  ] = useState("");
+
+  const [
+    runtimeSupervisorSettingsOpen,
+    setRuntimeSupervisorSettingsOpen,
+  ] = useState(false);
+
+  const [
+    runtimeArgumentsText,
+    setRuntimeArgumentsText,
+  ] = useState("");
+
   const [
     resettingCircuitModelId,
     setResettingCircuitModelId,
@@ -1177,6 +1203,229 @@ export default function PersistentTextChat() {
         requestJson,
       ],
     );
+
+  const refreshRuntimeSupervisor =
+    useCallback(
+      async () => {
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/supervisor/status",
+            );
+
+          setRuntimeSupervisor(
+            data.supervisor || null,
+          );
+        } catch {
+          setRuntimeSupervisor(null);
+        }
+      },
+      [requestJson],
+    );
+
+  const loadRuntimeSupervisorPolicy =
+    useCallback(
+      async () => {
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/supervisor/settings",
+            );
+
+          const policy =
+            data.policy || null;
+
+          setRuntimeSupervisorPolicy(
+            policy,
+          );
+
+          setRuntimeArgumentsText(
+            JSON.stringify(
+              policy?.runtime
+                ?.arguments || [],
+              null,
+              2,
+            ),
+          );
+        } catch (policyError) {
+          setError(
+            policyError instanceof Error
+              ? policyError.message
+              : String(policyError),
+          );
+        }
+      },
+      [requestJson],
+    );
+
+  const runRuntimeSupervisorAction =
+    useCallback(
+      async (action) => {
+        setRuntimeSupervisorBusy(
+          action,
+        );
+
+        try {
+          // LUKE_AI_SUPERVISOR_EXPLICIT_ENDPOINTS_V1
+          const endpointByAction = {
+            start:
+              "/api/text-runtime/supervisor/start",
+            stop:
+              "/api/text-runtime/supervisor/stop",
+            restart:
+              "/api/text-runtime/supervisor/restart",
+            reset:
+              "/api/text-runtime/supervisor/reset",
+          };
+
+          const endpoint =
+            endpointByAction[action];
+
+          if (!endpoint) {
+            throw new Error(
+              `Unsupported supervisor action: ${action}`,
+            );
+          }
+
+          const data =
+            await requestJson(
+              endpoint,
+              {
+                method: "POST",
+                body: JSON.stringify({}),
+              },
+            );
+
+          setRuntimeSupervisor(
+            data.supervisor || null,
+          );
+
+          setError("");
+        } catch (actionError) {
+          setError(
+            actionError instanceof Error
+              ? actionError.message
+              : String(actionError),
+          );
+        } finally {
+          setRuntimeSupervisorBusy(
+            "",
+          );
+        }
+      },
+      [requestJson],
+    );
+
+  const saveRuntimeSupervisorPolicy =
+    useCallback(
+      async () => {
+        if (!runtimeSupervisorPolicy) {
+          return;
+        }
+
+        let parsedArguments = [];
+
+        try {
+          parsedArguments =
+            JSON.parse(
+              runtimeArgumentsText ||
+              "[]",
+            );
+        } catch {
+          setError(
+            "Runtime Arguments ต้องเป็น JSON Array ที่ถูกต้อง",
+          );
+          return;
+        }
+
+        if (
+          !Array.isArray(
+            parsedArguments,
+          )
+        ) {
+          setError(
+            "Runtime Arguments ต้องเป็น JSON Array",
+          );
+          return;
+        }
+
+        setRuntimeSupervisorBusy(
+          "save-settings",
+        );
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/supervisor/settings",
+              {
+                method: "PUT",
+                body: JSON.stringify({
+                  policy: {
+                    ...runtimeSupervisorPolicy,
+                    runtime: {
+                      ...(
+                        runtimeSupervisorPolicy
+                          .runtime || {}
+                      ),
+                      arguments:
+                        parsedArguments,
+                    },
+                  },
+                }),
+              },
+            );
+
+          setRuntimeSupervisorPolicy(
+            data.policy,
+          );
+
+          setRuntimeSupervisor(
+            data.supervisor || null,
+          );
+
+          setRuntimeSupervisorSettingsOpen(
+            false,
+          );
+
+          setError("");
+        } catch (saveError) {
+          setError(
+            saveError instanceof Error
+              ? saveError.message
+              : String(saveError),
+          );
+        } finally {
+          setRuntimeSupervisorBusy(
+            "",
+          );
+        }
+      },
+      [
+        requestJson,
+        runtimeArgumentsText,
+        runtimeSupervisorPolicy,
+      ],
+    );
+
+  useEffect(() => {
+    refreshRuntimeSupervisor();
+    loadRuntimeSupervisorPolicy();
+
+    const interval =
+      window.setInterval(
+        refreshRuntimeSupervisor,
+        5000,
+      );
+
+    return () => {
+      window.clearInterval(
+        interval,
+      );
+    };
+  }, [
+    loadRuntimeSupervisorPolicy,
+    refreshRuntimeSupervisor,
+  ]);
 
   const refreshModelHealth =
     useCallback(
@@ -2447,6 +2696,469 @@ export default function PersistentTextChat() {
             </article>
           )}
         </div>
+
+        <section className="persistent-chat-supervisor-panel">
+          <div className="persistent-chat-supervisor-heading">
+            <div>
+              <strong>
+                Runtime Supervisor
+              </strong>
+
+              <span>
+                ควบคุมและตรวจสอบ Text Runtime
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="m3-btn m3-btn-outlined"
+              onClick={() => {
+                setRuntimeSupervisorSettingsOpen(
+                  (current) => !current,
+                );
+
+                if (
+                  !runtimeSupervisorPolicy
+                ) {
+                  loadRuntimeSupervisorPolicy();
+                }
+              }}
+            >
+              Runtime Settings
+            </button>
+          </div>
+
+          <div className="persistent-chat-supervisor-summary">
+            <div>
+              <span>
+                Status
+              </span>
+
+              <strong>
+                {runtimeSupervisor
+                  ?.status ||
+                  "unknown"}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                PID
+              </span>
+
+              <strong>
+                {runtimeSupervisor
+                  ?.pid ||
+                  "—"}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Restart
+              </span>
+
+              <strong>
+                {runtimeSupervisor
+                  ?.restartCount ||
+                  0}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Failures
+              </span>
+
+              <strong>
+                {runtimeSupervisor
+                  ?.consecutiveFailures ||
+                  0}
+              </strong>
+            </div>
+          </div>
+
+          {runtimeSupervisor
+            ?.lastError && (
+            <div className="persistent-chat-supervisor-error">
+              {runtimeSupervisor.lastError}
+            </div>
+          )}
+
+          <div className="persistent-chat-supervisor-actions">
+            <button
+              type="button"
+              className="m3-btn m3-btn-filled"
+              disabled={
+                Boolean(
+                  runtimeSupervisorBusy,
+                )
+              }
+              onClick={() =>
+                runRuntimeSupervisorAction(
+                  "start",
+                )
+              }
+            >
+              Start Runtime
+            </button>
+
+            <button
+              type="button"
+              className="m3-btn m3-btn-outlined"
+              disabled={
+                Boolean(
+                  runtimeSupervisorBusy,
+                )
+              }
+              onClick={() =>
+                runRuntimeSupervisorAction(
+                  "restart",
+                )
+              }
+            >
+              Restart Runtime
+            </button>
+
+            <button
+              type="button"
+              className="m3-btn m3-btn-error"
+              disabled={
+                Boolean(
+                  runtimeSupervisorBusy,
+                )
+              }
+              onClick={() =>
+                runRuntimeSupervisorAction(
+                  "stop",
+                )
+              }
+            >
+              Stop Runtime
+            </button>
+
+            <button
+              type="button"
+              className="m3-btn m3-btn-outlined"
+              disabled={
+                Boolean(
+                  runtimeSupervisorBusy,
+                )
+              }
+              onClick={() =>
+                runRuntimeSupervisorAction(
+                  "reset",
+                )
+              }
+            >
+              Reset Supervisor
+            </button>
+          </div>
+
+          {runtimeSupervisorSettingsOpen &&
+            runtimeSupervisorPolicy && (
+            <div className="persistent-chat-supervisor-settings">
+              <label>
+                <span>
+                  Runtime Command
+                </span>
+
+                <input
+                  type="text"
+                  value={
+                    runtimeSupervisorPolicy
+                      .runtime?.command ||
+                    ""
+                  }
+                  placeholder="/path/to/runtime"
+                  onChange={(event) =>
+                    setRuntimeSupervisorPolicy(
+                      (current) => ({
+                        ...current,
+                        runtime: {
+                          ...(current
+                            ?.runtime || {}),
+                          command:
+                            event.target
+                              .value,
+                        },
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <label>
+                <span>
+                  Working Directory
+                </span>
+
+                <input
+                  type="text"
+                  value={
+                    runtimeSupervisorPolicy
+                      .runtime
+                      ?.workingDirectory ||
+                    "."
+                  }
+                  onChange={(event) =>
+                    setRuntimeSupervisorPolicy(
+                      (current) => ({
+                        ...current,
+                        runtime: {
+                          ...(current
+                            ?.runtime || {}),
+                          workingDirectory:
+                            event.target
+                              .value,
+                        },
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <label>
+                <span>
+                  Health URL
+                </span>
+
+                <input
+                  type="text"
+                  value={
+                    runtimeSupervisorPolicy
+                      .runtime?.healthUrl ||
+                    ""
+                  }
+                  placeholder="http://127.0.0.1:10086/health"
+                  onChange={(event) =>
+                    setRuntimeSupervisorPolicy(
+                      (current) => ({
+                        ...current,
+                        runtime: {
+                          ...(current
+                            ?.runtime || {}),
+                          healthUrl:
+                            event.target
+                              .value,
+                        },
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <label className="persistent-chat-supervisor-settings-wide">
+                <span>
+                  Runtime Arguments
+                </span>
+
+                <textarea
+                  rows={6}
+                  value={
+                    runtimeArgumentsText
+                  }
+                  onChange={(event) =>
+                    setRuntimeArgumentsText(
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+
+              <label className="persistent-chat-supervisor-checkbox">
+                <input
+                  type="checkbox"
+                  checked={
+                    runtimeSupervisorPolicy
+                      .supervision
+                      ?.autoStart === true
+                  }
+                  onChange={(event) =>
+                    setRuntimeSupervisorPolicy(
+                      (current) => ({
+                        ...current,
+                        supervision: {
+                          ...(current
+                            ?.supervision ||
+                            {}),
+                          autoStart:
+                            event.target
+                              .checked,
+                        },
+                      }),
+                    )
+                  }
+                />
+
+                Auto Start
+              </label>
+
+              <label className="persistent-chat-supervisor-checkbox">
+                <input
+                  type="checkbox"
+                  checked={
+                    runtimeSupervisorPolicy
+                      .supervision
+                      ?.autoRestart !==
+                    false
+                  }
+                  onChange={(event) =>
+                    setRuntimeSupervisorPolicy(
+                      (current) => ({
+                        ...current,
+                        supervision: {
+                          ...(current
+                            ?.supervision ||
+                            {}),
+                          autoRestart:
+                            event.target
+                              .checked,
+                        },
+                      }),
+                    )
+                  }
+                />
+
+                Auto Restart
+              </label>
+
+              <label>
+                <span>
+                  Health Interval (ms)
+                </span>
+
+                <input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  value={
+                    runtimeSupervisorPolicy
+                      .supervision
+                      ?.healthCheckIntervalMs ||
+                    5000
+                  }
+                  onChange={(event) =>
+                    setRuntimeSupervisorPolicy(
+                      (current) => ({
+                        ...current,
+                        supervision: {
+                          ...(current
+                            ?.supervision ||
+                            {}),
+                          healthCheckIntervalMs:
+                            Number(
+                              event.target
+                                .value,
+                            ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <label>
+                <span>
+                  Maximum Failures
+                </span>
+
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={
+                    runtimeSupervisorPolicy
+                      .supervision
+                      ?.maximumConsecutiveFailures ||
+                    5
+                  }
+                  onChange={(event) =>
+                    setRuntimeSupervisorPolicy(
+                      (current) => ({
+                        ...current,
+                        supervision: {
+                          ...(current
+                            ?.supervision ||
+                            {}),
+                          maximumConsecutiveFailures:
+                            Number(
+                              event.target
+                                .value,
+                            ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <div className="persistent-chat-supervisor-settings-actions">
+                <button
+                  type="button"
+                  className="m3-btn m3-btn-filled"
+                  disabled={
+                    runtimeSupervisorBusy ===
+                    "save-settings"
+                  }
+                  onClick={
+                    saveRuntimeSupervisorPolicy
+                  }
+                >
+                  Save Settings
+                </button>
+
+                <button
+                  type="button"
+                  className="m3-btn m3-btn-outlined"
+                  onClick={() =>
+                    setRuntimeSupervisorSettingsOpen(
+                      false,
+                    )
+                  }
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {runtimeSupervisor
+            ?.events?.length > 0 && (
+            <details className="persistent-chat-supervisor-events">
+              <summary>
+                Supervisor Events
+              </summary>
+
+              <div>
+                {runtimeSupervisor.events
+                  .slice(-10)
+                  .reverse()
+                  .map((event) => (
+                    <article key={event.id}>
+                      <strong>
+                        {event.type}
+                      </strong>
+
+                      <span>
+                        {event.createdAt
+                          ? formatDate(
+                              event.createdAt,
+                            )
+                          : ""}
+                      </span>
+
+                      {event.error && (
+                        <small>
+                          {event.error}
+                        </small>
+                      )}
+                    </article>
+                  ))}
+              </div>
+            </details>
+          )}
+        </section>
 
         <section className="persistent-chat-model-health-panel">
           <div className="persistent-chat-model-health-heading">
