@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "catalogId": "luke-text-model-catalog",
-  "catalogVersion": "1.1.0",
+  "catalogVersion": "1.2.0",
   "generatedAt": "2026-08-06T00:00:00.000Z",
   "trust": {
     "mode": "trusted-source-metadata",
@@ -45,10 +45,40 @@
           "filename": "Qwen3-4B-Q4_K_M.gguf",
           "sizeBytes": 2684354560,
           "minimumRamBytes": 8589934592,
-          "recommendedRamBytes": 17179869184,
+          "recommendedRamBytes": 12884901888,
           "download": {
             "provider": "huggingface",
             "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            "metadataUrl": "https://huggingface.co/api/models/Qwen/Qwen3-4B-GGUF",
+            "sha256": null,
+            "resolveSha256FromMetadata": true
+          }
+        },
+        {
+          "id": "q5-k-m",
+          "quantization": "Q5_K_M",
+          "filename": "Qwen3-4B-Q5_K_M.gguf",
+          "sizeBytes": 3167538380,
+          "minimumRamBytes": 12884901888,
+          "recommendedRamBytes": 17179869184,
+          "download": {
+            "provider": "huggingface",
+            "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q5_K_M.gguf",
+            "metadataUrl": "https://huggingface.co/api/models/Qwen/Qwen3-4B-GGUF",
+            "sha256": null,
+            "resolveSha256FromMetadata": true
+          }
+        },
+        {
+          "id": "q8-0",
+          "quantization": "Q8_0",
+          "filename": "Qwen3-4B-Q8_0.gguf",
+          "sizeBytes": 4966055936,
+          "minimumRamBytes": 17179869184,
+          "recommendedRamBytes": 25769803776,
+          "download": {
+            "provider": "huggingface",
+            "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q8_0.gguf",
             "metadataUrl": "https://huggingface.co/api/models/Qwen/Qwen3-4B-GGUF",
             "sha256": null,
             "resolveSha256FromMetadata": true
@@ -110,11 +140,41 @@
           "quantization": "Q4_K_M",
           "filename": "Dolphin3.0-Llama3.2-3B-Q4_K_M.gguf",
           "sizeBytes": 2168958484,
-          "minimumRamBytes": 6442450944,
-          "recommendedRamBytes": 8589934592,
+          "minimumRamBytes": 8589934592,
+          "recommendedRamBytes": 12884901888,
           "download": {
             "provider": "huggingface",
             "url": "https://huggingface.co/bartowski/Dolphin3.0-Llama3.2-3B-GGUF/resolve/main/Dolphin3.0-Llama3.2-3B-Q4_K_M.gguf",
+            "metadataUrl": "https://huggingface.co/api/models/bartowski/Dolphin3.0-Llama3.2-3B-GGUF",
+            "sha256": null,
+            "resolveSha256FromMetadata": true
+          }
+        },
+        {
+          "id": "q5-k-m",
+          "quantization": "Q5_K_M",
+          "filename": "Dolphin3.0-Llama3.2-3B-Q5_K_M.gguf",
+          "sizeBytes": 2559371011,
+          "minimumRamBytes": 12884901888,
+          "recommendedRamBytes": 17179869184,
+          "download": {
+            "provider": "huggingface",
+            "url": "https://huggingface.co/bartowski/Dolphin3.0-Llama3.2-3B-GGUF/resolve/main/Dolphin3.0-Llama3.2-3B-Q5_K_M.gguf",
+            "metadataUrl": "https://huggingface.co/api/models/bartowski/Dolphin3.0-Llama3.2-3B-GGUF",
+            "sha256": null,
+            "resolveSha256FromMetadata": true
+          }
+        },
+        {
+          "id": "q8-0",
+          "quantization": "Q8_0",
+          "filename": "Dolphin3.0-Llama3.2-3B-Q8_0.gguf",
+          "sizeBytes": 4012573195,
+          "minimumRamBytes": 17179869184,
+          "recommendedRamBytes": 25769803776,
+          "download": {
+            "provider": "huggingface",
+            "url": "https://huggingface.co/bartowski/Dolphin3.0-Llama3.2-3B-GGUF/resolve/main/Dolphin3.0-Llama3.2-3B-Q8_0.gguf",
             "metadataUrl": "https://huggingface.co/api/models/bartowski/Dolphin3.0-Llama3.2-3B-GGUF",
             "sha256": null,
             "resolveSha256FromMetadata": true

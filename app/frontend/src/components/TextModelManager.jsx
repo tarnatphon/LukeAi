@@ -190,18 +190,51 @@ function ModelCard({
   model,
   queueItems,
   updateInfo,
+  hardwareInfo,
   busyId,
   onDownload,
   onUpdate,
   onAction,
 }) {
+  // LUKE_AI_TEXT_MODEL_HARDWARE_UI_V3
+  const recommendedVariantId =
+    hardwareInfo?.recommendedVariantId ||
+    model.recommendedVariant ||
+    model.variants?.[0]?.id ||
+    "";
+
+  const [
+    selectedVariantId,
+    setSelectedVariantId,
+  ] = useState(
+    recommendedVariantId,
+  );
+
+  useEffect(() => {
+    if (recommendedVariantId) {
+      setSelectedVariantId(
+        recommendedVariantId,
+      );
+    }
+  }, [recommendedVariantId]);
+
   const variant =
     model.variants?.find(
       (item) =>
-        item.id ===
-        model.recommendedVariant,
+        item.id === selectedVariantId,
+    ) ||
+    model.variants?.find(
+      (item) =>
+        item.id === recommendedVariantId,
     ) ||
     model.variants?.[0];
+
+  const variantHardware =
+    hardwareInfo?.variants?.find(
+      (item) =>
+        item.id === variant?.id,
+    ) ||
+    null;
 
   const queueItem = variant
     ? getModelQueueItem(
@@ -309,6 +342,91 @@ function ModelCard({
           )}
         </div>
       )}
+
+      <div className="text-model-variant-selector">
+        <label
+          htmlFor={`text-model-variant-${model.id}`}
+        >
+          Quantization
+        </label>
+
+        <select
+          id={`text-model-variant-${model.id}`}
+          value={variant?.id || ""}
+          disabled={
+            Boolean(queueItem) ||
+            busy
+          }
+          onChange={(event) =>
+            setSelectedVariantId(
+              event.target.value,
+            )
+          }
+        >
+          {(model.variants || []).map(
+            (candidate) => {
+              const compatibility =
+                hardwareInfo?.variants?.find(
+                  (item) =>
+                    item.id === candidate.id,
+                );
+
+              let suffix = " — ไม่แนะนำ";
+
+              if (
+                compatibility?.compatibility ===
+                "recommended"
+              ) {
+                suffix = " — แนะนำ";
+              } else if (
+                compatibility?.compatibility ===
+                "compatible"
+              ) {
+                suffix = " — ใช้งานได้";
+              }
+
+              return (
+                <option
+                  key={candidate.id}
+                  value={candidate.id}
+                  disabled={
+                    compatibility?.downloadable ===
+                    false
+                  }
+                >
+                  {candidate.quantization}
+                  {suffix}
+                </option>
+              );
+            },
+          )}
+        </select>
+
+        {variantHardware && (
+          <div
+            className={
+              "text-model-hardware-status " +
+              (
+                variantHardware.compatibility ===
+                "recommended"
+                  ? "text-model-hardware-recommended"
+                  : variantHardware.compatibility ===
+                      "compatible"
+                    ? "text-model-hardware-compatible"
+                    : "text-model-hardware-incompatible"
+              )
+            }
+          >
+            {variantHardware.compatibility ===
+            "recommended"
+              ? "เหมาะกับเครื่องนี้"
+              : variantHardware.compatibility ===
+                  "compatible"
+                ? "สามารถใช้งานได้"
+                : "ไม่แนะนำสำหรับเครื่องนี้"}
+          </div>
+        )}
+      </div>
 
       <div className="text-model-meta-grid">
         <div>
@@ -437,7 +555,11 @@ function ModelCard({
           <button
             type="button"
             className="m3-btn m3-btn-filled"
-            disabled={busy}
+            disabled={
+              busy ||
+              variantHardware?.downloadable ===
+                false
+            }
             onClick={() =>
               onDownload(
                 model,
@@ -600,6 +722,15 @@ export default function TextModelManager() {
   const [policy, setPolicy] =
     useState(null);
 
+  const [
+    hardwareStatus,
+    setHardwareStatus,
+  ] = useState({
+    hardware: null,
+    summary: {},
+    models: [],
+  });
+
   // LUKE_AI_TEXT_MODEL_UPDATE_UI_V1
   const [updateStatus, setUpdateStatus] =
     useState({
@@ -685,6 +816,7 @@ export default function TextModelManager() {
           catalogData,
           queueData,
           updateData,
+          hardwareData,
         ] = await Promise.all([
           requestJson(
             "/api/text-models/catalog",
@@ -694,6 +826,9 @@ export default function TextModelManager() {
           ),
           requestJson(
             "/api/text-models/updates",
+          ),
+          requestJson(
+            "/api/text-models/hardware",
           ),
         ]);
 
@@ -720,6 +855,15 @@ export default function TextModelManager() {
             models: [],
           },
         );
+
+        setHardwareStatus(
+          hardwareData || {
+            hardware: null,
+            summary: {},
+            models: [],
+          },
+        );
+
         setError("");
       } catch (refreshError) {
         if (mountedRef.current) {
@@ -1000,6 +1144,52 @@ export default function TextModelManager() {
         </div>
       </div>
 
+      {hardwareStatus.hardware && (
+        <div className="text-model-hardware-summary">
+          <div className="m3-card text-model-hardware-card">
+            <span>สถาปัตยกรรม</span>
+            <strong>
+              {hardwareStatus.hardware.appleSilicon
+                ? "Apple Silicon"
+                : hardwareStatus.hardware.architecture}
+            </strong>
+          </div>
+
+          <div className="m3-card text-model-hardware-card">
+            <span>RAM ทั้งหมด</span>
+            <strong>
+              {formatBytes(
+                hardwareStatus.hardware
+                  .totalRamBytes,
+              )}
+            </strong>
+          </div>
+
+          <div className="m3-card text-model-hardware-card">
+            <span>RAM ว่าง</span>
+            <strong>
+              {formatBytes(
+                hardwareStatus.hardware
+                  .availableRamBytes,
+              )}
+            </strong>
+          </div>
+
+          <div className="m3-card text-model-hardware-card">
+            <span>พื้นที่ว่าง</span>
+            <strong>
+              {hardwareStatus.hardware
+                .freeStorageBytes == null
+                ? "ไม่ทราบ"
+                : formatBytes(
+                    hardwareStatus.hardware
+                      .freeStorageBytes,
+                  )}
+            </strong>
+          </div>
+        </div>
+      )}
+
       <div className="m3-card text-model-download-policy">
         <HardDrive size={20} />
 
@@ -1081,6 +1271,13 @@ export default function TextModelManager() {
                 queueItems={queue.items}
                 updateInfo={
                   updateStatus.models?.find(
+                    (item) =>
+                      item.modelId ===
+                      model.id,
+                  ) || null
+                }
+                hardwareInfo={
+                  hardwareStatus.models?.find(
                     (item) =>
                       item.modelId ===
                       model.id,

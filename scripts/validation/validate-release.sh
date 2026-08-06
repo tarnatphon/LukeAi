@@ -194,3 +194,11 @@ else
   echo "FAIL: Node.js is required for Text Model Update validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Text Model hardware compatibility validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-text-model-hardware-compatibility.cjs
+else
+  echo "FAIL: Node.js is required for Text Model hardware validation"
+  exit 1
+fi

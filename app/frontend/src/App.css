@@ -5253,3 +5253,113 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_TEXT_MODEL_HARDWARE_STYLES_V3 */
+.text-model-hardware-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.text-model-hardware-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 15px;
+}
+
+.text-model-hardware-card span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.76rem;
+}
+
+.text-model-hardware-card strong {
+  font-size: 0.98rem;
+}
+
+.text-model-variant-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.text-model-variant-selector label {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.text-model-variant-selector select {
+  width: 100%;
+  padding: 10px 11px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 10px;
+  color:
+    var(--md-sys-color-on-surface);
+  background:
+    var(--md-sys-color-surface);
+}
+
+.text-model-variant-selector select:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.text-model-hardware-status {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.text-model-hardware-recommended {
+  color:
+    var(--md-sys-color-success);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-success) 11%,
+      transparent
+    );
+}
+
+.text-model-hardware-compatible {
+  color:
+    var(--md-sys-color-primary);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-primary) 10%,
+      transparent
+    );
+}
+
+.text-model-hardware-incompatible {
+  color:
+    var(--md-sys-color-error);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-error) 10%,
+      transparent
+    );
+}
+
+@media (max-width: 900px) {
+  .text-model-hardware-summary {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .text-model-hardware-summary {
+    grid-template-columns: 1fr;
+  }
+}

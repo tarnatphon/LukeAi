@@ -8031,11 +8031,14 @@ function getCatalogModelVariant(
   modelId,
   variantId
 ) {
-  const catalog = readTextModelCatalog();
+  const catalog =
+    readTextModelCatalog();
 
-  const model = catalog.models.find(
-    (item) => item.id === modelId
-  );
+  const model =
+    catalog.models.find(
+      (item) =>
+        item.id === modelId
+    );
 
   if (!model) {
     const error = new Error(
@@ -8046,15 +8049,26 @@ function getCatalogModelVariant(
     throw error;
   }
 
+  const hardwareRecommendation =
+    typeof getTextModelHardwareRecommendation ===
+      "function"
+      ? getTextModelHardwareRecommendation(
+          modelId
+        )
+      : null;
+
   const selectedVariantId =
     variantId ||
-    model.recommendedVariant;
+    hardwareRecommendation
+      ?.recommendedVariantId ||
+    model.recommendedVariant ||
+    model.variants?.[0]?.id;
 
-  const variant = (
-    model.variants || []
-  ).find(
-    (item) => item.id === selectedVariantId
-  );
+  const variant =
+    (model.variants || []).find(
+      (item) =>
+        item.id === selectedVariantId
+    );
 
   if (!variant) {
     const error = new Error(
@@ -8290,6 +8304,46 @@ async function enqueueTextModel(
     modelId,
     variantId
   );
+
+  const hardwareStatus =
+    getTextModelHardwareRecommendation(
+      modelId
+    );
+
+  const selectedHardwareVariant =
+    hardwareStatus
+      ?.variants
+      ?.find(
+        (item) =>
+          item.id === variant.id
+      );
+
+  if (
+    selectedHardwareVariant &&
+    selectedHardwareVariant.downloadable !==
+      true
+  ) {
+    const insufficientStorage =
+      selectedHardwareVariant
+        .reasons
+        ?.includes(
+          "insufficient-storage"
+        );
+
+    const error = new Error(
+      insufficientStorage
+        ? "พื้นที่จัดเก็บไม่เพียงพอสำหรับโมเดลนี้"
+        : "โมเดลรุ่นนี้ไม่เหมาะกับสเปกเครื่องปัจจุบัน"
+    );
+
+    error.statusCode = 409;
+    error.code =
+      insufficientStorage
+        ? "INSUFFICIENT_STORAGE"
+        : "HARDWARE_INCOMPATIBLE";
+
+    throw error;
+  }
 
   validateTrustedModelDownload(
     model,
@@ -9457,6 +9511,310 @@ function getTextModelUpdateStatus(
   );
 }
 
+
+// LUKE_AI_TEXT_MODEL_HARDWARE_COMPATIBILITY_V3
+const textModelHardwareOs = require("node:os");
+
+function getTextModelHardwareProfile() {
+  const testTotalRam =
+    Number(
+      process.env
+        .LUKE_AI_TEST_TOTAL_RAM_BYTES
+    );
+
+  const testAvailableRam =
+    Number(
+      process.env
+        .LUKE_AI_TEST_AVAILABLE_RAM_BYTES
+    );
+
+  const totalRamBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testTotalRam)
+      ? testTotalRam
+      : textModelHardwareOs.totalmem();
+
+  const availableRamBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testAvailableRam)
+      ? testAvailableRam
+      : textModelHardwareOs.freemem();
+
+  const storage =
+    typeof resolveRuntimeStorageDirectory ===
+      "function"
+      ? resolveRuntimeStorageDirectory({
+          create: true,
+          createFallback: true,
+        })
+      : null;
+
+  const selectedStorage =
+    storage?.usingFallback
+      ? storage.fallback
+      : storage?.external;
+
+  const freeStorageCandidate =
+    Number(
+      selectedStorage?.freeBytes
+    );
+
+  return {
+    platform: process.platform,
+    architecture: process.arch,
+    appleSilicon:
+      process.platform === "darwin" &&
+      process.arch === "arm64",
+    cpuCount:
+      textModelHardwareOs.cpus()?.length ||
+      1,
+    totalRamBytes,
+    availableRamBytes,
+    selectedStorageDirectory:
+      storage?.selectedDirectory || null,
+    usingStorageFallback:
+      storage?.usingFallback === true,
+    freeStorageBytes:
+      Number.isFinite(
+        freeStorageCandidate
+      )
+        ? freeStorageCandidate
+        : null,
+  };
+}
+
+function getTextModelQuantizationRank(
+  quantization
+) {
+  const value =
+    String(quantization || "")
+      .toUpperCase();
+
+  if (value.startsWith("Q8")) {
+    return 80;
+  }
+
+  if (value.startsWith("Q6")) {
+    return 60;
+  }
+
+  if (value.startsWith("Q5")) {
+    return 50;
+  }
+
+  if (value.startsWith("Q4")) {
+    return 40;
+  }
+
+  if (value.startsWith("Q3")) {
+    return 30;
+  }
+
+  return 10;
+}
+
+function evaluateTextModelHardwareVariant(
+  variant,
+  hardware
+) {
+  const sizeBytes =
+    Number(variant.sizeBytes) || 0;
+
+  const minimumRamBytes =
+    Number(
+      variant.minimumRamBytes
+    ) ||
+    Math.ceil(sizeBytes * 1.4);
+
+  const recommendedRamBytes =
+    Number(
+      variant.recommendedRamBytes
+    ) ||
+    Math.ceil(sizeBytes * 2);
+
+  const reserveBytes =
+    Math.max(
+      10 * 1024 ** 3,
+      Math.ceil(sizeBytes * 0.25)
+    );
+
+  const requiredStorageBytes =
+    sizeBytes + reserveBytes;
+
+  const totalRamCompatible =
+    hardware.totalRamBytes >=
+    minimumRamBytes;
+
+  const availableRamCompatible =
+    hardware.availableRamBytes >=
+    Math.min(
+      minimumRamBytes,
+      Math.floor(
+        hardware.totalRamBytes * 0.75
+      )
+    );
+
+  const storageCompatible =
+    hardware.freeStorageBytes == null ||
+    hardware.freeStorageBytes >=
+    requiredStorageBytes;
+
+  const reasons = [];
+
+  if (!totalRamCompatible) {
+    reasons.push(
+      "total-ram-below-minimum"
+    );
+  }
+
+  if (!availableRamCompatible) {
+    reasons.push(
+      "available-ram-too-low"
+    );
+  }
+
+  if (!storageCompatible) {
+    reasons.push(
+      "insufficient-storage"
+    );
+  }
+
+  let compatibility = "incompatible";
+  let score = 0;
+
+  if (
+    totalRamCompatible &&
+    availableRamCompatible &&
+    storageCompatible
+  ) {
+    const fullyRecommended =
+      hardware.totalRamBytes >=
+      recommendedRamBytes;
+
+    compatibility =
+      fullyRecommended
+        ? "recommended"
+        : "compatible";
+
+    score =
+      getTextModelQuantizationRank(
+        variant.quantization
+      ) +
+      (
+        fullyRecommended
+          ? 100
+          : 0
+      );
+  }
+
+  return {
+    id: variant.id,
+    quantization:
+      variant.quantization,
+    filename:
+      variant.filename,
+    sizeBytes,
+    minimumRamBytes,
+    recommendedRamBytes,
+    requiredStorageBytes,
+    compatibility,
+    recommended:
+      compatibility === "recommended",
+    downloadable:
+      totalRamCompatible &&
+      storageCompatible,
+    reasons,
+    score,
+  };
+}
+
+function buildTextModelHardwareCompatibility() {
+  const hardware =
+    getTextModelHardwareProfile();
+
+  const catalog =
+    readTextModelCatalog();
+
+  const models =
+    catalog.models.map((model) => {
+      const variants =
+        (model.variants || [])
+          .map(
+            (variant) =>
+              evaluateTextModelHardwareVariant(
+                variant,
+                hardware
+              )
+          )
+          .sort(
+            (left, right) =>
+              right.score - left.score
+          );
+
+      const recommendation =
+        variants.find(
+          (variant) =>
+            variant.compatibility ===
+            "recommended"
+        ) ||
+        variants.find(
+          (variant) =>
+            variant.compatibility ===
+            "compatible"
+        ) ||
+        null;
+
+      return {
+        modelId: model.id,
+        modelName:
+          model.name?.th ||
+          model.name?.en ||
+          model.id,
+        compatible:
+          Boolean(recommendation),
+        recommendedVariantId:
+          recommendation?.id || null,
+        recommendedQuantization:
+          recommendation?.quantization ||
+          null,
+        variants,
+      };
+    });
+
+  return {
+    ok: true,
+    checkedAt:
+      new Date().toISOString(),
+    hardware,
+    summary: {
+      modelCount: models.length,
+      compatibleModelCount:
+        models.filter(
+          (model) => model.compatible
+        ).length,
+      incompatibleModelCount:
+        models.filter(
+          (model) => !model.compatible
+        ).length,
+    },
+    models,
+  };
+}
+
+function getTextModelHardwareRecommendation(
+  modelId
+) {
+  return (
+    buildTextModelHardwareCompatibility()
+      .models
+      .find(
+        (model) =>
+          model.modelId === modelId
+      ) ||
+    null
+  );
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -10143,6 +10501,28 @@ const server = http.createServer(async (req, res) => {
               : String(error),
         }
       );
+    }
+  }
+
+  // GET /api/text-models/hardware
+  if (
+    req.url === "/api/text-models/hardware" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildTextModelHardwareCompatibility()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
     }
   }
 
