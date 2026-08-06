@@ -6342,3 +6342,168 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_MODEL_HEALTH_CIRCUIT_BREAKER_STYLES_V1 */
+.persistent-chat-model-health-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 14px 15px;
+  border-top:
+    1px solid var(--border-color-muted);
+  background:
+    var(--md-sys-color-surface-container-low);
+}
+
+.persistent-chat-model-health-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.persistent-chat-model-health-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-model-health-heading span,
+.persistent-chat-model-health-empty {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.73rem;
+}
+
+.persistent-chat-model-health-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.persistent-chat-model-health-card {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 11px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 11px;
+  background:
+    var(--md-sys-color-surface);
+}
+
+.persistent-chat-model-health-card header {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.persistent-chat-model-health-card header span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.persistent-chat-model-health-card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-model-health-card > div span,
+.persistent-chat-model-health-card small {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.persistent-chat-model-health-card small,
+.persistent-chat-model-health-card button {
+  grid-column: 1 / -1;
+}
+
+.persistent-chat-model-health-closed {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-success)
+      35%,
+      var(--border-color-muted)
+    );
+}
+
+.persistent-chat-model-health-closed header span {
+  color:
+    var(--md-sys-color-success);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-success)
+      10%,
+      transparent
+    );
+}
+
+.persistent-chat-model-health-open {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-error)
+      45%,
+      var(--border-color-muted)
+    );
+}
+
+.persistent-chat-model-health-open header span {
+  color:
+    var(--md-sys-color-error);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-error)
+      10%,
+      transparent
+    );
+}
+
+.persistent-chat-model-health-half-open {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-tertiary)
+      45%,
+      var(--border-color-muted)
+    );
+}
+
+.persistent-chat-model-health-half-open header span {
+  color:
+    var(--md-sys-color-tertiary);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-tertiary)
+      10%,
+      transparent
+    );
+}
+
+@media (max-width: 1100px) {
+  .persistent-chat-model-health-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .persistent-chat-model-health-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

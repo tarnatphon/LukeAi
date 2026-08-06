@@ -180,6 +180,22 @@ export default function PersistentTextChat() {
     setFallbackModelId,
   ] = useState("");
 
+  // LUKE_AI_MODEL_HEALTH_CIRCUIT_BREAKER_UI_V1
+  const [
+    modelHealth,
+    setModelHealth,
+  ] = useState([]);
+
+  const [
+    modelHealthLoading,
+    setModelHealthLoading,
+  ] = useState(false);
+
+  const [
+    resettingCircuitModelId,
+    setResettingCircuitModelId,
+  ] = useState("");
+
   const mountedRef = useRef(true);
 
   const requestJson = useCallback(
@@ -1161,6 +1177,82 @@ export default function PersistentTextChat() {
         requestJson,
       ],
     );
+
+  const refreshModelHealth =
+    useCallback(
+      async () => {
+        setModelHealthLoading(true);
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/model-health",
+            );
+
+          setModelHealth(
+            data.models || [],
+          );
+        } catch {
+          setModelHealth([]);
+        } finally {
+          setModelHealthLoading(false);
+        }
+      },
+      [requestJson],
+    );
+
+  const resetModelCircuit =
+    useCallback(
+      async (modelId) => {
+        setResettingCircuitModelId(
+          modelId,
+        );
+
+        try {
+          await requestJson(
+            "/api/text-runtime/model-health/reset",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                modelId,
+              }),
+            },
+          );
+
+          await refreshModelHealth();
+        } catch (resetError) {
+          setError(
+            resetError instanceof Error
+              ? resetError.message
+              : String(resetError),
+          );
+        } finally {
+          setResettingCircuitModelId(
+            "",
+          );
+        }
+      },
+      [
+        refreshModelHealth,
+        requestJson,
+      ],
+    );
+
+  useEffect(() => {
+    refreshModelHealth();
+
+    const interval =
+      window.setInterval(
+        refreshModelHealth,
+        10000,
+      );
+
+    return () => {
+      window.clearInterval(
+        interval,
+      );
+    };
+  }, [refreshModelHealth]);
 
   const routeModelForPrompt =
     useCallback(
@@ -2355,6 +2447,143 @@ export default function PersistentTextChat() {
             </article>
           )}
         </div>
+
+        <section className="persistent-chat-model-health-panel">
+          <div className="persistent-chat-model-health-heading">
+            <div>
+              <strong>
+                Model Health Monitor
+              </strong>
+
+              <span>
+                ตรวจสอบความเสถียรและหยุดใช้โมเดลที่ล้มเหลวซ้ำชั่วคราว
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="m3-btn m3-btn-outlined"
+              disabled={modelHealthLoading}
+              onClick={
+                refreshModelHealth
+              }
+            >
+              {modelHealthLoading
+                ? "กำลังตรวจสอบ..."
+                : "Refresh Health"}
+            </button>
+          </div>
+
+          {modelHealth.length === 0 ? (
+            <div className="persistent-chat-model-health-empty">
+              ยังไม่มีข้อมูลการทำงานของโมเดล
+            </div>
+          ) : (
+            <div className="persistent-chat-model-health-grid">
+              {modelHealth.map(
+                (model) => (
+                  <article
+                    key={model.modelId}
+                    className={
+                      "persistent-chat-model-health-card " +
+                      `persistent-chat-model-health-${model.circuitState}`
+                    }
+                  >
+                    <header>
+                      <strong>
+                        {model.modelId}
+                      </strong>
+
+                      <span>
+                        {model.circuitState}
+                      </span>
+                    </header>
+
+                    <div>
+                      <span>
+                        Success Rate
+                      </span>
+
+                      <strong>
+                        {(
+                          (
+                            model.metrics
+                              ?.successRate ??
+                            1
+                          ) *
+                          100
+                        ).toFixed(0)}
+                        %
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Success
+                      </span>
+
+                      <strong>
+                        {model.totalSuccesses ||
+                          0}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Failure
+                      </span>
+
+                      <strong>
+                        {model.totalFailures ||
+                          0}
+                      </strong>
+                    </div>
+
+                    {model.nextProbeAt && (
+                      <small>
+                        ทดลองอีกครั้ง:
+                        {" "}
+                        {formatDate(
+                          model.nextProbeAt,
+                        )}
+                      </small>
+                    )}
+
+                    {model.lastErrorType && (
+                      <small>
+                        ล่าสุด:
+                        {" "}
+                        {model.lastErrorType}
+                      </small>
+                    )}
+
+                    {model.circuitState !==
+                      "closed" && (
+                      <button
+                        type="button"
+                        className="m3-btn m3-btn-outlined"
+                        disabled={
+                          resettingCircuitModelId ===
+                          model.modelId
+                        }
+                        onClick={() =>
+                          resetModelCircuit(
+                            model.modelId,
+                          )
+                        }
+                      >
+                        {resettingCircuitModelId ===
+                        model.modelId
+                          ? "กำลัง Reset..."
+                          : "Reset Circuit"}
+                      </button>
+                    )}
+                  </article>
+                ),
+              )}
+            </div>
+          )}
+        </section>
 
         {(recoveryStatus ||
           recoveryAttempts.length > 0) && (

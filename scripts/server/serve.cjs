@@ -15085,6 +15085,18 @@ function routeTextModel({
             model.modelId
           )
       )
+      .filter(
+        (model) => {
+          const health =
+            isModelCircuitAvailable(
+              model.modelId
+            );
+
+          return (
+            health.available === true
+          );
+        }
+      )
       .map(
         (model) => {
           const components = {
@@ -15967,6 +15979,14 @@ async function generateWithRuntimeRecovery(
         attempt.completedAt =
           new Date().toISOString();
 
+        recordModelHealthResult({
+          modelId:
+            candidate.modelId,
+          success: true,
+          source:
+            "runtime-recovery",
+        });
+
         attempt.responseCharacters =
           normalizedContent.length;
 
@@ -16085,6 +16105,17 @@ async function generateWithRuntimeRecovery(
           error instanceof Error
             ? error.message
             : String(error);
+
+        recordModelHealthResult({
+          modelId:
+            candidate.modelId,
+          success: false,
+          errorType,
+          error:
+            attempt.error,
+          source:
+            "runtime-recovery",
+        });
 
         writeTextGenerationEvent(
           response,
@@ -16216,6 +16247,587 @@ function stopRuntimeRecoveryGeneration(
       state.generationId,
     attempts:
       state.attempts.length,
+  };
+}
+
+
+// LUKE_AI_MODEL_HEALTH_CIRCUIT_BREAKER_V1
+const modelHealthPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "model-health-policy.json"
+);
+
+const modelHealthStorePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-chat",
+  "model-health.json"
+);
+
+function readModelHealthPolicy() {
+  return readJsonFileStrict(
+    modelHealthPolicyPath,
+    "Model health policy"
+  );
+}
+
+function createInitialModelHealthStore() {
+  return {
+    schemaVersion: 1,
+    updatedAt: null,
+    models: {},
+    events: [],
+  };
+}
+
+function readModelHealthStore() {
+  if (!fs.existsSync(modelHealthStorePath)) {
+    const initial =
+      createInitialModelHealthStore();
+
+    writeJsonFileAtomic(
+      modelHealthStorePath,
+      initial
+    );
+
+    return initial;
+  }
+
+  return readJsonFileStrict(
+    modelHealthStorePath,
+    "Model health store"
+  );
+}
+
+function writeModelHealthStore(store) {
+  store.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    modelHealthStorePath,
+    store
+  );
+}
+
+function createInitialModelHealthEntry(
+  modelId
+) {
+  return {
+    modelId,
+    circuitState: "closed",
+    consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
+    totalAttempts: 0,
+    totalSuccesses: 0,
+    totalFailures: 0,
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    lastFailureAt: null,
+    lastErrorType: null,
+    lastError: null,
+    openedAt: null,
+    nextProbeAt: null,
+    halfOpenAttempts: 0,
+    recentResults: [],
+  };
+}
+
+function normalizeModelHealthEntry(
+  modelId,
+  entry
+) {
+  return {
+    ...createInitialModelHealthEntry(
+      modelId
+    ),
+    ...(entry || {}),
+    modelId,
+  };
+}
+
+function calculateModelHealthMetrics(
+  entry
+) {
+  const recentResults =
+    Array.isArray(entry.recentResults)
+      ? entry.recentResults
+      : [];
+
+  const successes =
+    recentResults.filter(
+      (result) =>
+        result.success === true
+    ).length;
+
+  const failures =
+    recentResults.length -
+    successes;
+
+  const successRate =
+    recentResults.length > 0
+      ? successes /
+        recentResults.length
+      : 1;
+
+  return {
+    sampleCount:
+      recentResults.length,
+    recentSuccesses:
+      successes,
+    recentFailures:
+      failures,
+    successRate:
+      Number(
+        successRate.toFixed(4)
+      ),
+  };
+}
+
+function refreshCircuitStateByTime(
+  entry
+) {
+  if (
+    entry.circuitState !== "open" ||
+    !entry.nextProbeAt
+  ) {
+    return entry;
+  }
+
+  const nextProbeTime =
+    new Date(
+      entry.nextProbeAt
+    ).getTime();
+
+  if (
+    Number.isFinite(nextProbeTime) &&
+    Date.now() >= nextProbeTime
+  ) {
+    entry.circuitState =
+      "half-open";
+
+    entry.halfOpenAttempts = 0;
+  }
+
+  return entry;
+}
+
+function getModelHealthEntry(
+  modelId
+) {
+  const store =
+    readModelHealthStore();
+
+  const entry =
+    normalizeModelHealthEntry(
+      modelId,
+      store.models?.[modelId]
+    );
+
+  refreshCircuitStateByTime(
+    entry
+  );
+
+  store.models[modelId] =
+    entry;
+
+  writeModelHealthStore(store);
+
+  return {
+    store,
+    entry,
+  };
+}
+
+function recordModelHealthResult({
+  modelId,
+  success,
+  errorType = null,
+  error = null,
+  source = "runtime-generation",
+}) {
+  const policy =
+    readModelHealthPolicy();
+
+  const store =
+    readModelHealthStore();
+
+  const entry =
+    normalizeModelHealthEntry(
+      modelId,
+      store.models?.[modelId]
+    );
+
+  refreshCircuitStateByTime(
+    entry
+  );
+
+  const now =
+    new Date().toISOString();
+
+  entry.totalAttempts += 1;
+  entry.lastAttemptAt = now;
+
+  if (success) {
+    entry.totalSuccesses += 1;
+    entry.consecutiveSuccesses += 1;
+    entry.consecutiveFailures = 0;
+    entry.lastSuccessAt = now;
+    entry.lastErrorType = null;
+    entry.lastError = null;
+
+    if (
+      entry.circuitState ===
+        "half-open" ||
+      entry.circuitState ===
+        "open"
+    ) {
+      const successThreshold =
+        Number(
+          policy.circuitBreaker
+            ?.successThresholdToClose
+        ) || 1;
+
+      if (
+        entry.consecutiveSuccesses >=
+        successThreshold
+      ) {
+        entry.circuitState =
+          "closed";
+
+        entry.openedAt = null;
+        entry.nextProbeAt = null;
+        entry.halfOpenAttempts = 0;
+      }
+    }
+  } else {
+    entry.totalFailures += 1;
+    entry.consecutiveFailures += 1;
+    entry.consecutiveSuccesses = 0;
+    entry.lastFailureAt = now;
+    entry.lastErrorType =
+      errorType;
+    entry.lastError =
+      error;
+
+    const failureThreshold =
+      Number(
+        policy.circuitBreaker
+          ?.failureThreshold
+      ) || 3;
+
+    if (
+      entry.circuitState ===
+        "half-open" ||
+      entry.consecutiveFailures >=
+        failureThreshold
+    ) {
+      const cooldownMs =
+        Number(
+          policy.circuitBreaker
+            ?.cooldownMs
+        ) || 300000;
+
+      entry.circuitState =
+        "open";
+
+      entry.openedAt = now;
+
+      entry.nextProbeAt =
+        new Date(
+          Date.now() +
+          cooldownMs
+        ).toISOString();
+
+      entry.halfOpenAttempts = 0;
+    }
+  }
+
+  const rollingWindowSize =
+    Number(
+      policy.health
+        ?.rollingWindowSize
+    ) || 50;
+
+  entry.recentResults = [
+    ...(entry.recentResults || []),
+    {
+      success:
+        success === true,
+      errorType,
+      createdAt: now,
+    },
+  ].slice(
+    -rollingWindowSize
+  );
+
+  const event = {
+    id:
+      createTextChatId(
+        "model-health"
+      ),
+    modelId,
+    success:
+      success === true,
+    errorType,
+    error,
+    source,
+    circuitState:
+      entry.circuitState,
+    createdAt: now,
+  };
+
+  store.models[modelId] =
+    entry;
+
+  store.events.push(event);
+
+  const maximumEvents =
+    Number(
+      policy.health
+        ?.maximumEvents
+    ) || 10000;
+
+  store.events =
+    store.events.slice(
+      -maximumEvents
+    );
+
+  writeModelHealthStore(store);
+
+  return {
+    entry: {
+      ...entry,
+      metrics:
+        calculateModelHealthMetrics(
+          entry
+        ),
+    },
+    event,
+  };
+}
+
+function isModelCircuitAvailable(
+  modelId
+) {
+  const policy =
+    readModelHealthPolicy();
+
+  const {
+    store,
+    entry,
+  } = getModelHealthEntry(
+    modelId
+  );
+
+  if (
+    entry.circuitState ===
+    "closed"
+  ) {
+    return {
+      available: true,
+      probe: false,
+      entry,
+    };
+  }
+
+  if (
+    entry.circuitState ===
+      "half-open" &&
+    policy.routing
+      ?.allowHalfOpenProbe !==
+      false
+  ) {
+    const maximumAttempts =
+      Number(
+        policy.circuitBreaker
+          ?.halfOpenMaximumAttempts
+      ) || 1;
+
+    if (
+      Number(
+        entry.halfOpenAttempts
+      ) < maximumAttempts
+    ) {
+      entry.halfOpenAttempts =
+        Number(
+          entry.halfOpenAttempts
+        ) + 1;
+
+      store.models[modelId] =
+        entry;
+
+      writeModelHealthStore(
+        store
+      );
+
+      return {
+        available: true,
+        probe: true,
+        entry,
+      };
+    }
+  }
+
+  return {
+    available: false,
+    probe: false,
+    entry,
+  };
+}
+
+function resetModelCircuit(
+  modelId
+) {
+  const store =
+    readModelHealthStore();
+
+  const previous =
+    normalizeModelHealthEntry(
+      modelId,
+      store.models?.[modelId]
+    );
+
+  const reset = {
+    ...previous,
+    circuitState: "closed",
+    consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
+    openedAt: null,
+    nextProbeAt: null,
+    halfOpenAttempts: 0,
+    lastErrorType: null,
+    lastError: null,
+  };
+
+  store.models[modelId] =
+    reset;
+
+  store.events.push({
+    id:
+      createTextChatId(
+        "model-health-reset"
+      ),
+    modelId,
+    success: true,
+    errorType: null,
+    error: null,
+    source:
+      "manual-circuit-reset",
+    circuitState:
+      "closed",
+    createdAt:
+      new Date().toISOString(),
+  });
+
+  writeModelHealthStore(
+    store
+  );
+
+  return {
+    ...reset,
+    metrics:
+      calculateModelHealthMetrics(
+        reset
+      ),
+  };
+}
+
+function getModelHealthSummary() {
+  const store =
+    readModelHealthStore();
+
+  let changed = false;
+
+  const models =
+    Object.entries(
+      store.models || {}
+    )
+      .map(
+        ([
+          modelId,
+          rawEntry,
+        ]) => {
+          const entry =
+            normalizeModelHealthEntry(
+              modelId,
+              rawEntry
+            );
+
+          const previousState =
+            entry.circuitState;
+
+          refreshCircuitStateByTime(
+            entry
+          );
+
+          if (
+            previousState !==
+            entry.circuitState
+          ) {
+            changed = true;
+          }
+
+          store.models[modelId] =
+            entry;
+
+          return {
+            ...entry,
+            metrics:
+              calculateModelHealthMetrics(
+                entry
+              ),
+          };
+        }
+      )
+      .sort(
+        (left, right) => {
+          const stateOrder = {
+            open: 0,
+            "half-open": 1,
+            closed: 2,
+          };
+
+          return (
+            stateOrder[
+              left.circuitState
+            ] -
+              stateOrder[
+                right.circuitState
+              ] ||
+            right.totalFailures -
+              left.totalFailures
+          );
+        }
+      );
+
+  if (changed) {
+    writeModelHealthStore(
+      store
+    );
+  }
+
+  return {
+    updatedAt:
+      store.updatedAt,
+    models,
+    eventCount:
+      store.events?.length || 0,
+    openCircuitCount:
+      models.filter(
+        (model) =>
+          model.circuitState ===
+          "open"
+      ).length,
+    halfOpenCircuitCount:
+      models.filter(
+        (model) =>
+          model.circuitState ===
+          "half-open"
+      ).length,
   };
 }
 
@@ -17286,6 +17898,67 @@ const server = http.createServer(async (req, res) => {
         ...stopMultiModelGeneration(
           body.conversationId.trim()
         ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-runtime/model-health
+  if (
+    req.url === "/api/text-runtime/model-health" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        ...getModelHealthSummary(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/model-health/reset
+  if (
+    req.url === "/api/text-runtime/model-health/reset" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const modelId =
+        String(
+          body.modelId || ""
+        ).trim();
+
+      if (!modelId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "modelId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        model:
+          resetModelCircuit(
+            modelId
+          ),
       });
     } catch (error) {
       return json(res, 500, {
