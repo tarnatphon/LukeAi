@@ -252,6 +252,17 @@ export default function PersistentTextChat() {
     setRuntimeInstallBusy,
   ] = useState(false);
 
+  // LUKE_AI_RUNTIME_INSTALL_PROGRESS_UI_V2
+  const [
+    runtimeInstallPreflight,
+    setRuntimeInstallPreflight,
+  ] = useState({});
+
+  const [
+    runtimePreflightBusy,
+    setRuntimePreflightBusy,
+  ] = useState("");
+
   const [
     runtimeDetectionInfo,
     setRuntimeDetectionInfo,
@@ -1285,6 +1296,67 @@ export default function PersistentTextChat() {
       [requestJson],
     );
 
+  const checkRuntimeInstallPreflight =
+    useCallback(
+      async (runtimeType) => {
+        setRuntimePreflightBusy(
+          runtimeType,
+        );
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/install-preflight",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  runtimeType,
+                }),
+              },
+            );
+
+          setRuntimeInstallPreflight(
+            (current) => ({
+              ...current,
+              [runtimeType]:
+                data.preflight || null,
+            }),
+          );
+
+          setError("");
+
+          return (
+            data.preflight || null
+          );
+        } catch (preflightError) {
+          const preflight =
+            preflightError?.data
+              ?.preflight ||
+            preflightError?.preflight ||
+            null;
+
+          setRuntimeInstallPreflight(
+            (current) => ({
+              ...current,
+              [runtimeType]:
+                preflight,
+            }),
+          );
+
+          setError(
+            preflightError instanceof Error
+              ? preflightError.message
+              : String(preflightError),
+          );
+
+          return preflight;
+        } finally {
+          setRuntimePreflightBusy("");
+        }
+      },
+      [requestJson],
+    );
+
   const installDetectedRuntime =
     useCallback(
       async (runtimeType) => {
@@ -1294,6 +1366,20 @@ export default function PersistentTextChat() {
         );
 
         try {
+          const preflight =
+            await checkRuntimeInstallPreflight(
+              runtimeType,
+            );
+
+          if (
+            preflight &&
+            preflight.allowed !== true
+          ) {
+            throw new Error(
+              `พื้นที่ว่างไม่เพียงพอ ต้องใช้ ${preflight.requiredText || "พื้นที่เพิ่มเติม"} แต่มี ${preflight.availableText || "ไม่ทราบ"}`,
+            );
+          }
+
           const data =
             await requestJson(
               "/api/text-runtime/install",
@@ -1325,7 +1411,10 @@ export default function PersistentTextChat() {
           setRuntimeInstallBusy(false);
         }
       },
-      [requestJson],
+      [
+        checkRuntimeInstallPreflight,
+        requestJson,
+      ],
     );
 
   const cancelRuntimeInstall =
@@ -3195,6 +3284,69 @@ export default function PersistentTextChat() {
                     )}
 
                     {/* LUKE_AI_RUNTIME_INSTALL_BUTTON_FINAL_V1 */}
+                    {!runtime.installed && (
+                      <div className="persistent-chat-runtime-preflight">
+                        {runtimeInstallPreflight[
+                          runtime.runtimeType
+                        ] ? (
+                          <>
+                            <span>
+                              ต้องใช้:
+                              {" "}
+                              {runtimeInstallPreflight[
+                                runtime.runtimeType
+                              ].requiredText ||
+                                "ไม่ทราบ"}
+                            </span>
+
+                            <span>
+                              พื้นที่ว่าง:
+                              {" "}
+                              {runtimeInstallPreflight[
+                                runtime.runtimeType
+                              ].availableText ||
+                                "ไม่ทราบ"}
+                            </span>
+
+                            <strong
+                              className={
+                                runtimeInstallPreflight[
+                                  runtime.runtimeType
+                                ].allowed
+                                  ? "persistent-chat-runtime-preflight-pass"
+                                  : "persistent-chat-runtime-preflight-fail"
+                              }
+                            >
+                              {runtimeInstallPreflight[
+                                runtime.runtimeType
+                              ].allowed
+                                ? "พื้นที่เพียงพอ"
+                                : "พื้นที่ไม่เพียงพอ"}
+                            </strong>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="m3-btn m3-btn-outlined"
+                            disabled={
+                              runtimePreflightBusy ===
+                              runtime.runtimeType
+                            }
+                            onClick={() =>
+                              checkRuntimeInstallPreflight(
+                                runtime.runtimeType,
+                              )
+                            }
+                          >
+                            {runtimePreflightBusy ===
+                            runtime.runtimeType
+                              ? "กำลังตรวจพื้นที่..."
+                              : "ตรวจพื้นที่ก่อนติดตั้ง"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {runtime.installed ? (
                       <button
                         type="button"
@@ -3312,6 +3464,57 @@ export default function PersistentTextChat() {
                           {job.status}
                         </span>
                       </header>
+
+                      <div className="persistent-chat-runtime-install-progress">
+                        <div>
+                          <span>
+                            {job.progressStage ||
+                              job.status}
+                          </span>
+
+                          <strong>
+                            {Math.max(
+                              0,
+                              Math.min(
+                                100,
+                                Number(
+                                  job.progress,
+                                ) || 0,
+                              ),
+                            )}
+                            %
+                          </strong>
+                        </div>
+
+                        <progress
+                          max="100"
+                          value={Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              Number(
+                                job.progress,
+                              ) || 0,
+                            ),
+                          )}
+                        />
+
+                        {job.diskPreflight && (
+                          <small>
+                            พื้นที่ว่าง
+                            {" "}
+                            {job.diskPreflight
+                              .availableText ||
+                              "ไม่ทราบ"}
+                            {" · "}
+                            ต้องใช้
+                            {" "}
+                            {job.diskPreflight
+                              .requiredText ||
+                              "ไม่ทราบ"}
+                          </small>
+                        )}
+                      </div>
 
                       {job.error && (
                         <div className="persistent-chat-runtime-install-error">

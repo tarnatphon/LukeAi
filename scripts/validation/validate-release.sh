@@ -322,3 +322,11 @@ else
   echo "FAIL: Node.js is required for Runtime One-Click Install validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Runtime Install Progress validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-install-progress.cjs
+else
+  echo "FAIL: Node.js is required for Runtime Install Progress validation"
+  exit 1
+fi

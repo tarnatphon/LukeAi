@@ -14,7 +14,9 @@
     "allowSystemPythonInstall": false,
     "allowShell": false,
     "automaticallyConfigureAfterInstall": false,
-    "automaticallyStartAfterInstall": false
+    "automaticallyStartAfterInstall": false,
+    "minimumFreeSpaceBufferBytes": 536870912,
+    "rejectWhenDiskSpaceUnknown": false
   },
   "paths": {
     "localRuntimeRoot": "~/Library/Application Support/LUKE AI STUDIO/runtimes",
@@ -24,18 +26,21 @@
     "ollama": {
       "displayName": "Ollama",
       "installer": "homebrew",
-      "package": "ollama"
+      "package": "ollama",
+      "estimatedInstallBytes": 2147483648
     },
     "llama.cpp": {
       "displayName": "llama.cpp",
       "installer": "homebrew",
-      "package": "llama.cpp"
+      "package": "llama.cpp",
+      "estimatedInstallBytes": 3221225472
     },
     "mlx": {
       "displayName": "MLX LM Server",
       "installer": "python-venv",
       "package": "mlx-lm",
-      "appleSiliconOnly": true
+      "appleSiliconOnly": true,
+      "estimatedInstallBytes": 4294967296
     }
   }
 }

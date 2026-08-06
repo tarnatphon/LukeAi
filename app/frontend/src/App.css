@@ -7049,3 +7049,73 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-direction: column;
   }
 }
+
+/* LUKE_AI_RUNTIME_INSTALL_PROGRESS_STYLES_V2 */
+.persistent-chat-runtime-preflight {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.persistent-chat-runtime-preflight span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.persistent-chat-runtime-preflight strong {
+  font-size: 0.69rem;
+}
+
+.persistent-chat-runtime-preflight-pass {
+  color: var(--md-sys-color-success);
+}
+
+.persistent-chat-runtime-preflight-fail {
+  color: var(--md-sys-color-error);
+}
+
+.persistent-chat-runtime-install-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.persistent-chat-runtime-install-progress > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.persistent-chat-runtime-install-progress span,
+.persistent-chat-runtime-install-progress small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.persistent-chat-runtime-install-progress strong {
+  font-size: 0.72rem;
+}
+
+.persistent-chat-runtime-install-progress progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.persistent-chat-runtime-install-progress progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.persistent-chat-runtime-install-progress progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--md-sys-color-primary);
+}

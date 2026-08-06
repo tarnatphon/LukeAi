@@ -17173,6 +17173,67 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_AUTO_DETECTION_API_V3
   // LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_API_V2
 
+  // LUKE_AI_RUNTIME_INSTALL_PREFLIGHT_API_V2
+  // POST /api/text-runtime/install-preflight
+  if (
+    req.url === "/api/text-runtime/install-preflight" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const runtimeType =
+        String(
+          body.runtimeType || ""
+        ).trim();
+
+      if (!runtimeType) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "runtimeType is required",
+        });
+      }
+
+      const preflight =
+        runtimeInstallQueue
+          .getDiskPreflight(
+            runtimeType
+          );
+
+      return json(
+        res,
+        preflight.allowed
+          ? 200
+          : 409,
+        {
+          ok:
+            preflight.allowed,
+          preflight,
+          error:
+            preflight.allowed
+              ? null
+              : "Insufficient disk space.",
+        }
+      );
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+          preflight:
+            error.preflight || null,
+        }
+      );
+    }
+  }
+
   // GET /api/text-runtime/install-queue
   if (
     req.url === "/api/text-runtime/install-queue" &&

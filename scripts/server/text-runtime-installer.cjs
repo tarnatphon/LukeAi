@@ -88,6 +88,137 @@ function executableExists(
   }
 }
 
+// LUKE_AI_RUNTIME_INSTALL_PROGRESS_PREFLIGHT_V2
+function clampInstallProgress(value) {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(number)
+    )
+  );
+}
+
+function formatInstallBytes(bytes) {
+  const number =
+    Number(bytes);
+
+  if (
+    !Number.isFinite(number) ||
+    number < 0
+  ) {
+    return null;
+  }
+
+  const units = [
+    "B",
+    "KB",
+    "MB",
+    "GB",
+    "TB",
+  ];
+
+  let value = number;
+  let index = 0;
+
+  while (
+    value >= 1024 &&
+    index < units.length - 1
+  ) {
+    value /= 1024;
+    index += 1;
+  }
+
+  return (
+    `${value.toFixed(
+      index === 0 ? 0 : 1
+    )} ${units[index]}`
+  );
+}
+
+function parseInstallProgress(
+  output,
+  currentProgress = 0
+) {
+  const text =
+    String(output || "");
+
+  const matches = [
+    ...text.matchAll(
+      /(?:^|[\s[(])(\d{1,3}(?:\.\d+)?)\s*%/g
+    ),
+  ];
+
+  if (matches.length > 0) {
+    const latest =
+      Number(
+        matches[
+          matches.length - 1
+        ][1]
+      );
+
+    if (Number.isFinite(latest)) {
+      return Math.max(
+        currentProgress,
+        clampInstallProgress(latest)
+      );
+    }
+  }
+
+  const lower =
+    text.toLowerCase();
+
+  if (
+    lower.includes("downloading") ||
+    lower.includes("fetching")
+  ) {
+    return Math.max(
+      currentProgress,
+      25
+    );
+  }
+
+  if (lower.includes("installing")) {
+    return Math.max(
+      currentProgress,
+      55
+    );
+  }
+
+  if (
+    lower.includes("building") ||
+    lower.includes("linking")
+  ) {
+    return Math.max(
+      currentProgress,
+      75
+    );
+  }
+
+  if (
+    lower.includes(
+      "successfully installed"
+    ) ||
+    lower.includes(
+      "installation complete"
+    )
+  ) {
+    return Math.max(
+      currentProgress,
+      95
+    );
+  }
+
+  return currentProgress;
+}
+
 class RuntimeInstallQueue {
   constructor({
     root,
@@ -182,6 +313,250 @@ class RuntimeInstallQueue {
         executableExists
       ) ||
       null
+    );
+  }
+
+  resolveDiskCheckPath(
+    runtimeType
+  ) {
+    const policy =
+      this.readPolicy();
+
+    const definition =
+      policy.supportedRuntimes
+        ?.[runtimeType];
+
+    if (
+      definition?.installer ===
+      "python-venv"
+    ) {
+      return expandHome(
+        policy.paths
+          ?.pythonVenvRoot ||
+        "~/Library/Application Support/LUKE AI STUDIO/runtime-venvs"
+      );
+    }
+
+    const brew =
+      this.resolveHomebrew();
+
+    if (
+      brew?.startsWith(
+        "/opt/homebrew/"
+      )
+    ) {
+      return "/opt/homebrew";
+    }
+
+    if (
+      brew?.startsWith(
+        "/usr/local/"
+      )
+    ) {
+      return "/usr/local";
+    }
+
+    return this.root;
+  }
+
+  getDiskPreflight(
+    runtimeType
+  ) {
+    const policy =
+      this.readPolicy();
+
+    const definition =
+      policy.supportedRuntimes
+        ?.[runtimeType];
+
+    if (!definition) {
+      const error =
+        new Error(
+          "Unsupported runtime type."
+        );
+
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const estimatedInstallBytes =
+      Math.max(
+        0,
+        Number(
+          definition
+            .estimatedInstallBytes
+        ) || 0
+      );
+
+    const bufferBytes =
+      Math.max(
+        0,
+        Number(
+          policy.installation
+            ?.minimumFreeSpaceBufferBytes
+        ) || 0
+      );
+
+    const requiredBytes =
+      estimatedInstallBytes +
+      bufferBytes;
+
+    const requestedPath =
+      this.resolveDiskCheckPath(
+        runtimeType
+      );
+
+    let existingPath =
+      requestedPath;
+
+    while (
+      existingPath &&
+      !fs.existsSync(existingPath)
+    ) {
+      const parent =
+        path.dirname(
+          existingPath
+        );
+
+      if (
+        parent === existingPath
+      ) {
+        break;
+      }
+
+      existingPath =
+        parent;
+    }
+
+    if (
+      !existingPath ||
+      !fs.existsSync(existingPath) ||
+      typeof fs.statfsSync !==
+        "function"
+    ) {
+      const allowed =
+        policy.installation
+          ?.rejectWhenDiskSpaceUnknown !==
+        true;
+
+      return {
+        runtimeType,
+        checked: false,
+        allowed,
+        path:
+          requestedPath,
+        existingPath:
+          existingPath || null,
+        estimatedInstallBytes,
+        bufferBytes,
+        requiredBytes,
+        availableBytes: null,
+        estimatedInstallText:
+          formatInstallBytes(
+            estimatedInstallBytes
+          ),
+        bufferText:
+          formatInstallBytes(
+            bufferBytes
+          ),
+        requiredText:
+          formatInstallBytes(
+            requiredBytes
+          ),
+        availableText: null,
+        reason:
+          "disk-space-unavailable",
+      };
+    }
+
+    const statistics =
+      fs.statfsSync(
+        existingPath
+      );
+
+    const blockSize =
+      Number(
+        statistics.bsize ||
+        statistics.frsize ||
+        0
+      );
+
+    const availableBlocks =
+      Number(
+        statistics.bavail ??
+        statistics.bfree ??
+        0
+      );
+
+    const availableBytes =
+      Math.max(
+        0,
+        blockSize *
+        availableBlocks
+      );
+
+    return {
+      runtimeType,
+      checked: true,
+      allowed:
+        availableBytes >=
+        requiredBytes,
+      path:
+        requestedPath,
+      existingPath,
+      estimatedInstallBytes,
+      bufferBytes,
+      requiredBytes,
+      availableBytes,
+      estimatedInstallText:
+        formatInstallBytes(
+          estimatedInstallBytes
+        ),
+      bufferText:
+        formatInstallBytes(
+          bufferBytes
+        ),
+      requiredText:
+        formatInstallBytes(
+          requiredBytes
+        ),
+      availableText:
+        formatInstallBytes(
+          availableBytes
+        ),
+      reason:
+        availableBytes >=
+          requiredBytes
+          ? null
+          : "insufficient-disk-space",
+    };
+  }
+
+  updateJobProgress(
+    jobId,
+    progress,
+    stage = null
+  ) {
+    return this.updateJob(
+      jobId,
+      (current) => ({
+        ...current,
+        progress:
+          Math.max(
+            Number(
+              current.progress
+            ) || 0,
+            clampInstallProgress(
+              progress
+            )
+          ),
+        progressStage:
+          stage ||
+          current.progressStage ||
+          null,
+        progressUpdatedAt:
+          new Date().toISOString(),
+      })
     );
   }
 
@@ -403,6 +778,26 @@ class RuntimeInstallQueue {
       return duplicate;
     }
 
+    const preflight =
+      this.getDiskPreflight(
+        runtimeType
+      );
+
+    if (
+      preflight.allowed !== true
+    ) {
+      const error =
+        new Error(
+          `พื้นที่ว่างไม่เพียงพอสำหรับ ${runtimeType}: ต้องใช้ ${preflight.requiredText || preflight.requiredBytes + " bytes"} แต่มี ${preflight.availableText || "ไม่ทราบ"}`
+        );
+
+      error.statusCode = 409;
+      error.preflight =
+        preflight;
+
+      throw error;
+    }
+
     const plan =
       this.getInstallPlan(
         runtimeType
@@ -418,6 +813,13 @@ class RuntimeInstallQueue {
         plan.installationType,
       status:
         "queued",
+      progress: 0,
+      progressStage:
+        "queued",
+      progressUpdatedAt:
+        new Date().toISOString(),
+      diskPreflight:
+        preflight,
       createdAt:
         new Date().toISOString(),
       startedAt: null,
@@ -528,6 +930,17 @@ class RuntimeInstallQueue {
         ...current,
         status:
           "installing",
+        progress:
+          Math.max(
+            Number(
+              current.progress
+            ) || 0,
+            5
+          ),
+        progressStage:
+          "starting",
+        progressUpdatedAt:
+          new Date().toISOString(),
         startedAt:
           new Date().toISOString(),
         error: null,
@@ -567,20 +980,88 @@ class RuntimeInstallQueue {
     child.stdout?.on(
       "data",
       (chunk) => {
+        const output =
+          String(chunk);
+
         this.appendLog(
           job.id,
-          String(chunk)
+          output
         );
+
+        const latestJob =
+          this.readState()
+            .jobs.find(
+              (item) =>
+                item.id === job.id
+            );
+
+        const nextProgress =
+          parseInstallProgress(
+            output,
+            Number(
+              latestJob?.progress
+            ) || 0
+          );
+
+        if (
+          nextProgress >
+          Number(
+            latestJob?.progress
+          )
+        ) {
+          this.updateJobProgress(
+            job.id,
+            Math.min(
+              95,
+              nextProgress
+            ),
+            "installing"
+          );
+        }
       }
     );
 
     child.stderr?.on(
       "data",
       (chunk) => {
+        const output =
+          String(chunk);
+
         this.appendLog(
           job.id,
-          String(chunk)
+          output
         );
+
+        const latestJob =
+          this.readState()
+            .jobs.find(
+              (item) =>
+                item.id === job.id
+            );
+
+        const nextProgress =
+          parseInstallProgress(
+            output,
+            Number(
+              latestJob?.progress
+            ) || 0
+          );
+
+        if (
+          nextProgress >
+          Number(
+            latestJob?.progress
+          )
+        ) {
+          this.updateJobProgress(
+            job.id,
+            Math.min(
+              95,
+              nextProgress
+            ),
+            "installing"
+          );
+        }
       }
     );
 
@@ -678,6 +1159,11 @@ class RuntimeInstallQueue {
           ...current,
           status:
             "completed",
+          progress: 100,
+          progressStage:
+            "completed",
+          progressUpdatedAt:
+            new Date().toISOString(),
           completedAt:
             new Date().toISOString(),
           exitCode:
@@ -694,6 +1180,10 @@ class RuntimeInstallQueue {
           ...current,
           status:
             "failed",
+          progressStage:
+            "failed",
+          progressUpdatedAt:
+            new Date().toISOString(),
           completedAt:
             new Date().toISOString(),
           exitCode:
@@ -806,6 +1296,12 @@ class RuntimeInstallQueue {
 
     job.status =
       "cancelled";
+
+    job.progressStage =
+      "cancelled";
+
+    job.progressUpdatedAt =
+      new Date().toISOString();
 
     job.cancelledAt =
       new Date().toISOString();
