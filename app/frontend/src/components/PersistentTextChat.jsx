@@ -52,6 +52,17 @@ export default function PersistentTextChat() {
   const [saving, setSaving] =
     useState(false);
 
+  // LUKE_AI_TEXT_CHAT_MEMORY_UI_V1
+  const [
+    memoryStatus,
+    setMemoryStatus,
+  ] = useState(null);
+
+  const [
+    optimizingMemory,
+    setOptimizingMemory,
+  ] = useState(false);
+
   const [error, setError] =
     useState("");
 
@@ -180,6 +191,159 @@ export default function PersistentTextChat() {
       activeConversationId,
     ],
   );
+
+  const refreshMemoryStatus =
+    useCallback(
+      async (
+        conversationId,
+      ) => {
+        if (!conversationId) {
+          setMemoryStatus(null);
+          return;
+        }
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-chat/memory/status",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  conversationId,
+                }),
+              },
+            );
+
+          setMemoryStatus(data);
+        } catch {
+          setMemoryStatus(null);
+        }
+      },
+      [requestJson],
+    );
+
+  const optimizeMemory =
+    useCallback(
+      async () => {
+        if (!activeConversationId) {
+          return;
+        }
+
+        setOptimizingMemory(true);
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-chat/memory/optimize",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  conversationId:
+                    activeConversationId,
+                  force: true,
+                  reason:
+                    "manual-user-request",
+                }),
+              },
+            );
+
+          setMemoryStatus({
+            ok: true,
+            conversationId:
+              activeConversationId,
+            context:
+              data.context,
+            ram:
+              data.ram,
+            memory: {
+              hasSummary:
+                Boolean(
+                  data.conversation
+                    ?.memory?.summary,
+                ),
+              factCount:
+                data.conversation
+                  ?.memory?.facts
+                  ?.length || 0,
+              decisionCount:
+                data.conversation
+                  ?.memory?.decisions
+                  ?.length || 0,
+              taskCount:
+                data.conversation
+                  ?.memory?.tasks
+                  ?.length || 0,
+              snapshotCount:
+                data.conversation
+                  ?.memory?.snapshots
+                  ?.length || 0,
+              lastCompactedAt:
+                data.conversation
+                  ?.memory
+                  ?.lastCompactedAt ||
+                null,
+            },
+            session: {
+              id:
+                data.session?.id ||
+                data.conversation
+                  ?.session?.id ||
+                null,
+              refreshCount:
+                data.conversation
+                  ?.session
+                  ?.refreshCount || 0,
+              refreshedAt:
+                data.conversation
+                  ?.session
+                  ?.refreshedAt || null,
+              refreshReason:
+                data.conversation
+                  ?.session
+                  ?.refreshReason || null,
+            },
+          });
+
+          await refresh();
+        } catch (optimizeError) {
+          setError(
+            optimizeError instanceof Error
+              ? optimizeError.message
+              : String(optimizeError),
+          );
+        } finally {
+          setOptimizingMemory(false);
+        }
+      },
+      [
+        activeConversationId,
+        refresh,
+        requestJson,
+      ],
+    );
+
+  useEffect(() => {
+    refreshMemoryStatus(
+      activeConversationId,
+    );
+
+    const interval =
+      window.setInterval(
+        () => {
+          refreshMemoryStatus(
+            activeConversationId,
+          );
+        },
+        5000,
+      );
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [
+    activeConversationId,
+    refreshMemoryStatus,
+  ]);
 
   const filteredConversations = useMemo(
     () => {
@@ -331,6 +495,15 @@ export default function PersistentTextChat() {
           );
 
           setDraft("");
+
+          window.setTimeout(
+            () => {
+              refreshMemoryStatus(
+                conversationId,
+              );
+            },
+            250,
+          );
         } catch (sendError) {
           setError(
             sendError instanceof Error
@@ -580,6 +753,107 @@ export default function PersistentTextChat() {
             </button>
           </div>
         </header>
+
+        {memoryStatus && (
+          <section className="persistent-chat-memory-panel">
+            <div className="persistent-chat-memory-heading">
+              <div>
+                <strong>
+                  Conversation Memory
+                </strong>
+
+                <span>
+                  ระบบรักษาบริบทและรีเฟรชเซสชันอัตโนมัติ
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="m3-btn m3-btn-outlined"
+                disabled={optimizingMemory}
+                onClick={optimizeMemory}
+              >
+                {optimizingMemory
+                  ? "กำลังเพิ่มประสิทธิภาพ..."
+                  : "เพิ่มประสิทธิภาพตอนนี้"}
+              </button>
+            </div>
+
+            <div className="persistent-chat-memory-grid">
+              <div>
+                <span>Context</span>
+                <strong>
+                  {memoryStatus.context
+                    ?.usagePercent || 0}%
+                </strong>
+              </div>
+
+              <div>
+                <span>Token โดยประมาณ</span>
+                <strong>
+                  {(memoryStatus.context
+                    ?.estimatedTokens || 0)
+                    .toLocaleString()}
+                </strong>
+              </div>
+
+              <div>
+                <span>RAM ใช้งาน</span>
+                <strong>
+                  {memoryStatus.ram
+                    ?.usedPercent || 0}%
+                </strong>
+              </div>
+
+              <div>
+                <span>Session Refresh</span>
+                <strong>
+                  {memoryStatus.session
+                    ?.refreshCount || 0}
+                </strong>
+              </div>
+
+              <div>
+                <span>Memory Facts</span>
+                <strong>
+                  {memoryStatus.memory
+                    ?.factCount || 0}
+                </strong>
+              </div>
+
+              <div>
+                <span>Snapshots</span>
+                <strong>
+                  {memoryStatus.memory
+                    ?.snapshotCount || 0}
+                </strong>
+              </div>
+            </div>
+
+            <div className="persistent-chat-memory-status">
+              <span>
+                Context Action:
+                {" "}
+                {memoryStatus.context
+                  ?.action || "none"}
+              </span>
+
+              <span>
+                RAM Action:
+                {" "}
+                {memoryStatus.ram
+                  ?.action || "none"}
+              </span>
+
+              <span>
+                {memoryStatus.memory
+                  ?.hasSummary
+                  ? "สรุปบริบทพร้อมใช้งาน"
+                  : "ยังไม่ต้องสรุปบริบท"}
+              </span>
+            </div>
+          </section>
+        )}
 
         {error && (
           <div className="text-model-manager-error">

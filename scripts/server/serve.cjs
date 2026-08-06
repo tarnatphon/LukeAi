@@ -10054,6 +10054,12 @@ function appendTextChatMessage(
 
   writeTextChatStore(store);
 
+  setImmediate(() => {
+    autoOptimizeTextChatConversation(
+      conversation.id
+    );
+  });
+
   return {
     conversation,
     message,
@@ -10197,6 +10203,822 @@ function deleteTextChatConversation(
   writeTextChatStore(store);
 
   return removed;
+}
+
+
+// LUKE_AI_TEXT_CHAT_MEMORY_MANAGER_V1
+const textChatMemoryPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "memory-policy.json"
+);
+
+function readTextChatMemoryPolicy() {
+  return readJsonFileStrict(
+    textChatMemoryPolicyPath,
+    "Text chat memory policy"
+  );
+}
+
+function estimateTextChatTokens(value) {
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const charactersPerToken =
+    Number(
+      policy.context
+        ?.charactersPerEstimatedToken
+    ) || 4;
+
+  return Math.max(
+    0,
+    Math.ceil(
+      String(value || "").length /
+      charactersPerToken
+    )
+  );
+}
+
+function getConversationContextLimit(
+  conversation
+) {
+  const policy =
+    readTextChatMemoryPolicy();
+
+  return (
+    Number(
+      conversation.settings
+        ?.contextLength
+    ) ||
+    Number(
+      policy.context
+        ?.defaultContextTokens
+    ) ||
+    32768
+  );
+}
+
+function calculateConversationContextStatus(
+  conversation
+) {
+  const contextLimitTokens =
+    getConversationContextLimit(
+      conversation
+    );
+
+  const systemPromptTokens =
+    estimateTextChatTokens(
+      conversation.systemPrompt
+    );
+
+  const summaryTokens =
+    estimateTextChatTokens(
+      conversation.memory?.summary
+    );
+
+  const messageTokens =
+    (conversation.messages || [])
+      .reduce(
+        (total, message) =>
+          total +
+          estimateTextChatTokens(
+            message.content
+          ) +
+          8,
+        0
+      );
+
+  const estimatedTokens =
+    systemPromptTokens +
+    summaryTokens +
+    messageTokens;
+
+  const usagePercent =
+    contextLimitTokens > 0
+      ? Math.min(
+          999,
+          Number(
+            (
+              estimatedTokens /
+              contextLimitTokens *
+              100
+            ).toFixed(2)
+          )
+        )
+      : 0;
+
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const summaryThreshold =
+    Number(
+      policy.context
+        ?.summaryThresholdPercent
+    ) || 80;
+
+  const snapshotThreshold =
+    Number(
+      policy.context
+        ?.snapshotThresholdPercent
+    ) || 90;
+
+  const refreshThreshold =
+    Number(
+      policy.context
+        ?.sessionRefreshThresholdPercent
+    ) || 95;
+
+  let action = "none";
+
+  if (usagePercent >= refreshThreshold) {
+    action = "refresh";
+  } else if (
+    usagePercent >= snapshotThreshold
+  ) {
+    action = "snapshot";
+  } else if (
+    usagePercent >= summaryThreshold
+  ) {
+    action = "summarize";
+  }
+
+  return {
+    contextLimitTokens,
+    estimatedTokens,
+    usagePercent,
+    remainingTokens:
+      Math.max(
+        0,
+        contextLimitTokens -
+        estimatedTokens
+      ),
+    action,
+    thresholds: {
+      summary: summaryThreshold,
+      snapshot: snapshotThreshold,
+      refresh: refreshThreshold,
+    },
+  };
+}
+
+function getTextChatRamStatus() {
+  const os =
+    require("node:os");
+
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const testTotal =
+    Number(
+      process.env
+        .LUKE_AI_TEST_TOTAL_RAM_BYTES
+    );
+
+  const testFree =
+    Number(
+      process.env
+        .LUKE_AI_TEST_FREE_RAM_BYTES
+    );
+
+  const totalBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testTotal)
+      ? testTotal
+      : os.totalmem();
+
+  const freeBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testFree)
+      ? testFree
+      : os.freemem();
+
+  const usedBytes =
+    Math.max(
+      0,
+      totalBytes - freeBytes
+    );
+
+  const usedPercent =
+    totalBytes > 0
+      ? Number(
+          (
+            usedBytes /
+            totalBytes *
+            100
+          ).toFixed(2)
+        )
+      : 0;
+
+  const prepareThreshold =
+    Number(
+      policy.ram
+        ?.prepareRefreshAtUsedPercent
+    ) || 85;
+
+  const refreshThreshold =
+    Number(
+      policy.ram
+        ?.refreshAtUsedPercent
+    ) || 92;
+
+  const emergencyThreshold =
+    Number(
+      policy.ram
+        ?.emergencyRefreshAtUsedPercent
+    ) || 95;
+
+  const minimumFreeBytes =
+    Number(
+      policy.ram
+        ?.minimumFreeBytes
+    ) ||
+    1024 ** 3;
+
+  let action = "none";
+
+  if (
+    usedPercent >= emergencyThreshold ||
+    freeBytes < minimumFreeBytes
+  ) {
+    action = "emergency-refresh";
+  } else if (
+    usedPercent >= refreshThreshold
+  ) {
+    action = "refresh";
+  } else if (
+    usedPercent >= prepareThreshold
+  ) {
+    action = "prepare";
+  }
+
+  return {
+    totalBytes,
+    freeBytes,
+    usedBytes,
+    usedPercent,
+    action,
+    thresholds: {
+      prepare: prepareThreshold,
+      refresh: refreshThreshold,
+      emergency: emergencyThreshold,
+    },
+  };
+}
+
+function uniqueMemoryValues(values) {
+  return [
+    ...new Set(
+      values
+        .map(
+          (value) =>
+            String(value || "")
+              .replace(/\s+/g, " ")
+              .trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function extractConversationMemory(
+  conversation
+) {
+  const messages =
+    conversation.messages || [];
+
+  const userMessages =
+    messages.filter(
+      (message) =>
+        message.role === "user"
+    );
+
+  const assistantMessages =
+    messages.filter(
+      (message) =>
+        message.role === "assistant"
+    );
+
+  const facts = [];
+  const decisions = [];
+  const tasks = [];
+
+  const factPatterns = [
+    /(?:จำไว้ว่า|ข้อมูลคือ|ข้อเท็จจริง|ชื่อ|ต้องการ|ใช้|เก็บไว้)[\s:：]*(.+)/i,
+  ];
+
+  const decisionPatterns = [
+    /(?:ตกลง|สรุปว่า|เลือก|ตัดสินใจ|ตามนี้|ให้ใช้)[\s:：]*(.+)/i,
+  ];
+
+  const taskPatterns = [
+    /(?:ต้องทำ|ขั้นต่อไป|ต่อไป|อย่าลืม|เพิ่ม|แก้ไข|พัฒนา)[\s:：]*(.+)/i,
+  ];
+
+  for (const message of messages) {
+    const content =
+      String(message.content || "");
+
+    for (const pattern of factPatterns) {
+      const match =
+        content.match(pattern);
+
+      if (match?.[1]) {
+        facts.push(
+          match[1].slice(0, 500)
+        );
+      }
+    }
+
+    for (const pattern of decisionPatterns) {
+      const match =
+        content.match(pattern);
+
+      if (match?.[1]) {
+        decisions.push(
+          match[1].slice(0, 500)
+        );
+      }
+    }
+
+    for (const pattern of taskPatterns) {
+      const match =
+        content.match(pattern);
+
+      if (match?.[1]) {
+        tasks.push(
+          match[1].slice(0, 500)
+        );
+      }
+    }
+  }
+
+  const latestUserMessages =
+    userMessages
+      .slice(-5)
+      .map(
+        (message) =>
+          message.content
+      );
+
+  const latestAssistantMessages =
+    assistantMessages
+      .slice(-3)
+      .map(
+        (message) =>
+          message.content
+      );
+
+  return {
+    facts:
+      uniqueMemoryValues(facts)
+        .slice(-100),
+    decisions:
+      uniqueMemoryValues(decisions)
+        .slice(-100),
+    tasks:
+      uniqueMemoryValues(tasks)
+        .slice(-100),
+    latestUserMessages,
+    latestAssistantMessages,
+  };
+}
+
+function buildConversationSummary(
+  conversation
+) {
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const extracted =
+    extractConversationMemory(
+      conversation
+    );
+
+  const parts = [
+    `หัวข้อ: ${conversation.title}`,
+  ];
+
+  if (extracted.facts.length) {
+    parts.push(
+      "ข้อเท็จจริงสำคัญ:\n" +
+      extracted.facts
+        .map(
+          (value) => `- ${value}`
+        )
+        .join("\n")
+    );
+  }
+
+  if (extracted.decisions.length) {
+    parts.push(
+      "การตัดสินใจ:\n" +
+      extracted.decisions
+        .map(
+          (value) => `- ${value}`
+        )
+        .join("\n")
+    );
+  }
+
+  if (extracted.tasks.length) {
+    parts.push(
+      "สิ่งที่ต้องทำต่อ:\n" +
+      extracted.tasks
+        .map(
+          (value) => `- ${value}`
+        )
+        .join("\n")
+    );
+  }
+
+  if (
+    extracted
+      .latestUserMessages
+      .length
+  ) {
+    parts.push(
+      "ข้อความล่าสุดของผู้ใช้:\n" +
+      extracted
+        .latestUserMessages
+        .map(
+          (value) =>
+            `- ${String(value).slice(0, 1000)}`
+        )
+        .join("\n")
+    );
+  }
+
+  const maximumCharacters =
+    Number(
+      policy.memory
+        ?.maximumSummaryCharacters
+    ) || 12000;
+
+  return {
+    summary:
+      parts
+        .join("\n\n")
+        .slice(
+          0,
+          maximumCharacters
+        ),
+    facts:
+      extracted.facts,
+    decisions:
+      extracted.decisions,
+    tasks:
+      extracted.tasks,
+  };
+}
+
+function createConversationMemorySnapshot(
+  conversation,
+  reason
+) {
+  const built =
+    buildConversationSummary(
+      conversation
+    );
+
+  const now =
+    new Date().toISOString();
+
+  const snapshot = {
+    id:
+      createTextChatId(
+        "memory-snapshot"
+      ),
+    createdAt: now,
+    reason,
+    conversationId:
+      conversation.id,
+    messageCount:
+      conversation.messages?.length ||
+      0,
+    summary:
+      built.summary,
+    facts:
+      built.facts,
+    decisions:
+      built.decisions,
+    tasks:
+      built.tasks,
+    settings: {
+      modelId:
+        conversation.modelId ||
+        null,
+      systemPrompt:
+        conversation.systemPrompt ||
+        "",
+      generationSettings: {
+        ...(conversation.settings || {}),
+      },
+    },
+  };
+
+  conversation.memory = {
+    ...(conversation.memory || {}),
+    summary:
+      built.summary,
+    facts:
+      built.facts,
+    decisions:
+      built.decisions,
+    tasks:
+      built.tasks,
+    lastCompactedAt: now,
+    latestSnapshotId:
+      snapshot.id,
+    snapshots: [
+      ...(
+        conversation.memory
+          ?.snapshots || []
+      ),
+      snapshot,
+    ].slice(-20),
+  };
+
+  return snapshot;
+}
+
+function refreshConversationSession(
+  conversation,
+  reason
+) {
+  const snapshot =
+    createConversationMemorySnapshot(
+      conversation,
+      reason
+    );
+
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const recentMessageCount =
+    Number(
+      policy.context
+        ?.recentMessagesToPreserve
+    ) || 20;
+
+  const previousSessionId =
+    conversation.session?.id ||
+    null;
+
+  const nextSessionId =
+    createTextChatId(
+      "chat-session"
+    );
+
+  conversation.session = {
+    id: nextSessionId,
+    previousSessionId,
+    refreshedAt:
+      new Date().toISOString(),
+    refreshCount:
+      Number(
+        conversation.session
+          ?.refreshCount
+      ) + 1 || 1,
+    refreshReason: reason,
+    memorySnapshotId:
+      snapshot.id,
+    restoreContext: {
+      summary:
+        conversation.memory.summary,
+      facts:
+        conversation.memory.facts,
+      decisions:
+        conversation.memory.decisions,
+      tasks:
+        conversation.memory.tasks,
+      recentMessages:
+        (
+          conversation.messages || []
+        ).slice(
+          -recentMessageCount
+        ),
+    },
+  };
+
+  return {
+    snapshot,
+    session:
+      conversation.session,
+  };
+}
+
+function optimizeTextChatConversation(
+  conversationId,
+  {
+    force = false,
+    reason = "automatic",
+  } = {}
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const context =
+    calculateConversationContextStatus(
+      conversation
+    );
+
+  const ram =
+    getTextChatRamStatus();
+
+  let action =
+    force
+      ? "refresh"
+      : context.action;
+
+  if (
+    [
+      "refresh",
+      "emergency-refresh",
+    ].includes(ram.action)
+  ) {
+    action = "refresh";
+  } else if (
+    ram.action === "prepare" &&
+    action === "none"
+  ) {
+    action = "summarize";
+  }
+
+  let snapshot = null;
+  let session = null;
+
+  if (action === "summarize") {
+    const built =
+      buildConversationSummary(
+        conversation
+      );
+
+    conversation.memory = {
+      ...(conversation.memory || {}),
+      summary:
+        built.summary,
+      facts:
+        built.facts,
+      decisions:
+        built.decisions,
+      tasks:
+        built.tasks,
+      lastCompactedAt:
+        new Date().toISOString(),
+    };
+  }
+
+  if (action === "snapshot") {
+    snapshot =
+      createConversationMemorySnapshot(
+        conversation,
+        reason
+      );
+  }
+
+  if (action === "refresh") {
+    const refreshed =
+      refreshConversationSession(
+        conversation,
+        reason
+      );
+
+    snapshot =
+      refreshed.snapshot;
+
+    session =
+      refreshed.session;
+  }
+
+  conversation.updatedAt =
+    new Date().toISOString();
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  return {
+    conversation,
+    action,
+    context:
+      calculateConversationContextStatus(
+        conversation
+      ),
+    ram,
+    snapshot,
+    session,
+  };
+}
+
+function getTextChatMemoryStatus(
+  conversationId
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return {
+    conversationId,
+    context:
+      calculateConversationContextStatus(
+        conversation
+      ),
+    ram:
+      getTextChatRamStatus(),
+    memory: {
+      hasSummary:
+        Boolean(
+          conversation.memory
+            ?.summary
+        ),
+      factCount:
+        conversation.memory
+          ?.facts?.length || 0,
+      decisionCount:
+        conversation.memory
+          ?.decisions?.length || 0,
+      taskCount:
+        conversation.memory
+          ?.tasks?.length || 0,
+      snapshotCount:
+        conversation.memory
+          ?.snapshots?.length || 0,
+      lastCompactedAt:
+        conversation.memory
+          ?.lastCompactedAt ||
+        null,
+    },
+    session: {
+      id:
+        conversation.session?.id ||
+        null,
+      refreshCount:
+        conversation.session
+          ?.refreshCount || 0,
+      refreshedAt:
+        conversation.session
+          ?.refreshedAt || null,
+      refreshReason:
+        conversation.session
+          ?.refreshReason || null,
+    },
+  };
+}
+
+function autoOptimizeTextChatConversation(
+  conversationId
+) {
+  try {
+    return optimizeTextChatConversation(
+      conversationId,
+      {
+        force: false,
+        reason:
+          "automatic-threshold",
+      }
+    );
+  } catch (error) {
+    console.error(
+      "[text-chat] Memory optimization failed:",
+      error instanceof Error
+        ? error.message
+        : String(error)
+    );
+
+    return null;
+  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -10907,6 +11729,102 @@ const server = http.createServer(async (req, res) => {
             ? error.message
             : String(error),
       });
+    }
+  }
+
+  // POST /api/text-chat/memory/optimize
+  if (
+    req.url === "/api/text-chat/memory/optimize" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      const result =
+        optimizeTextChatConversation(
+          body.conversationId.trim(),
+          {
+            force:
+              body.force === true,
+            reason:
+              String(
+                body.reason ||
+                "manual"
+              ),
+          }
+        );
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-chat/memory/status
+  if (
+    req.url === "/api/text-chat/memory/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...getTextChatMemoryStatus(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
     }
   }
 
