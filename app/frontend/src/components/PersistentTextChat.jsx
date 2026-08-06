@@ -148,6 +148,22 @@ export default function PersistentTextChat() {
     setFeedbackBusyId,
   ] = useState("");
 
+  // LUKE_AI_AUTOMATIC_MODEL_ROUTER_UI_V2
+  const [
+    autoRouterEnabled,
+    setAutoRouterEnabled,
+  ] = useState(true);
+
+  const [
+    routerDecision,
+    setRouterDecision,
+  ] = useState(null);
+
+  const [
+    routingModel,
+    setRoutingModel,
+  ] = useState(false);
+
   const mountedRef = useRef(true);
 
   const requestJson = useCallback(
@@ -1130,10 +1146,61 @@ export default function PersistentTextChat() {
       ],
     );
 
+  const routeModelForPrompt =
+    useCallback(
+      async (
+        conversationId,
+        prompt,
+      ) => {
+        if (!autoRouterEnabled) {
+          setRouterDecision(null);
+          return null;
+        }
+
+        setRoutingModel(true);
+
+        try {
+          const data =
+            await requestJson(
+              "/api/text-runtime/model-router/route",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  conversationId,
+                  prompt,
+                }),
+              },
+            );
+
+          setRouterDecision(data);
+
+          return (
+            data.selectedModel?.modelId ||
+            null
+          );
+        } catch (routerError) {
+          setError(
+            routerError instanceof Error
+              ? routerError.message
+              : String(routerError),
+          );
+
+          return null;
+        } finally {
+          setRoutingModel(false);
+        }
+      },
+      [
+        autoRouterEnabled,
+        requestJson,
+      ],
+    );
+
   const generateAssistantResponse =
     useCallback(
       async (
         conversationId,
+        modelId = null,
       ) => {
         setGenerating(true);
         setStreamingResponse("");
@@ -1156,6 +1223,7 @@ export default function PersistentTextChat() {
               },
               body: JSON.stringify({
                 conversationId,
+                modelId,
               }),
               signal:
                 controller.signal,
@@ -1435,8 +1503,15 @@ export default function PersistentTextChat() {
               conversationId,
             );
           } else {
+            const routedModelId =
+              await routeModelForPrompt(
+                conversationId,
+                content,
+              );
+
             await generateAssistantResponse(
               conversationId,
+              routedModelId,
             );
           }
         } catch (sendError) {
@@ -1458,6 +1533,7 @@ export default function PersistentTextChat() {
         multiModelEnabled,
         selectedModelIds,
         requestJson,
+        routeModelForPrompt,
       ],
     );
 
@@ -2133,6 +2209,109 @@ export default function PersistentTextChat() {
             </article>
           )}
         </div>
+
+        <section className="persistent-chat-router-panel">
+          <div className="persistent-chat-router-heading">
+            <div>
+              <strong>
+                Automatic Model Router
+              </strong>
+
+              <span>
+                วิเคราะห์ประเภทคำถามและเลือกโมเดลที่เหมาะที่สุด
+              </span>
+            </div>
+
+            <label className="persistent-chat-router-toggle">
+              <input
+                type="checkbox"
+                checked={autoRouterEnabled}
+                disabled={
+                  generating ||
+                  multiGenerating ||
+                  judgeGenerating
+                }
+                onChange={(event) => {
+                  setAutoRouterEnabled(
+                    event.target.checked,
+                  );
+
+                  if (
+                    !event.target.checked
+                  ) {
+                    setRouterDecision(null);
+                  }
+                }}
+              />
+
+              เลือกโมเดลอัตโนมัติ
+            </label>
+          </div>
+
+          {routingModel && (
+            <div className="persistent-chat-router-loading">
+              กำลังวิเคราะห์คำถามและเลือกโมเดล...
+            </div>
+          )}
+
+          {routerDecision?.selectedModel && (
+            <div className="persistent-chat-router-decision">
+              <div>
+                <span>
+                  โมเดลที่เลือก
+                </span>
+
+                <strong>
+                  {routerDecision
+                    .selectedModel
+                    .modelName ||
+                    routerDecision
+                      .selectedModel
+                      .modelId}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  ประเภทคำถาม
+                </span>
+
+                <strong>
+                  {routerDecision
+                    .taskDetection
+                    ?.taskType ||
+                    "general"}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  คะแนน Route
+                </span>
+
+                <strong>
+                  {(
+                    routerDecision
+                      .selectedModel
+                      .routeScore *
+                    100
+                  ).toFixed(1)}
+                </strong>
+              </div>
+
+              <div className="persistent-chat-router-reasons">
+                {(routerDecision.reasons ||
+                  []).map(
+                  (reason) => (
+                    <span key={reason}>
+                      {reason}
+                    </span>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+        </section>
 
         <section className="persistent-chat-multi-model-panel">
           <div className="persistent-chat-multi-model-heading">

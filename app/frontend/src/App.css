@@ -6078,3 +6078,118 @@ html[data-theme^="dark"] .settings-subsection:hover {
       transparent
     ) !important;
 }
+
+/* LUKE_AI_AUTOMATIC_MODEL_ROUTER_STYLES_V2 */
+.persistent-chat-router-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 14px 15px;
+  border-top:
+    1px solid var(--border-color-muted);
+  background:
+    var(--md-sys-color-surface-container-low);
+}
+
+.persistent-chat-router-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.persistent-chat-router-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.persistent-chat-router-heading span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.74rem;
+}
+
+.persistent-chat-router-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.79rem;
+  font-weight: 700;
+}
+
+.persistent-chat-router-loading {
+  padding: 9px 11px;
+  border-radius: 10px;
+  color:
+    var(--md-sys-color-primary);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-primary)
+      9%,
+      transparent
+    );
+  font-size: 0.76rem;
+}
+
+.persistent-chat-router-decision {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.persistent-chat-router-decision > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px;
+  border:
+    1px solid var(--border-color-muted);
+  border-radius: 10px;
+  background:
+    var(--md-sys-color-surface);
+}
+
+.persistent-chat-router-decision span {
+  color:
+    var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+}
+
+.persistent-chat-router-decision strong {
+  font-size: 0.82rem;
+}
+
+.persistent-chat-router-reasons {
+  grid-column: 1 / -1;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+}
+
+.persistent-chat-router-reasons span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color:
+    var(--md-sys-color-primary);
+  background:
+    color-mix(
+      in srgb,
+      var(--md-sys-color-primary)
+      9%,
+      transparent
+    );
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .persistent-chat-router-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .persistent-chat-router-decision {
+    grid-template-columns: 1fr;
+  }
+}

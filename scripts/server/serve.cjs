@@ -11851,8 +11851,33 @@ function createTextGenerationPayload(
   return {
     model:
       overrides.modelId ||
-      getTextGenerationModelId(
-        conversation
+      (
+        overrides.autoRoute ===
+          false
+          ? getTextGenerationModelId(
+              conversation
+            )
+          : (
+              routeTextModel({
+                prompt:
+                  [...(
+                    conversation.messages ||
+                    []
+                  )]
+                    .reverse()
+                    .find(
+                      (message) =>
+                        message.role ===
+                        "user"
+                    )
+                    ?.content ||
+                  "",
+                conversationId:
+                  conversation.id,
+              })
+                .selectedModel
+                .modelId
+            )
       ),
     messages:
       getTextGenerationMessages(
@@ -14643,6 +14668,650 @@ function getTextModelFeedbackSummary() {
   };
 }
 
+
+// LUKE_AI_AUTOMATIC_MODEL_ROUTER_V1
+const automaticModelRouterPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "model-router-policy.json"
+);
+
+function readAutomaticModelRouterPolicy() {
+  return readJsonFileStrict(
+    automaticModelRouterPolicyPath,
+    "Automatic model router policy"
+  );
+}
+
+function normalizeRouterText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectModelRouterTaskType(prompt) {
+  const policy =
+    readAutomaticModelRouterPolicy();
+
+  const normalizedPrompt =
+    normalizeRouterText(prompt);
+
+  let selectedType = "general";
+  let selectedScore = 0;
+  const matches = {};
+
+  for (
+    const [
+      taskType,
+      taskConfig,
+    ]
+    of Object.entries(
+      policy.taskTypes || {}
+    )
+  ) {
+    const keywords =
+      Array.isArray(taskConfig.keywords)
+        ? taskConfig.keywords
+        : [];
+
+    let score = 0;
+    const matchedKeywords = [];
+
+    for (const keyword of keywords) {
+      const normalizedKeyword =
+        normalizeRouterText(keyword);
+
+      if (
+        normalizedKeyword &&
+        normalizedPrompt.includes(
+          normalizedKeyword
+        )
+      ) {
+        score +=
+          normalizedKeyword.length > 8
+            ? 2
+            : 1;
+
+        matchedKeywords.push(keyword);
+      }
+    }
+
+    matches[taskType] = {
+      score,
+      matchedKeywords,
+    };
+
+    if (score > selectedScore) {
+      selectedType = taskType;
+      selectedScore = score;
+    }
+  }
+
+  const thaiCharacterCount =
+    (
+      String(prompt || "")
+        .match(/[\u0E00-\u0E7F]/g)
+      || []
+    ).length;
+
+  const totalCharacters =
+    Math.max(
+      1,
+      String(prompt || "").length
+    );
+
+  const thaiRatio =
+    thaiCharacterCount /
+    totalCharacters;
+
+  if (
+    thaiRatio >= 0.35 &&
+    selectedScore === 0
+  ) {
+    selectedType = "thai";
+  }
+
+  return {
+    taskType: selectedType,
+    confidence:
+      selectedScore > 0
+        ? Math.min(
+            1,
+            0.45 +
+            selectedScore * 0.12
+          )
+        : 0.35,
+    thaiRatio:
+      Number(thaiRatio.toFixed(4)),
+    matches,
+  };
+}
+
+function getRouterInstalledModels() {
+  try {
+    const registry =
+      readInstalledTextModels();
+
+    return (
+      registry.models || []
+    )
+      .filter(
+        (model) =>
+          model.installedPath
+      )
+      .map(
+        (model) => ({
+          modelId:
+            model.modelId,
+          modelName:
+            model.modelName ||
+            model.modelId,
+          version:
+            model.version || null,
+          variantId:
+            model.variantId || null,
+          quantization:
+            model.quantization || null,
+          runtime:
+            model.runtime || null,
+          installedPath:
+            model.installedPath,
+          contextLength:
+            Number(
+              model.contextLength
+            ) || null,
+          capabilities:
+            Array.isArray(
+              model.capabilities
+            )
+              ? model.capabilities
+              : [],
+          active:
+            registry.activeModelId ===
+            model.modelId,
+        })
+      );
+  } catch {
+    return [];
+  }
+}
+
+function getRouterCapabilityText(model) {
+  return normalizeRouterText([
+    model.modelId,
+    model.modelName,
+    model.variantId,
+    model.quantization,
+    model.runtime,
+    ...(model.capabilities || []),
+  ].join(" "));
+}
+
+function calculateRouterTaskCapability(
+  model,
+  taskType
+) {
+  const policy =
+    readAutomaticModelRouterPolicy();
+
+  const hints =
+    policy.capabilityHints?.[
+      taskType
+    ] ||
+    policy.capabilityHints?.general ||
+    [];
+
+  const capabilityText =
+    getRouterCapabilityText(model);
+
+  if (!hints.length) {
+    return 0.5;
+  }
+
+  const matched =
+    hints.filter(
+      (hint) =>
+        capabilityText.includes(
+          normalizeRouterText(hint)
+        )
+    );
+
+  return Math.min(
+    1,
+    0.3 +
+    matched.length /
+      Math.max(1, hints.length) *
+      0.7
+  );
+}
+
+function getRouterFeedbackScore(
+  modelId
+) {
+  try {
+    return Math.max(
+      0,
+      Math.min(
+        1,
+        (
+          getAdaptiveModelScore(
+            modelId
+          ) +
+          1
+        ) / 2
+      )
+    );
+  } catch {
+    return 0.5;
+  }
+}
+
+function getRouterHardwareScore(
+  modelId
+) {
+  try {
+    const hardware =
+      getTextModelHardwareRecommendation(
+        modelId
+      );
+
+    if (!hardware) {
+      return 0.5;
+    }
+
+    const selected =
+      hardware.variants?.find(
+        (variant) =>
+          variant.id ===
+          hardware.recommendedVariantId
+      );
+
+    if (!selected) {
+      return hardware.compatible
+        ? 0.65
+        : 0;
+    }
+
+    if (
+      selected.compatibility ===
+      "recommended"
+    ) {
+      return 1;
+    }
+
+    if (
+      selected.compatibility ===
+      "compatible"
+    ) {
+      return 0.72;
+    }
+
+    return 0;
+  } catch {
+    return 0.5;
+  }
+}
+
+function getRouterContextScore(
+  model,
+  estimatedPromptTokens
+) {
+  const contextLength =
+    Number(model.contextLength) ||
+    32768;
+
+  if (
+    estimatedPromptTokens >
+    contextLength
+  ) {
+    return 0;
+  }
+
+  const usage =
+    estimatedPromptTokens /
+    contextLength;
+
+  if (usage <= 0.25) {
+    return 1;
+  }
+
+  if (usage <= 0.5) {
+    return 0.85;
+  }
+
+  if (usage <= 0.75) {
+    return 0.65;
+  }
+
+  return 0.4;
+}
+
+function getRouterLanguageScore(
+  model,
+  taskDetection
+) {
+  const capabilityText =
+    getRouterCapabilityText(model);
+
+  if (
+    taskDetection.thaiRatio <
+    0.2
+  ) {
+    return 0.7;
+  }
+
+  if (
+    capabilityText.includes("thai") ||
+    capabilityText.includes(
+      "multilingual"
+    ) ||
+    capabilityText.includes("qwen") ||
+    capabilityText.includes("llama")
+  ) {
+    return 1;
+  }
+
+  return 0.55;
+}
+
+function routeTextModel({
+  prompt,
+  conversationId = null,
+  excludedModelIds = [],
+} = {}) {
+  const normalizedPrompt =
+    String(prompt || "").trim();
+
+  if (!normalizedPrompt) {
+    const error = new Error(
+      "Prompt is required for model routing."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const policy =
+    readAutomaticModelRouterPolicy();
+
+  const taskDetection =
+    detectModelRouterTaskType(
+      normalizedPrompt
+    );
+
+  const installedModels =
+    getRouterInstalledModels();
+
+  if (!installedModels.length) {
+    const error = new Error(
+      "No installed text models are available."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const excluded =
+    new Set(
+      (
+        Array.isArray(excludedModelIds)
+          ? excludedModelIds
+          : []
+      )
+        .map(
+          (modelId) =>
+            String(modelId || "")
+              .trim()
+        )
+        .filter(Boolean)
+    );
+
+  const estimatedPromptTokens =
+    estimateTextChatTokens(
+      normalizedPrompt
+    );
+
+  const weights =
+    policy.weights || {};
+
+  const scoredModels =
+    installedModels
+      .filter(
+        (model) =>
+          !excluded.has(
+            model.modelId
+          )
+      )
+      .map(
+        (model) => {
+          const components = {
+            taskCapability:
+              calculateRouterTaskCapability(
+                model,
+                taskDetection.taskType
+              ),
+            userFeedback:
+              getRouterFeedbackScore(
+                model.modelId
+              ),
+            hardwareCompatibility:
+              getRouterHardwareScore(
+                model.modelId
+              ),
+            contextFit:
+              getRouterContextScore(
+                model,
+                estimatedPromptTokens
+              ),
+            languageFit:
+              getRouterLanguageScore(
+                model,
+                taskDetection
+              ),
+            availability:
+              model.installedPath
+                ? 1
+                : 0,
+          };
+
+          const score =
+            components.taskCapability *
+              Number(
+                weights.taskCapability ??
+                0.38
+              ) +
+            components.userFeedback *
+              Number(
+                weights.userFeedback ??
+                0.22
+              ) +
+            components.hardwareCompatibility *
+              Number(
+                weights.hardwareCompatibility ??
+                0.15
+              ) +
+            components.contextFit *
+              Number(
+                weights.contextFit ??
+                0.1
+              ) +
+            components.languageFit *
+              Number(
+                weights.languageFit ??
+                0.08
+              ) +
+            components.availability *
+              Number(
+                weights.availability ??
+                0.07
+              );
+
+          return {
+            ...model,
+            routeScore:
+              Number(
+                score.toFixed(4)
+              ),
+            components: {
+              taskCapability:
+                Number(
+                  components
+                    .taskCapability
+                    .toFixed(4)
+                ),
+              userFeedback:
+                Number(
+                  components
+                    .userFeedback
+                    .toFixed(4)
+                ),
+              hardwareCompatibility:
+                Number(
+                  components
+                    .hardwareCompatibility
+                    .toFixed(4)
+                ),
+              contextFit:
+                Number(
+                  components
+                    .contextFit
+                    .toFixed(4)
+                ),
+              languageFit:
+                Number(
+                  components
+                    .languageFit
+                    .toFixed(4)
+                ),
+              availability:
+                components.availability,
+            },
+          };
+        }
+      )
+      .filter(
+        (model) =>
+          model.routeScore >=
+          Number(
+            policy.routing
+              ?.minimumScore ??
+            0.1
+          )
+      )
+      .sort(
+        (left, right) =>
+          right.routeScore -
+          left.routeScore
+      );
+
+  const selectedModel =
+    scoredModels[0] || null;
+
+  if (!selectedModel) {
+    const error = new Error(
+      "No compatible model was found for this prompt."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const maximumFallbackModels =
+    Number(
+      policy.routing
+        ?.maximumFallbackModels
+    ) || 2;
+
+  const fallbackModels =
+    scoredModels
+      .slice(
+        1,
+        1 + maximumFallbackModels
+      );
+
+  const reasons = [];
+
+  reasons.push(
+    `เหมาะกับงานประเภท ${taskDetection.taskType}`
+  );
+
+  if (
+    selectedModel.components
+      .userFeedback >= 0.6
+  ) {
+    reasons.push(
+      "มีคะแนนความพึงพอใจจากผู้ใช้ในระดับดี"
+    );
+  }
+
+  if (
+    selectedModel.components
+      .hardwareCompatibility >=
+    0.7
+  ) {
+    reasons.push(
+      "เหมาะกับ Hardware ปัจจุบัน"
+    );
+  }
+
+  if (
+    selectedModel.components
+      .languageFit >= 0.8
+  ) {
+    reasons.push(
+      "รองรับภาษาของคำถามได้ดี"
+    );
+  }
+
+  return {
+    conversationId,
+    prompt:
+      normalizedPrompt,
+    taskDetection,
+    estimatedPromptTokens,
+    selectedModel,
+    fallbackModels,
+    reasons,
+    evaluatedModels:
+      scoredModels,
+    routedAt:
+      new Date().toISOString(),
+  };
+}
+
+function getConversationLatestUserPrompt(
+  conversationId
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    return null;
+  }
+
+  return (
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      )
+      ?.content ||
+    null
+  );
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -15343,6 +16012,83 @@ const server = http.createServer(async (req, res) => {
         200,
         buildTextModelHardwareCompatibility()
       );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/model-router/route
+  if (
+    req.url === "/api/text-runtime/model-router/route" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const conversationId =
+        String(
+          body.conversationId || ""
+        ).trim() ||
+        null;
+
+      const prompt =
+        String(
+          body.prompt ||
+          (
+            conversationId
+              ? getConversationLatestUserPrompt(
+                  conversationId
+                )
+              : ""
+          ) ||
+          ""
+        ).trim();
+
+      const result =
+        routeTextModel({
+          prompt,
+          conversationId,
+          excludedModelIds:
+            body.excludedModelIds,
+        });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-runtime/model-router/policy
+  if (
+    req.url === "/api/text-runtime/model-router/policy" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        policy:
+          readAutomaticModelRouterPolicy(),
+      });
     } catch (error) {
       return json(res, 500, {
         ok: false,
