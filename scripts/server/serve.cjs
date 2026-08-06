@@ -13407,6 +13407,690 @@ function stopMultiModelGeneration(
   };
 }
 
+
+// LUKE_AI_JUDGE_SYNTHESIS_V1
+const aiJudgePolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "judge-synthesis-policy.json"
+);
+
+const activeJudgeSyntheses =
+  new Map();
+
+function readAiJudgePolicy() {
+  return readJsonFileStrict(
+    aiJudgePolicyPath,
+    "AI Judge synthesis policy"
+  );
+}
+
+function getLatestMultiModelResponses(
+  conversation
+) {
+  const messages =
+    conversation.messages || [];
+
+  const candidates =
+    messages
+      .filter(
+        (message) =>
+          message.role === "assistant" &&
+          message.metadata?.multiModel === true
+      )
+      .slice(-3)
+      .map(
+        (message) => ({
+          messageId: message.id,
+          modelId:
+            message.modelId ||
+            "unknown-model",
+          content:
+            message.content,
+          score:
+            Number(
+              message.metadata?.score
+            ) || 0,
+          rank:
+            Number(
+              message.metadata?.rank
+            ) || 999,
+          best:
+            message.metadata?.best === true,
+          metrics:
+            message.metadata?.metrics || {},
+        })
+      )
+      .sort(
+        (left, right) =>
+          left.rank - right.rank
+      );
+
+  return candidates;
+}
+
+function buildAiJudgePrompt(
+  conversation,
+  responses
+) {
+  const lastUserMessage =
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      );
+
+  const responseSections =
+    responses.map(
+      (response, index) => (
+        `คำตอบที่ ${index + 1}\n` +
+        `Model ID: ${response.modelId}\n` +
+        `Rank: ${response.rank}\n` +
+        `เนื้อหา:\n${response.content}`
+      )
+    );
+
+  return [
+    "คุณคือ AI Judge และ Final Answer Synthesizer",
+    "หน้าที่คือรวมคำตอบจากหลายโมเดลให้เป็นคำตอบสุดท้ายเพียงคำตอบเดียว",
+    "",
+    "ข้อกำหนด:",
+    "- ตอบด้วยภาษาเดียวกับผู้ใช้",
+    "- รักษาข้อมูลที่ถูกต้องและมีประโยชน์",
+    "- รวมจุดแข็งของแต่ละคำตอบ",
+    "- ลบข้อความซ้ำ",
+    "- แก้ความขัดแย้งโดยเลือกข้อมูลที่สมเหตุสมผลและสอดคล้องที่สุด",
+    "- ไม่กล่าวถึงคะแนน อันดับ หรือขั้นตอนประเมินภายใน",
+    "- ไม่กล่าวว่าเป็นการรวมจากหลายโมเดล",
+    "- ไม่ถามข้อมูลเดิมที่มีอยู่แล้วซ้ำ",
+    "",
+    `คำถามของผู้ใช้:\n${lastUserMessage?.content || ""}`,
+    "",
+    ...responseSections,
+    "",
+    "สร้าง Final Answer ที่สมบูรณ์ ชัดเจน และพร้อมส่งให้ผู้ใช้:",
+  ].join("\n\n");
+}
+
+function selectJudgeModelId(
+  conversation,
+  responses,
+  requestedJudgeModelId
+) {
+  if (
+    typeof requestedJudgeModelId ===
+      "string" &&
+    requestedJudgeModelId.trim()
+  ) {
+    return requestedJudgeModelId.trim();
+  }
+
+  const policy =
+    readAiJudgePolicy();
+
+  if (
+    policy.judge
+      ?.preferBestResponseModel !== false
+  ) {
+    const best =
+      responses.find(
+        (response) =>
+          response.best === true
+      ) ||
+      responses[0];
+
+    if (best?.modelId) {
+      return best.modelId;
+    }
+  }
+
+  return getTextGenerationModelId(
+    conversation
+  );
+}
+
+function saveAiJudgeFinalAnswer(
+  conversationId,
+  content,
+  {
+    judgeModelId,
+    sourceResponses,
+    synthesisId,
+    fallback = false,
+  }
+) {
+  const normalized =
+    String(content || "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const saved =
+    appendTextChatMessage(
+      conversationId,
+      {
+        role: "assistant",
+        content: normalized,
+        modelId:
+          judgeModelId || null,
+        metadata: {
+          source:
+            fallback
+              ? "ai-judge-fallback"
+              : "ai-judge-synthesis",
+          synthesisId,
+          finalAnswer: true,
+          best: true,
+          fallback,
+          judgeModelId:
+            judgeModelId || null,
+          sourceModelIds:
+            sourceResponses.map(
+              (response) =>
+                response.modelId
+            ),
+          sourceMessageIds:
+            sourceResponses.map(
+              (response) =>
+                response.messageId
+            ),
+          autosaved: true,
+        },
+      }
+    );
+
+  return saved?.message || null;
+}
+
+async function streamAiJudgeSynthesis(
+  conversationId,
+  response,
+  {
+    judgeModelId = null,
+  } = {}
+) {
+  if (
+    activeJudgeSyntheses.has(
+      conversationId
+    )
+  ) {
+    const error = new Error(
+      "AI Judge synthesis is already running for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const sourceResponses =
+    getLatestMultiModelResponses(
+      conversation
+    );
+
+  if (!sourceResponses.length) {
+    const error = new Error(
+      "No multi-model responses are available for synthesis."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const selectedJudgeModelId =
+    selectJudgeModelId(
+      conversation,
+      sourceResponses,
+      judgeModelId
+    );
+
+  const policy =
+    readAiJudgePolicy();
+
+  const generationPolicy =
+    readTextGenerationPolicy();
+
+  const synthesisId =
+    createTextChatId(
+      "judge-synthesis"
+    );
+
+  const controller =
+    new AbortController();
+
+  const state = {
+    synthesisId,
+    conversationId,
+    judgeModelId:
+      selectedJudgeModelId,
+    controller,
+    status: "starting",
+    accumulatedText: "",
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    fallback: false,
+    error: null,
+  };
+
+  activeJudgeSyntheses.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "judge-start",
+    {
+      synthesisId,
+      conversationId,
+      judgeModelId:
+        selectedJudgeModelId,
+      sourceModelIds:
+        sourceResponses.map(
+          (item) =>
+            item.modelId
+        ),
+    }
+  );
+
+  try {
+    state.status = "streaming";
+
+    const runtimeResponse =
+      await fetch(
+        buildTextRuntimeUrl(
+          generationPolicy.runtime
+            ?.generationPath ||
+          "/v1/chat/completions"
+        ),
+        {
+          method: "POST",
+          headers: {
+            "content-type":
+              "application/json",
+            accept:
+              "text/event-stream, application/json",
+            "x-luke-model-id":
+              selectedJudgeModelId,
+            "x-luke-generation-mode":
+              "judge-synthesis",
+          },
+          body: JSON.stringify({
+            model:
+              selectedJudgeModelId,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are an expert AI judge and response synthesizer.",
+              },
+              {
+                role: "user",
+                content:
+                  buildAiJudgePrompt(
+                    conversation,
+                    sourceResponses
+                  ),
+              },
+            ],
+            stream: true,
+            temperature:
+              Number(
+                policy.judge
+                  ?.temperature
+              ) || 0.3,
+            top_p:
+              Number(
+                policy.judge
+                  ?.topP
+              ) || 0.85,
+            max_tokens:
+              Number(
+                policy.judge
+                  ?.maxTokens
+              ) || 3072,
+          }),
+          signal:
+            controller.signal,
+        }
+      );
+
+    if (!runtimeResponse.ok) {
+      throw new Error(
+        await runtimeResponse.text() ||
+        `Judge runtime HTTP ${runtimeResponse.status}`
+      );
+    }
+
+    if (!runtimeResponse.body) {
+      throw new Error(
+        "Judge runtime returned no response body."
+      );
+    }
+
+    const contentType =
+      String(
+        runtimeResponse.headers.get(
+          "content-type"
+        ) || ""
+      ).toLowerCase();
+
+    if (
+      contentType.includes(
+        "application/json"
+      )
+    ) {
+      const payload =
+        await runtimeResponse.json();
+
+      const delta =
+        extractTextGenerationDelta(
+          payload
+        );
+
+      if (delta) {
+        state.accumulatedText +=
+          delta;
+
+        writeTextGenerationEvent(
+          response,
+          "judge-delta",
+          {
+            synthesisId,
+            content: delta,
+          }
+        );
+      }
+    } else {
+      const reader =
+        runtimeResponse.body
+          .getReader();
+
+      const decoder =
+        new TextDecoder();
+
+      let buffer = "";
+
+      while (true) {
+        const result =
+          await reader.read();
+
+        if (result.done) {
+          break;
+        }
+
+        buffer += decoder.decode(
+          result.value,
+          {
+            stream: true,
+          }
+        );
+
+        const lines =
+          buffer.split(/\r?\n/);
+
+        buffer =
+          lines.pop() || "";
+
+        for (const rawLine of lines) {
+          let line =
+            rawLine.trim();
+
+          if (
+            !line ||
+            line.startsWith(":")
+          ) {
+            continue;
+          }
+
+          if (
+            line.startsWith("data:")
+          ) {
+            line =
+              line
+                .slice(5)
+                .trim();
+          }
+
+          if (
+            line === "[DONE]"
+          ) {
+            continue;
+          }
+
+          let payload = null;
+
+          try {
+            payload =
+              JSON.parse(line);
+          } catch {
+            payload = line;
+          }
+
+          const delta =
+            extractTextGenerationDelta(
+              payload
+            );
+
+          if (!delta) {
+            continue;
+          }
+
+          state.accumulatedText +=
+            delta;
+
+          writeTextGenerationEvent(
+            response,
+            "judge-delta",
+            {
+              synthesisId,
+              content: delta,
+            }
+          );
+        }
+      }
+    }
+
+    if (!state.accumulatedText.trim()) {
+      throw new Error(
+        "AI Judge returned an empty response."
+      );
+    }
+
+    const savedMessage =
+      saveAiJudgeFinalAnswer(
+        conversationId,
+        state.accumulatedText,
+        {
+          judgeModelId:
+            selectedJudgeModelId,
+          sourceResponses,
+          synthesisId,
+          fallback: false,
+        }
+      );
+
+    state.status = "completed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    writeTextGenerationEvent(
+      response,
+      "judge-complete",
+      {
+        synthesisId,
+        conversationId,
+        judgeModelId:
+          selectedJudgeModelId,
+        content:
+          state.accumulatedText,
+        message:
+          savedMessage,
+        fallback: false,
+        autosaved:
+          Boolean(savedMessage),
+      }
+    );
+  } catch (error) {
+    const fallbackEnabled =
+      policy.fallback?.enabled !==
+        false;
+
+    const fallbackResponse =
+      sourceResponses.find(
+        (item) =>
+          item.best === true
+      ) ||
+      sourceResponses[0];
+
+    if (
+      fallbackEnabled &&
+      fallbackResponse?.content
+    ) {
+      state.fallback = true;
+
+      state.status =
+        "completed-with-fallback";
+
+      state.accumulatedText =
+        fallbackResponse.content;
+
+      state.completedAt =
+        new Date().toISOString();
+
+      const savedMessage =
+        saveAiJudgeFinalAnswer(
+          conversationId,
+          fallbackResponse.content,
+          {
+            judgeModelId:
+              fallbackResponse.modelId,
+            sourceResponses,
+            synthesisId,
+            fallback: true,
+          }
+        );
+
+      writeTextGenerationEvent(
+        response,
+        "judge-fallback",
+        {
+          synthesisId,
+          conversationId,
+          judgeModelId:
+            fallbackResponse.modelId,
+          content:
+            fallbackResponse.content,
+          message:
+            savedMessage,
+          fallback: true,
+          autosaved:
+            Boolean(savedMessage),
+          reason:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    } else {
+      state.status = "failed";
+
+      state.error =
+        error instanceof Error
+          ? error.message
+          : String(error);
+
+      state.completedAt =
+        new Date().toISOString();
+
+      writeTextGenerationEvent(
+        response,
+        "error",
+        {
+          synthesisId,
+          error:
+            state.error,
+        }
+      );
+    }
+  } finally {
+    activeJudgeSyntheses.delete(
+      conversationId
+    );
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopAiJudgeSynthesis(
+  conversationId
+) {
+  const state =
+    activeJudgeSyntheses.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active AI Judge synthesis.",
+    };
+  }
+
+  state.status = "stopping";
+  state.controller.abort();
+
+  return {
+    stopped: true,
+    synthesisId:
+      state.synthesisId,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -14107,6 +14791,107 @@ const server = http.createServer(async (req, res) => {
         200,
         buildTextModelHardwareCompatibility()
       );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/judge-synthesis
+  if (
+    req.url === "/api/text-runtime/judge-synthesis" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      await streamAiJudgeSynthesis(
+        body.conversationId.trim(),
+        res,
+        {
+          judgeModelId:
+            body.judgeModelId ||
+            null,
+        }
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/judge-synthesis/stop
+  if (
+    req.url === "/api/text-runtime/judge-synthesis/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopAiJudgeSynthesis(
+          body.conversationId.trim()
+        ),
+      });
     } catch (error) {
       return json(res, 500, {
         ok: false,

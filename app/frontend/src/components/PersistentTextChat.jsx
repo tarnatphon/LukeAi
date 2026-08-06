@@ -94,6 +94,22 @@ export default function PersistentTextChat() {
     setMultiEvaluation,
   ] = useState(null);
 
+  // LUKE_AI_JUDGE_SYNTHESIS_UI_V1
+  const [
+    judgeGenerating,
+    setJudgeGenerating,
+  ] = useState(false);
+
+  const [
+    judgeResponse,
+    setJudgeResponse,
+  ] = useState("");
+
+  const [
+    judgeFallback,
+    setJudgeFallback,
+  ] = useState(false);
+
   const generationAbortRef =
     useRef(null);
 
@@ -640,6 +656,228 @@ export default function PersistentTextChat() {
         }
       },
       [requestJson],
+    );
+
+  const generateJudgeSynthesis =
+    useCallback(
+      async () => {
+        if (!activeConversationId) {
+          return;
+        }
+
+        setJudgeGenerating(true);
+        setJudgeResponse("");
+        setJudgeFallback(false);
+        setError("");
+
+        const controller =
+          new AbortController();
+
+        generationAbortRef.current =
+          controller;
+
+        try {
+          const response = await fetch(
+            "/api/text-runtime/judge-synthesis",
+            {
+              method: "POST",
+              headers: {
+                "content-type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                conversationId:
+                  activeConversationId,
+              }),
+              signal:
+                controller.signal,
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              await response.text() ||
+              `HTTP ${response.status}`,
+            );
+          }
+
+          if (!response.body) {
+            throw new Error(
+              "AI Judge stream is unavailable.",
+            );
+          }
+
+          const reader =
+            response.body.getReader();
+
+          const decoder =
+            new TextDecoder();
+
+          let buffer = "";
+          let accumulated = "";
+
+          while (true) {
+            const result =
+              await reader.read();
+
+            if (result.done) {
+              break;
+            }
+
+            buffer += decoder.decode(
+              result.value,
+              {
+                stream: true,
+              },
+            );
+
+            const frames =
+              buffer.split("\n\n");
+
+            buffer =
+              frames.pop() || "";
+
+            for (const frame of frames) {
+              const lines =
+                frame.split(/\r?\n/);
+
+              let eventName =
+                "message";
+
+              let dataText = "";
+
+              for (const line of lines) {
+                if (
+                  line.startsWith(
+                    "event:",
+                  )
+                ) {
+                  eventName =
+                    line
+                      .slice(6)
+                      .trim();
+                }
+
+                if (
+                  line.startsWith(
+                    "data:",
+                  )
+                ) {
+                  dataText +=
+                    line
+                      .slice(5)
+                      .trim();
+                }
+              }
+
+              if (!dataText) {
+                continue;
+              }
+
+              let payload = null;
+
+              try {
+                payload =
+                  JSON.parse(dataText);
+              } catch {
+                continue;
+              }
+
+              if (
+                eventName ===
+                  "judge-delta" &&
+                typeof payload.content ===
+                  "string"
+              ) {
+                accumulated +=
+                  payload.content;
+
+                setJudgeResponse(
+                  accumulated,
+                );
+              }
+
+              if (
+                eventName ===
+                "judge-fallback"
+              ) {
+                setJudgeFallback(true);
+
+                setJudgeResponse(
+                  payload.content || "",
+                );
+              }
+
+              if (
+                eventName === "error"
+              ) {
+                throw new Error(
+                  payload.error ||
+                  "AI Judge synthesis failed.",
+                );
+              }
+            }
+          }
+
+          await refresh();
+
+          await refreshMemoryStatus(
+            activeConversationId,
+          );
+        } catch (judgeError) {
+          if (
+            judgeError?.name !==
+            "AbortError"
+          ) {
+            setError(
+              judgeError instanceof Error
+                ? judgeError.message
+                : String(judgeError),
+            );
+          }
+        } finally {
+          generationAbortRef.current =
+            null;
+
+          setJudgeGenerating(false);
+        }
+      },
+      [
+        activeConversationId,
+        refresh,
+        refreshMemoryStatus,
+      ],
+    );
+
+  const stopJudgeSynthesis =
+    useCallback(
+      async () => {
+        if (!activeConversationId) {
+          return;
+        }
+
+        try {
+          await requestJson(
+            "/api/text-runtime/judge-synthesis/stop",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                conversationId:
+                  activeConversationId,
+              }),
+            },
+          );
+        } catch {}
+
+        generationAbortRef.current
+          ?.abort();
+
+        setJudgeGenerating(false);
+      },
+      [
+        activeConversationId,
+        requestJson,
+      ],
     );
 
   const generateMultiModelResponses =
@@ -1850,6 +2088,73 @@ export default function PersistentTextChat() {
                     },
                   )}
                 </div>
+              )}
+
+              {multiEvaluation?.responses
+                ?.length > 0 && (
+                <section className="persistent-chat-judge-panel">
+                  <div className="persistent-chat-judge-heading">
+                    <div>
+                      <strong>
+                        AI Judge Final Answer
+                      </strong>
+
+                      <span>
+                        รวมจุดแข็งของทุกโมเดลเป็นคำตอบสุดท้ายเดียว
+                      </span>
+                    </div>
+
+                    {judgeGenerating ? (
+                      <button
+                        type="button"
+                        className="m3-btn m3-btn-error"
+                        onClick={
+                          stopJudgeSynthesis
+                        }
+                      >
+                        หยุด AI Judge
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="m3-btn m3-btn-filled"
+                        onClick={
+                          generateJudgeSynthesis
+                        }
+                      >
+                        สร้าง Final Answer
+                      </button>
+                    )}
+                  </div>
+
+                  {(judgeGenerating ||
+                    judgeResponse) && (
+                    <article className="persistent-chat-judge-result">
+                      <header>
+                        <strong>
+                          Final Answer
+                        </strong>
+
+                        {judgeFallback && (
+                          <span className="persistent-chat-judge-fallback">
+                            Best Response Fallback
+                          </span>
+                        )}
+                      </header>
+
+                      <p>
+                        {judgeResponse ||
+                          "กำลังวิเคราะห์และรวมคำตอบ..."}
+
+                        {judgeGenerating && (
+                          <span className="persistent-chat-streaming-cursor">
+                            ▍
+                          </span>
+                        )}
+                      </p>
+                    </article>
+                  )}
+                </section>
               )}
             </>
           )}
