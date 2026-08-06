@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "luke-text-model-catalog",
+  "catalogVersion": "1.0.0",
+  "generatedAt": "2026-08-06T00:00:00.000Z",
+  "trust": {
+    "mode": "trusted-source-metadata",
+    "signatureRequiredForProduction": true,
+    "allowedHosts": [
+      "huggingface.co"
+    ],
+    "allowedPublishers": [
+      "Qwen"
+    ]
+  },
+  "models": [
+    {
+      "id": "qwen3-4b",
+      "publisher": "Qwen",
+      "name": {
+        "en": "Qwen3 4B",
+        "th": "Qwen3 4B"
+      },
+      "description": {
+        "en": "Compact multilingual text model for local chat, reasoning and general tasks.",
+        "th": "โมเดลข้อความขนาดกะทัดรัดสำหรับแชท การให้เหตุผล และงานทั่วไปในเครื่อง"
+      },
+      "family": "qwen3",
+      "format": "gguf",
+      "runtime": "llama.cpp",
+      "repository": "Qwen/Qwen3-4B-GGUF",
+      "version": "1.0.0",
+      "contextLength": 32768,
+      "languages": [
+        "th",
+        "en",
+        "zh"
+      ],
+      "recommendedVariant": "q4-k-m",
+      "variants": [
+        {
+          "id": "q4-k-m",
+          "quantization": "Q4_K_M",
+          "filename": "Qwen3-4B-Q4_K_M.gguf",
+          "sizeBytes": 2684354560,
+          "minimumRamBytes": 8589934592,
+          "recommendedRamBytes": 17179869184,
+          "download": {
+            "provider": "huggingface",
+            "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            "metadataUrl": "https://huggingface.co/api/models/Qwen/Qwen3-4B-GGUF",
+            "sha256": null,
+            "resolveSha256FromMetadata": true
+          }
+        }
+      ],
+      "license": {
+        "id": "apache-2.0",
+        "requiresAcceptance": false
+      },
+      "status": "available"
+    }
+  ]
+}

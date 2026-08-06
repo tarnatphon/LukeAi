@@ -7921,6 +7921,419 @@ function cleanupRuntimeStorageCategory(
   };
 }
 
+
+// LUKE_AI_TEXT_MODEL_CATALOG_QUEUE_V1
+const textModelCatalogPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-models",
+  "signed-catalog.json"
+);
+
+const textModelPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-models",
+  "catalog-policy.json"
+);
+
+const textModelQueuePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-models",
+  "download-queue.json"
+);
+
+function readJsonFileStrict(filePath, label) {
+  const value = JSON.parse(
+    fs.readFileSync(filePath, "utf8")
+  );
+
+  if (!value || typeof value !== "object") {
+    throw new Error(`${label} is invalid.`);
+  }
+
+  return value;
+}
+
+function writeJsonFileAtomic(filePath, value) {
+  fs.mkdirSync(
+    path.dirname(filePath),
+    {
+      recursive: true,
+    }
+  );
+
+  const temporaryPath = `${filePath}.tmp`;
+
+  fs.writeFileSync(
+    temporaryPath,
+    JSON.stringify(value, null, 2) + "\n",
+    "utf8"
+  );
+
+  fs.renameSync(
+    temporaryPath,
+    filePath
+  );
+}
+
+function readTextModelCatalog() {
+  const catalog = readJsonFileStrict(
+    textModelCatalogPath,
+    "Text model catalog"
+  );
+
+  if (!Array.isArray(catalog.models)) {
+    throw new Error(
+      "Text model catalog contains no models."
+    );
+  }
+
+  return catalog;
+}
+
+function readTextModelPolicy() {
+  return readJsonFileStrict(
+    textModelPolicyPath,
+    "Text model policy"
+  );
+}
+
+function readTextModelQueue() {
+  const queue = readJsonFileStrict(
+    textModelQueuePath,
+    "Text model queue"
+  );
+
+  if (!Array.isArray(queue.items)) {
+    throw new Error(
+      "Text model queue is invalid."
+    );
+  }
+
+  return queue;
+}
+
+function writeTextModelQueue(queue) {
+  queue.updatedAt = new Date().toISOString();
+
+  writeJsonFileAtomic(
+    textModelQueuePath,
+    queue
+  );
+}
+
+function getCatalogModelVariant(
+  modelId,
+  variantId
+) {
+  const catalog = readTextModelCatalog();
+
+  const model = catalog.models.find(
+    (item) => item.id === modelId
+  );
+
+  if (!model) {
+    const error = new Error(
+      `Unknown text model: ${modelId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const selectedVariantId =
+    variantId ||
+    model.recommendedVariant;
+
+  const variant = (
+    model.variants || []
+  ).find(
+    (item) => item.id === selectedVariantId
+  );
+
+  if (!variant) {
+    const error = new Error(
+      `Unknown model variant: ${selectedVariantId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return {
+    model,
+    variant,
+  };
+}
+
+function validateTrustedModelDownload(
+  model,
+  variant
+) {
+  const catalog = readTextModelCatalog();
+
+  const allowedHosts = new Set(
+    catalog.trust?.allowedHosts || []
+  );
+
+  const allowedPublishers = new Set(
+    catalog.trust?.allowedPublishers || []
+  );
+
+  if (!allowedPublishers.has(model.publisher)) {
+    const error = new Error(
+      "Model publisher is not trusted."
+    );
+
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const downloadUrl = new URL(
+    variant.download?.url
+  );
+
+  if (
+    downloadUrl.protocol !== "https:" ||
+    !allowedHosts.has(downloadUrl.hostname)
+  ) {
+    const error = new Error(
+      "Model download URL is not trusted."
+    );
+
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+async function resolveHuggingFaceSha256(
+  model,
+  variant
+) {
+  if (
+    typeof variant.download?.sha256 === "string" &&
+    /^[a-f0-9]{64}$/i.test(
+      variant.download.sha256
+    )
+  ) {
+    return variant.download.sha256.toLowerCase();
+  }
+
+  if (
+    variant.download?.provider !== "huggingface" ||
+    variant.download?.resolveSha256FromMetadata !== true
+  ) {
+    throw new Error(
+      "Trusted SHA256 is unavailable."
+    );
+  }
+
+  const metadataUrl = new URL(
+    variant.download.metadataUrl
+  );
+
+  if (
+    metadataUrl.protocol !== "https:" ||
+    metadataUrl.hostname !== "huggingface.co"
+  ) {
+    throw new Error(
+      "Untrusted model metadata URL."
+    );
+  }
+
+  const response = await fetch(
+    metadataUrl,
+    {
+      headers: {
+        accept: "application/json",
+        "user-agent":
+          "LUKE-AI-STUDIO/TextModelManager",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to resolve model metadata: HTTP ${response.status}`
+    );
+  }
+
+  const metadata = await response.json();
+
+  const sibling = (
+    metadata.siblings || []
+  ).find(
+    (item) =>
+      item.rfilename === variant.filename
+  );
+
+  const sha256 =
+    sibling?.lfs?.sha256 ||
+    sibling?.xetHash ||
+    null;
+
+  if (
+    typeof sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/i.test(sha256)
+  ) {
+    throw new Error(
+      "Model metadata did not provide a valid SHA256."
+    );
+  }
+
+  return sha256.toLowerCase();
+}
+
+function sanitizeTextModelQueue(queue) {
+  const policy = readTextModelPolicy();
+
+  const maximumBatchSelection =
+    Number(
+      policy.downloadPolicy
+        ?.maximumBatchSelection
+    ) || 3;
+
+  const activeItems = queue.items.filter(
+    (item) =>
+      ![
+        "completed",
+        "cancelled",
+        "failed",
+        "skipped",
+      ].includes(item.state)
+  );
+
+  if (
+    activeItems.length >
+    maximumBatchSelection
+  ) {
+    throw new Error(
+      `Text model queue cannot contain more than ${maximumBatchSelection} active items.`
+    );
+  }
+
+  return queue;
+}
+
+async function enqueueTextModel(
+  modelId,
+  variantId
+) {
+  const policy = readTextModelPolicy();
+
+  const maximumBatchSelection =
+    Number(
+      policy.downloadPolicy
+        ?.maximumBatchSelection
+    ) || 3;
+
+  const queue = readTextModelQueue();
+
+  const activeItems = queue.items.filter(
+    (item) =>
+      ![
+        "completed",
+        "cancelled",
+        "failed",
+        "skipped",
+      ].includes(item.state)
+  );
+
+  if (
+    activeItems.length >=
+    maximumBatchSelection
+  ) {
+    const error = new Error(
+      `เลือกดาวน์โหลดได้สูงสุด ${maximumBatchSelection} โมเดลต่อชุด`
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const duplicate = activeItems.find(
+    (item) =>
+      item.modelId === modelId &&
+      item.variantId === variantId
+  );
+
+  if (duplicate) {
+    const error = new Error(
+      "โมเดลนี้อยู่ในคิวดาวน์โหลดแล้ว"
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const {
+    model,
+    variant,
+  } = getCatalogModelVariant(
+    modelId,
+    variantId
+  );
+
+  validateTrustedModelDownload(
+    model,
+    variant
+  );
+
+  const sha256 =
+    await resolveHuggingFaceSha256(
+      model,
+      variant
+    );
+
+  const now = new Date().toISOString();
+
+  const item = {
+    id:
+      `text-model-${Date.now()}-` +
+      Math.random().toString(16).slice(2, 10),
+    modelId: model.id,
+    variantId: variant.id,
+    publisher: model.publisher,
+    modelName:
+      model.name?.th ||
+      model.name?.en ||
+      model.id,
+    version: model.version,
+    format: model.format,
+    runtime: model.runtime,
+    filename: variant.filename,
+    sizeBytes: variant.sizeBytes,
+    quantization: variant.quantization,
+    download: {
+      url: variant.download.url,
+      sha256,
+    },
+    state: "queued",
+    progress: {
+      percent: 0,
+      downloadedBytes: 0,
+      totalBytes: variant.sizeBytes,
+      speedBytesPerSecond: 0,
+    },
+    queuePosition:
+      activeItems.length + 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  queue.items.push(item);
+
+  sanitizeTextModelQueue(queue);
+  writeTextModelQueue(queue);
+
+  return item;
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -8311,6 +8724,105 @@ const server = http.createServer(async (req, res) => {
             ? error.message
             : String(error),
       });
+    }
+  }
+
+  // GET /api/text-models/catalog
+  if (
+    req.url === "/api/text-models/catalog" &&
+    req.method === "GET"
+  ) {
+    try {
+      const catalog = readTextModelCatalog();
+
+      return json(res, 200, {
+        ok: true,
+        catalogId: catalog.catalogId,
+        catalogVersion:
+          catalog.catalogVersion,
+        trust: catalog.trust,
+        models: catalog.models,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-models/download-queue
+  if (
+    req.url === "/api/text-models/download-queue" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        queue: readTextModelQueue(),
+        policy:
+          readTextModelPolicy()
+            .downloadPolicy,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-models/download-queue
+  if (
+    req.url === "/api/text-models/download-queue" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.modelId !== "string" ||
+        !body.modelId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "modelId is required",
+        });
+      }
+
+      const item =
+        await enqueueTextModel(
+          body.modelId.trim(),
+          typeof body.variantId === "string"
+            ? body.variantId.trim()
+            : undefined
+        );
+
+      return json(res, 201, {
+        ok: true,
+        item,
+        message:
+          "เพิ่มโมเดลลงคิวดาวน์โหลดแล้ว",
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
     }
   }
 
