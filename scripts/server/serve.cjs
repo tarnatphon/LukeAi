@@ -8098,8 +8098,20 @@ function validateTrustedModelDownload(
     variant.download?.url
   );
 
+  const trustedTestLoopback =
+    process.env.NODE_ENV === "test" &&
+    downloadUrl.protocol === "http:" &&
+    [
+      "127.0.0.1",
+      "localhost",
+      "::1",
+    ].includes(downloadUrl.hostname);
+
   if (
-    downloadUrl.protocol !== "https:" ||
+    (
+      downloadUrl.protocol !== "https:" &&
+      !trustedTestLoopback
+    ) ||
     !allowedHosts.has(downloadUrl.hostname)
   ) {
     const error = new Error(
@@ -8331,7 +8343,852 @@ async function enqueueTextModel(
   sanitizeTextModelQueue(queue);
   writeTextModelQueue(queue);
 
+  startTextModelQueueWorker();
+
   return item;
+}
+
+
+// LUKE_AI_TEXT_MODEL_DOWNLOAD_WORKER_V1
+const textModelDownloadControllers = new Map();
+let textModelQueueWorkerRunning = false;
+
+const textModelTerminalStates = new Set([
+  "completed",
+  "cancelled",
+  "failed",
+  "skipped",
+]);
+
+function getTextModelQueueItem(itemId) {
+  return (
+    readTextModelQueue().items.find(
+      (item) => item.id === itemId
+    ) || null
+  );
+}
+
+function updateTextModelQueueItem(
+  itemId,
+  updates = {}
+) {
+  const queue = readTextModelQueue();
+
+  const item = queue.items.find(
+    (entry) => entry.id === itemId
+  );
+
+  if (!item) {
+    const error = new Error(
+      `Text model queue item not found: ${itemId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    updates.progress &&
+    typeof updates.progress === "object"
+  ) {
+    item.progress = {
+      ...(item.progress || {}),
+      ...updates.progress,
+    };
+  }
+
+  for (
+    const [key, value]
+    of Object.entries(updates)
+  ) {
+    if (key !== "progress") {
+      item[key] = value;
+    }
+  }
+
+  item.updatedAt = new Date().toISOString();
+
+  writeTextModelQueue(queue);
+
+  return item;
+}
+
+function normalizeTextModelQueuePositions() {
+  const queue = readTextModelQueue();
+
+  const activeItems = queue.items
+    .filter(
+      (item) =>
+        !textModelTerminalStates.has(item.state)
+    )
+    .sort(
+      (left, right) =>
+        Number(left.queuePosition || 0) -
+        Number(right.queuePosition || 0)
+    );
+
+  activeItems.forEach((item, index) => {
+    item.queuePosition = index + 1;
+  });
+
+  writeTextModelQueue(queue);
+}
+
+function getNextQueuedTextModelItem() {
+  return (
+    readTextModelQueue()
+      .items
+      .filter(
+        (item) => item.state === "queued"
+      )
+      .sort(
+        (left, right) =>
+          Number(left.queuePosition || 0) -
+          Number(right.queuePosition || 0)
+      )[0] || null
+  );
+}
+
+function getTextModelStorageRoot() {
+  if (
+    typeof resolveRuntimeStorageDirectory ===
+    "function"
+  ) {
+    const storage =
+      resolveRuntimeStorageDirectory({
+        create: true,
+        createFallback: true,
+      });
+
+    if (
+      storage.ok &&
+      storage.selectedDirectory
+    ) {
+      return storage.selectedDirectory;
+    }
+  }
+
+  const homeDirectory =
+    process.env.HOME ||
+    process.env.USERPROFILE ||
+    ROOT;
+
+  const fallbackDirectory = path.join(
+    homeDirectory,
+    "Downloads",
+    "LUKE-AI-STUDIO"
+  );
+
+  fs.mkdirSync(
+    fallbackDirectory,
+    {
+      recursive: true,
+    }
+  );
+
+  return fallbackDirectory;
+}
+
+function getTextModelItemPaths(item) {
+  const storageRoot =
+    getTextModelStorageRoot();
+
+  const stagingDirectory = path.join(
+    storageRoot,
+    ".luke-text-model-staging",
+    item.id
+  );
+
+  const modelDirectory = path.join(
+    storageRoot,
+    "models",
+    "text",
+    item.modelId,
+    item.version,
+    item.variantId
+  );
+
+  return {
+    storageRoot,
+    stagingDirectory,
+    modelDirectory,
+    temporaryFile: path.join(
+      stagingDirectory,
+      `${item.filename}.part`
+    ),
+    completedFile: path.join(
+      modelDirectory,
+      item.filename
+    ),
+  };
+}
+
+function calculateTextModelSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash =
+      require("node:crypto")
+        .createHash("sha256");
+
+    const input =
+      fs.createReadStream(filePath);
+
+    input.on("error", reject);
+
+    input.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+
+    input.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+  });
+}
+
+async function downloadTextModelQueueItem(item) {
+  const controller =
+    new AbortController();
+
+  textModelDownloadControllers.set(
+    item.id,
+    controller
+  );
+
+  const paths =
+    getTextModelItemPaths(item);
+
+  fs.mkdirSync(
+    paths.stagingDirectory,
+    {
+      recursive: true,
+    }
+  );
+
+  fs.mkdirSync(
+    paths.modelDirectory,
+    {
+      recursive: true,
+    }
+  );
+
+  let existingBytes = 0;
+
+  if (fs.existsSync(paths.temporaryFile)) {
+    existingBytes =
+      fs.statSync(paths.temporaryFile).size;
+  }
+
+  const headers = {};
+
+  if (existingBytes > 0) {
+    headers.range =
+      `bytes=${existingBytes}-`;
+  }
+
+  updateTextModelQueueItem(
+    item.id,
+    {
+      state: "downloading",
+      error: null,
+      storage: {
+        root: paths.storageRoot,
+        temporaryFile:
+          paths.temporaryFile,
+        completedFile:
+          paths.completedFile,
+      },
+      progress: {
+        downloadedBytes:
+          existingBytes,
+      },
+    }
+  );
+
+  const response = await fetch(
+    item.download.url,
+    {
+      headers,
+      redirect: "follow",
+      signal: controller.signal,
+    }
+  );
+
+  if (
+    !response.ok ||
+    !response.body
+  ) {
+    throw new Error(
+      `Model download failed with HTTP ${response.status}`
+    );
+  }
+
+  const rangeAccepted =
+    existingBytes > 0 &&
+    response.status === 206;
+
+  if (
+    existingBytes > 0 &&
+    !rangeAccepted
+  ) {
+    fs.rmSync(
+      paths.temporaryFile,
+      {
+        force: true,
+      }
+    );
+
+    existingBytes = 0;
+  }
+
+  const contentLength = Number(
+    response.headers.get(
+      "content-length"
+    )
+  );
+
+  const totalBytes =
+    Number.isFinite(contentLength)
+      ? existingBytes + contentLength
+      : Number(item.sizeBytes) || null;
+
+  const output =
+    fs.createWriteStream(
+      paths.temporaryFile,
+      {
+        flags:
+          rangeAccepted
+            ? "a"
+            : "w",
+      }
+    );
+
+  const reader =
+    response.body.getReader();
+
+  let downloadedBytes =
+    existingBytes;
+
+  const startedAt = Date.now();
+  let lastPersistedAt = 0;
+
+  try {
+    while (true) {
+      const result =
+        await reader.read();
+
+      if (result.done) {
+        break;
+      }
+
+      const chunk =
+        Buffer.from(result.value);
+
+      await new Promise(
+        (resolve, reject) => {
+          output.write(
+            chunk,
+            (error) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+
+              resolve();
+            }
+          );
+        }
+      );
+
+      downloadedBytes +=
+        chunk.length;
+
+      const now = Date.now();
+
+      if (
+        now - lastPersistedAt >= 300
+      ) {
+        const elapsedSeconds =
+          Math.max(
+            0.001,
+            (now - startedAt) / 1000
+          );
+
+        const sessionBytes =
+          downloadedBytes -
+          existingBytes;
+
+        const percent =
+          totalBytes
+            ? Math.min(
+                99,
+                Math.floor(
+                  downloadedBytes /
+                  totalBytes *
+                  100
+                )
+              )
+            : 0;
+
+        updateTextModelQueueItem(
+          item.id,
+          {
+            progress: {
+              percent,
+              downloadedBytes,
+              totalBytes,
+              speedBytesPerSecond:
+                Math.floor(
+                  sessionBytes /
+                  elapsedSeconds
+                ),
+            },
+          }
+        );
+
+        lastPersistedAt = now;
+      }
+    }
+  } finally {
+    await new Promise((resolve) => {
+      output.end(resolve);
+    });
+  }
+
+  updateTextModelQueueItem(
+    item.id,
+    {
+      state: "verifying",
+      progress: {
+        percent: 99,
+        downloadedBytes,
+        totalBytes:
+          totalBytes ||
+          downloadedBytes,
+        speedBytesPerSecond: 0,
+      },
+    }
+  );
+
+  const actualSha256 =
+    await calculateTextModelSha256(
+      paths.temporaryFile
+    );
+
+  const expectedSha256 =
+    String(
+      item.download.sha256 || ""
+    ).toLowerCase();
+
+  if (
+    !expectedSha256 ||
+    actualSha256 !== expectedSha256
+  ) {
+    const error = new Error(
+      "Text model SHA256 verification failed."
+    );
+
+    error.code = "CHECKSUM_MISMATCH";
+    throw error;
+  }
+
+  if (fs.existsSync(paths.completedFile)) {
+    const installedSha256 =
+      await calculateTextModelSha256(
+        paths.completedFile
+      );
+
+    if (installedSha256 === expectedSha256) {
+      fs.rmSync(
+        paths.temporaryFile,
+        {
+          force: true,
+        }
+      );
+    } else {
+      const conflictPath =
+        `${paths.completedFile}.previous-${Date.now()}`;
+
+      fs.renameSync(
+        paths.completedFile,
+        conflictPath
+      );
+
+      fs.renameSync(
+        paths.temporaryFile,
+        paths.completedFile
+      );
+    }
+  } else {
+    fs.renameSync(
+      paths.temporaryFile,
+      paths.completedFile
+    );
+  }
+
+  fs.rmSync(
+    paths.stagingDirectory,
+    {
+      recursive: true,
+      force: true,
+    }
+  );
+
+  updateTextModelQueueItem(
+    item.id,
+    {
+      state: "completed",
+      installedPath:
+        paths.completedFile,
+      checksum: {
+        algorithm: "sha256",
+        expected:
+          expectedSha256,
+        actual:
+          actualSha256,
+        verified: true,
+      },
+      completedAt:
+        new Date().toISOString(),
+      progress: {
+        percent: 100,
+        downloadedBytes,
+        totalBytes:
+          totalBytes ||
+          downloadedBytes,
+        speedBytesPerSecond: 0,
+      },
+    }
+  );
+}
+
+async function processTextModelQueue() {
+  if (textModelQueueWorkerRunning) {
+    return;
+  }
+
+  textModelQueueWorkerRunning = true;
+
+  try {
+    while (true) {
+      const item =
+        getNextQueuedTextModelItem();
+
+      if (!item) {
+        break;
+      }
+
+      const queue =
+        readTextModelQueue();
+
+      queue.activeItemId = item.id;
+      writeTextModelQueue(queue);
+
+      try {
+        await downloadTextModelQueueItem(
+          item
+        );
+      } catch (error) {
+        const latestItem =
+          getTextModelQueueItem(item.id);
+
+        const paused =
+          latestItem?.state === "paused";
+
+        const cancelled =
+          latestItem?.state === "cancelled";
+
+        updateTextModelQueueItem(
+          item.id,
+          {
+            state:
+              paused
+                ? "paused"
+                : cancelled
+                  ? "cancelled"
+                  : "failed",
+            error:
+              paused || cancelled
+                ? null
+                : {
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : String(error),
+                    code:
+                      error?.code
+                        ? String(error.code)
+                        : null,
+                    occurredAt:
+                      new Date().toISOString(),
+                  },
+          }
+        );
+      } finally {
+        textModelDownloadControllers.delete(
+          item.id
+        );
+
+        const latestQueue =
+          readTextModelQueue();
+
+        if (
+          latestQueue.activeItemId ===
+          item.id
+        ) {
+          latestQueue.activeItemId = null;
+          writeTextModelQueue(
+            latestQueue
+          );
+        }
+
+        normalizeTextModelQueuePositions();
+      }
+    }
+  } finally {
+    textModelQueueWorkerRunning = false;
+  }
+}
+
+function startTextModelQueueWorker() {
+  setImmediate(() => {
+    processTextModelQueue().catch(
+      (error) => {
+        console.error(
+          "[text-models] Queue worker failed:",
+          error instanceof Error
+            ? error.message
+            : String(error)
+        );
+      }
+    );
+  });
+}
+
+function pauseTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (item.state !== "downloading") {
+    const error = new Error(
+      "Only an active download can be paused."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  updateTextModelQueueItem(
+    itemId,
+    {
+      state: "paused",
+    }
+  );
+
+  textModelDownloadControllers
+    .get(itemId)
+    ?.abort();
+
+  return getTextModelQueueItem(itemId);
+}
+
+function resumeTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    ![
+      "paused",
+      "failed",
+    ].includes(item.state)
+  ) {
+    const error = new Error(
+      "Only paused or failed downloads can resume."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const updated =
+    updateTextModelQueueItem(
+      itemId,
+      {
+        state: "queued",
+        error: null,
+      }
+    );
+
+  startTextModelQueueWorker();
+
+  return updated;
+}
+
+function cancelTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    textModelTerminalStates.has(
+      item.state
+    )
+  ) {
+    const error = new Error(
+      "Queue item is already finished."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const updated =
+    updateTextModelQueueItem(
+      itemId,
+      {
+        state: "cancelled",
+        cancelledAt:
+          new Date().toISOString(),
+      }
+    );
+
+  textModelDownloadControllers
+    .get(itemId)
+    ?.abort();
+
+  normalizeTextModelQueuePositions();
+
+  return updated;
+}
+
+function skipTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (item.state !== "queued") {
+    const error = new Error(
+      "Only queued items can be skipped."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const updated =
+    updateTextModelQueueItem(
+      itemId,
+      {
+        state: "skipped",
+        skippedAt:
+          new Date().toISOString(),
+      }
+    );
+
+  normalizeTextModelQueuePositions();
+
+  return updated;
+}
+
+function moveTextModelQueueItem(
+  itemId,
+  direction
+) {
+  const queue =
+    readTextModelQueue();
+
+  const activeItems = queue.items
+    .filter(
+      (item) =>
+        !textModelTerminalStates.has(
+          item.state
+        )
+    )
+    .sort(
+      (left, right) =>
+        Number(left.queuePosition || 0) -
+        Number(right.queuePosition || 0)
+    );
+
+  const index =
+    activeItems.findIndex(
+      (item) => item.id === itemId
+    );
+
+  if (index < 0) {
+    const error = new Error(
+      "Queue item is not movable."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const targetIndex =
+    direction === "up"
+      ? index - 1
+      : direction === "down"
+        ? index + 1
+        : 0;
+
+  if (
+    targetIndex < 0 ||
+    targetIndex >= activeItems.length
+  ) {
+    return activeItems[index];
+  }
+
+  const current =
+    activeItems[index];
+
+  const target =
+    activeItems[targetIndex];
+
+  const currentPosition =
+    current.queuePosition;
+
+  current.queuePosition =
+    target.queuePosition;
+
+  target.queuePosition =
+    currentPosition;
+
+  writeTextModelQueue(queue);
+  normalizeTextModelQueuePositions();
+
+  return getTextModelQueueItem(itemId);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -8724,6 +9581,84 @@ const server = http.createServer(async (req, res) => {
             ? error.message
             : String(error),
       });
+    }
+  }
+
+  // POST /api/text-models/download-queue/start
+  if (
+    req.url === "/api/text-models/download-queue/start" &&
+    req.method === "POST"
+  ) {
+    startTextModelQueueWorker();
+
+    return json(res, 202, {
+      ok: true,
+      message:
+        "เริ่มประมวลผลคิวดาวน์โหลดแล้ว",
+    });
+  }
+
+  const textModelQueueActionMatch =
+    req.url.match(
+      /^\/api\/text-models\/download-queue\/([^/?]+)\/(pause|resume|cancel|skip|move)$/
+    );
+
+  if (
+    textModelQueueActionMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const itemId =
+        decodeURIComponent(
+          textModelQueueActionMatch[1]
+        );
+
+      const action =
+        textModelQueueActionMatch[2];
+
+      const body =
+        action === "move"
+          ? await readJsonRequestBody(req)
+          : {};
+
+      let item;
+
+      if (action === "pause") {
+        item =
+          pauseTextModelQueueItem(itemId);
+      } else if (action === "resume") {
+        item =
+          resumeTextModelQueueItem(itemId);
+      } else if (action === "cancel") {
+        item =
+          cancelTextModelQueueItem(itemId);
+      } else if (action === "skip") {
+        item =
+          skipTextModelQueueItem(itemId);
+      } else {
+        item =
+          moveTextModelQueueItem(
+            itemId,
+            body.direction
+          );
+      }
+
+      return json(res, 200, {
+        ok: true,
+        item,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
     }
   }
 

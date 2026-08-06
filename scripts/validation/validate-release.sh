@@ -170,3 +170,11 @@ else
   echo "FAIL: Node.js is required for Community Model validation"
   exit 1
 fi
+
+# LUKE AI STUDIO sequential Text Model download validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-text-model-download-worker.cjs
+else
+  echo "FAIL: Node.js is required for Text Model download validation"
+  exit 1
+fi
