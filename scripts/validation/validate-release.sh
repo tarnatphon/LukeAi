@@ -122,3 +122,11 @@ else
   echo "FAIL: Node.js is required for runtime download worker validation"
   exit 1
 fi
+
+# LUKE AI STUDIO runtime download dashboard validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-runtime-dashboard.cjs
+else
+  echo "FAIL: Node.js is required for runtime dashboard validation"
+  exit 1
+fi

@@ -12,6 +12,8 @@ import Home from "./components/Home";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, listLlmConversations, saveLlmConversation, deleteLlmConversation, listSpeechTranscriptions, deleteSpeechTranscription, listTtsOutputs, deleteTtsOutput, stopServer } from "./services/api";
 import "./App.css";
 
+// LUKE_AI_RUNTIME_DASHBOARD_V1
+import RuntimeDownloadDashboard from "./components/RuntimeDownloadDashboard";
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -836,7 +838,10 @@ function App() {
         </div>
 
         <div style={{ display: activeTab === "settings" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
-          <Settings
+          <div className="runtime-dashboard-shell">
+  <RuntimeDownloadDashboard />
+</div>
+<Settings
             constraints={constraints}
             setConstraints={setConstraints}
             activeModel={activeModel}
