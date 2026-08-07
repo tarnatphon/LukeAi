@@ -1,3 +1,8 @@
+// LUKE_AI_S3_COMPATIBLE_STORAGE_IMPORT_V2
+const {
+  S3CompatibleStorageAdapter,
+} = require("./s3-compatible-storage-adapter.cjs");
+
 // LUKE_AI_STORAGE_KEYCHAIN_IMPORT_V1
 const {
   MacOSKeychainCredentialVault,
@@ -17230,6 +17235,22 @@ const unifiedStorageProviderCore =
 const storageCredentialVault =
   new MacOSKeychainCredentialVault();
 
+// LUKE_AI_S3_COMPATIBLE_STORAGE_BOOTSTRAP_V2
+const s3CompatibleStorageAdapter =
+  new S3CompatibleStorageAdapter({
+    providerCore:
+      unifiedStorageProviderCore,
+    credentialVault:
+      storageCredentialVault,
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "s3-transfer-state.json"
+    ),
+  });
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
 
@@ -17411,6 +17432,245 @@ const server = http.createServer(async (req, res) => {
         }
       );
     }
+  }
+
+  // LUKE_AI_S3_COMPATIBLE_STORAGE_API_V2
+
+  if (
+    req.url === "/api/storage/s3/test" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .testConnection(
+            String(
+              body.providerId || ""
+            ).trim()
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/upload" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .uploadFile({
+            providerId:
+              body.providerId,
+            sourcePath:
+              body.sourcePath,
+            objectKey:
+              body.objectKey ||
+              null,
+            contentType:
+              body.contentType ||
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/download" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const storage =
+        storageDestinationManager
+          .resolveActiveDestination();
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .downloadFile({
+            providerId:
+              body.providerId,
+            objectKey:
+              body.objectKey,
+            destinationPath:
+              body.destinationPath,
+            approvedRoot:
+              storage.destination.path,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/delete-request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const confirmation =
+        s3CompatibleStorageAdapter
+          .requestDelete({
+            providerId:
+              body.providerId,
+            objectKey:
+              body.objectKey,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        confirmation,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/delete-confirm" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .confirmDelete({
+            confirmationId:
+              body.confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/delete-cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        s3CompatibleStorageAdapter
+          .cancelDelete({
+            confirmationId:
+              body.confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/status" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      storage:
+        s3CompatibleStorageAdapter
+          .getStatus(),
+    });
   }
 
   // GET /api/storage/providers

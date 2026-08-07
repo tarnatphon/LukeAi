@@ -362,3 +362,11 @@ else
   echo "FAIL: Node.js is required for Storage Keychain and NAS Dashboard validation"
   exit 1
 fi
+
+# LUKE AI STUDIO S3-Compatible Storage Adapter validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-s3-compatible-storage-adapter.cjs
+else
+  echo "FAIL: Node.js is required for S3-Compatible Storage Adapter validation"
+  exit 1
+fi
