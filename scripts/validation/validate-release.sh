@@ -370,3 +370,11 @@ else
   echo "FAIL: Node.js is required for S3-Compatible Storage Adapter validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Cloud Storage Provider Dashboard validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-cloud-storage-provider-dashboard.cjs
+else
+  echo "FAIL: Node.js is required for Cloud Storage Provider Dashboard validation"
+  exit 1
+fi

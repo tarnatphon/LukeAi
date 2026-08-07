@@ -7439,3 +7439,192 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-direction: column;
   }
 }
+
+/* LUKE_AI_CLOUD_STORAGE_PROVIDER_STYLES_V2 */
+.cloud-storage-provider-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.cloud-storage-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cloud-storage-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cloud-storage-heading span,
+.cloud-operation-grid span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+}
+
+.cloud-provider-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 11px;
+  background: var(--md-sys-color-surface);
+}
+
+.cloud-provider-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cloud-provider-form input,
+.cloud-provider-form select,
+.cloud-operation-grid input,
+.cloud-operation-grid select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface-container-lowest);
+  font: inherit;
+}
+
+.cloud-provider-wide,
+.cloud-provider-checkbox {
+  grid-column: 1 / -1;
+}
+
+.cloud-provider-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+}
+
+.cloud-provider-checkbox input {
+  width: auto;
+}
+
+.cloud-provider-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cloud-provider-list article,
+.cloud-operation-grid > div,
+.cloud-delete-confirmations,
+.cloud-transfer-history {
+  padding: 11px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 10px;
+  background: var(--md-sys-color-surface);
+}
+
+.cloud-provider-list article {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.cloud-provider-list header,
+.cloud-transfer-history header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cloud-provider-list span,
+.cloud-provider-list small,
+.cloud-transfer-history span,
+.cloud-transfer-history small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.65rem;
+  overflow-wrap: anywhere;
+}
+
+.cloud-operation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cloud-operation-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cloud-delete-confirmations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cloud-delete-confirmations article {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.cloud-delete-confirmations article > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.cloud-transfer-history > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.cloud-transfer-history article {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.cloud-transfer-history progress {
+  width: 100%;
+}
+
+@media (max-width: 1000px) {
+  .cloud-provider-list,
+  .cloud-operation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .cloud-storage-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cloud-provider-form,
+  .cloud-provider-list,
+  .cloud-operation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-provider-wide,
+  .cloud-provider-checkbox {
+    grid-column: auto;
+  }
+}
