@@ -1,3 +1,8 @@
+// LUKE_AI_UNIFIED_STORAGE_PROVIDER_IMPORT_V1
+const {
+  UnifiedStorageProviderCore,
+} = require("./unified-storage-provider-core.cjs");
+
 // LUKE_AI_STORAGE_FOLDER_PICKER_IMPORT_V2
 const {
   chooseStorageFolder,
@@ -17197,6 +17202,25 @@ const storageDestinationManager =
     ),
   });
 
+// LUKE_AI_UNIFIED_STORAGE_PROVIDER_BOOTSTRAP_V1
+const unifiedStorageProviderCore =
+  new UnifiedStorageProviderCore({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-providers.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-provider-state.json"
+    ),
+  });
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
 
@@ -17207,6 +17231,149 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_STORAGE_DESTINATION_MANAGER_API_V2
 
   // LUKE_AI_STORAGE_SETTINGS_API_V2
+
+  // LUKE_AI_UNIFIED_STORAGE_PROVIDER_API_V1
+
+  // GET /api/storage/providers
+  if (
+    req.url === "/api/storage/providers" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        storage:
+          unifiedStorageProviderCore
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/providers
+  if (
+    req.url === "/api/storage/providers" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const provider =
+        unifiedStorageProviderCore
+          .upsertProvider(
+            body.provider
+          );
+
+      return json(res, 200, {
+        ok: true,
+        provider,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/providers/check
+  if (
+    req.url === "/api/storage/providers/check" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const providerId =
+        String(
+          body.providerId || ""
+        ).trim();
+
+      const result =
+        providerId
+          ? unifiedStorageProviderCore
+              .checkProvider(
+                providerId
+              )
+          : unifiedStorageProviderCore
+              .checkAllProviders();
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/providers/select
+  if (
+    req.url === "/api/storage/providers/select" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        unifiedStorageProviderCore
+          .selectProvider({
+            capability:
+              body.capability ||
+              "write",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+          providers:
+            error.providers || null,
+        }
+      );
+    }
+  }
 
   // GET /api/storage/settings
   if (
