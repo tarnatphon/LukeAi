@@ -510,6 +510,55 @@ class UnifiedStorageProviderCore {
     return provider;
   }
 
+  // LUKE_AI_PROVIDER_CREDENTIAL_REFERENCE_V1
+  setCredentialReference({
+    providerId,
+    credentialReference,
+  }) {
+    const provider =
+      this.getProvider(
+        providerId
+      );
+
+    const reference =
+      String(
+        credentialReference || ""
+      ).trim();
+
+    if (!reference) {
+      const error =
+        new Error(
+          "Credential reference is required."
+        );
+
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return this.upsertProvider({
+      ...provider,
+      credentialReference:
+        reference,
+      configurationStatus:
+        "configured",
+    });
+  }
+
+  clearCredentialReference(
+    providerId
+  ) {
+    const provider =
+      this.getProvider(
+        providerId
+      );
+
+    return this.upsertProvider({
+      ...provider,
+      credentialReference:
+        null,
+    });
+  }
+
   removeProvider(providerId) {
     const id =
       sanitizeId(

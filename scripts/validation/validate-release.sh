@@ -354,3 +354,11 @@ else
   echo "FAIL: Node.js is required for Unified Storage Provider Core validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Storage Keychain and NAS Dashboard validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-keychain-nas-dashboard.cjs
+else
+  echo "FAIL: Node.js is required for Storage Keychain and NAS Dashboard validation"
+  exit 1
+fi

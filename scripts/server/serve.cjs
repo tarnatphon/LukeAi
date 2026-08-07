@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_KEYCHAIN_IMPORT_V1
+const {
+  MacOSKeychainCredentialVault,
+} = require("./macos-keychain-credential-vault.cjs");
+
 // LUKE_AI_UNIFIED_STORAGE_PROVIDER_IMPORT_V1
 const {
   UnifiedStorageProviderCore,
@@ -17221,6 +17226,10 @@ const unifiedStorageProviderCore =
     ),
   });
 
+// LUKE_AI_STORAGE_KEYCHAIN_BOOTSTRAP_V1
+const storageCredentialVault =
+  new MacOSKeychainCredentialVault();
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
 
@@ -17233,6 +17242,176 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_STORAGE_SETTINGS_API_V2
 
   // LUKE_AI_UNIFIED_STORAGE_PROVIDER_API_V1
+
+  // LUKE_AI_STORAGE_KEYCHAIN_API_V1
+
+  // POST /api/storage/credentials
+  if (
+    req.url === "/api/storage/credentials" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const providerId =
+        String(
+          body.providerId || ""
+        ).trim();
+
+      if (!providerId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "providerId is required",
+        });
+      }
+
+      const saved =
+        await storageCredentialVault
+          .save({
+            reference:
+              body.credentialReference ||
+              null,
+            providerId,
+            credential:
+              body.credential,
+          });
+
+      const provider =
+        unifiedStorageProviderCore
+          .setCredentialReference({
+            providerId,
+            credentialReference:
+              saved.reference,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        credential: saved,
+        provider,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/credentials/status
+  if (
+    req.url === "/api/storage/credentials/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const reference =
+        String(
+          body.credentialReference || ""
+        ).trim();
+
+      if (!reference) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "credentialReference is required",
+        });
+      }
+
+      const credential =
+        await storageCredentialVault
+          .getSummary(
+            reference
+          );
+
+      return json(res, 200, {
+        ok: true,
+        credential,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/credentials/delete
+  if (
+    req.url === "/api/storage/credentials/delete" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const providerId =
+        String(
+          body.providerId || ""
+        ).trim();
+
+      const reference =
+        String(
+          body.credentialReference || ""
+        ).trim();
+
+      if (
+        !providerId ||
+        !reference
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "providerId and credentialReference are required",
+        });
+      }
+
+      const deleted =
+        await storageCredentialVault
+          .delete(reference);
+
+      const provider =
+        unifiedStorageProviderCore
+          .clearCredentialReference(
+            providerId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        deleted,
+        provider,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   // GET /api/storage/providers
   if (

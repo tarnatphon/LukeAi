@@ -22,6 +22,9 @@ import {
 /* LUKE_AI_STORAGE_DESTINATION_PANEL_IMPORT_FINAL_V1 */
 import StorageDestinationPanel from "./StorageDestinationPanel.jsx";
 
+/* LUKE_AI_STORAGE_PROVIDER_PANEL_IMPORT_V2 */
+import StorageProviderPanel from "./StorageProviderPanel.jsx";
+
 function formatDate(value) {
   if (!value) {
     return "";
@@ -3130,6 +3133,12 @@ export default function PersistentTextChat() {
         </div>
 
         {/* LUKE_AI_STORAGE_DESTINATION_PANEL_MOUNT_FINAL_V1 */}
+        {/* LUKE_AI_STORAGE_PROVIDER_PANEL_MOUNT_V2 */}
+        <StorageProviderPanel
+          requestJson={requestJson}
+          setError={setError}
+        />
+
         <StorageDestinationPanel
           requestJson={requestJson}
           setError={setError}
