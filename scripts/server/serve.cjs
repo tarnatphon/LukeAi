@@ -1,3 +1,8 @@
+// LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_IMPORT_V2
+const {
+  UnifiedStorageTransferQueue,
+} = require("./unified-storage-transfer-queue.cjs");
+
 // LUKE_AI_S3_COMPATIBLE_STORAGE_IMPORT_V2
 const {
   S3CompatibleStorageAdapter,
@@ -17251,6 +17256,23 @@ const s3CompatibleStorageAdapter =
     ),
   });
 
+// LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_BOOTSTRAP_V2
+const unifiedStorageTransferQueue =
+  new UnifiedStorageTransferQueue({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "unified-transfer-queue.json"
+    ),
+    providerCore:
+      unifiedStorageProviderCore,
+    s3Adapter:
+      s3CompatibleStorageAdapter,
+    maxConcurrent: 1,
+  });
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
 
@@ -17671,6 +17693,149 @@ const server = http.createServer(async (req, res) => {
         s3CompatibleStorageAdapter
           .getStatus(),
     });
+  }
+
+  // LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_API_V2
+
+  // GET /api/storage/queue
+  if (
+    req.url === "/api/storage/queue" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      queue:
+        unifiedStorageTransferQueue
+          .getStatus(),
+    });
+  }
+
+  // POST /api/storage/queue/enqueue
+  if (
+    req.url === "/api/storage/queue/enqueue" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const job =
+        unifiedStorageTransferQueue
+          .enqueue(
+            body.job
+          );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/queue/pause
+  if (
+    req.url === "/api/storage/queue/pause" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      result:
+        unifiedStorageTransferQueue
+          .pause(),
+    });
+  }
+
+  // POST /api/storage/queue/resume
+  if (
+    req.url === "/api/storage/queue/resume" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      result:
+        unifiedStorageTransferQueue
+          .resume(),
+    });
+  }
+
+  // POST /api/storage/queue/cancel
+  if (
+    req.url === "/api/storage/queue/cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const job =
+        unifiedStorageTransferQueue
+          .cancel(
+            body.jobId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/queue/retry
+  if (
+    req.url === "/api/storage/queue/retry" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const job =
+        unifiedStorageTransferQueue
+          .retry(
+            body.jobId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
   }
 
   // GET /api/storage/providers

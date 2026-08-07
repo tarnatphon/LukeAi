@@ -378,3 +378,11 @@ else
   echo "FAIL: Node.js is required for Cloud Storage Provider Dashboard validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Unified Storage Transfer Queue validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-unified-storage-transfer-queue.cjs
+else
+  echo "FAIL: Node.js is required for Unified Storage Transfer Queue validation"
+  exit 1
+fi
