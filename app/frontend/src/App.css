@@ -7119,3 +7119,181 @@ html[data-theme^="dark"] .settings-subsection:hover {
   border-radius: 999px;
   background: var(--md-sys-color-primary);
 }
+
+/* LUKE_AI_STORAGE_DESTINATION_DASHBOARD_STYLES_FINAL_V1 */
+.storage-destination-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.storage-destination-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.storage-destination-heading > div,
+.storage-transfer-panel > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.storage-destination-heading span,
+.storage-transfer-panel span,
+.storage-deletion-confirmations span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.7rem;
+}
+
+.storage-destination-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-destination-status > div,
+.storage-transfer-panel,
+.storage-deletion-confirmations,
+.storage-transfer-history {
+  padding: 11px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 10px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-destination-status > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.storage-destination-status span,
+.storage-destination-status small,
+.storage-transfer-history small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+  overflow-wrap: anywhere;
+}
+
+.storage-destination-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 11px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-destination-settings label,
+.storage-transfer-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.storage-destination-settings label > span,
+.storage-transfer-panel label > span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.storage-destination-settings input,
+.storage-destination-settings select,
+.storage-transfer-panel input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface-container-lowest);
+  font: inherit;
+}
+
+.storage-folder-field,
+.storage-setting-checkbox {
+  grid-column: 1 / -1;
+}
+
+.storage-folder-field > div {
+  display: flex;
+  gap: 7px;
+}
+
+.storage-folder-field input {
+  flex: 1;
+}
+
+.storage-setting-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+}
+
+.storage-setting-checkbox input {
+  width: auto;
+}
+
+.storage-transfer-panel,
+.storage-deletion-confirmations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.storage-deletion-confirmations article,
+.storage-transfer-history article {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.storage-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.storage-transfer-history summary {
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.storage-transfer-history > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+@media (max-width: 850px) {
+  .storage-destination-status,
+  .storage-destination-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .storage-folder-field,
+  .storage-setting-checkbox {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 650px) {
+  .storage-destination-heading,
+  .storage-folder-field > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

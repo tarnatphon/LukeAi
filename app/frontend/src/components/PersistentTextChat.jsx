@@ -19,6 +19,9 @@ import {
   useState,
 } from "react";
 
+/* LUKE_AI_STORAGE_DESTINATION_PANEL_IMPORT_FINAL_V1 */
+import StorageDestinationPanel from "./StorageDestinationPanel.jsx";
+
 function formatDate(value) {
   if (!value) {
     return "";
@@ -3125,6 +3128,12 @@ export default function PersistentTextChat() {
             </article>
           )}
         </div>
+
+        {/* LUKE_AI_STORAGE_DESTINATION_PANEL_MOUNT_FINAL_V1 */}
+        <StorageDestinationPanel
+          requestJson={requestJson}
+          setError={setError}
+        />
 
         <section className="persistent-chat-runtime-detection-panel">
           <div className="persistent-chat-runtime-detection-heading">

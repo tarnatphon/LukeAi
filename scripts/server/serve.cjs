@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_FOLDER_PICKER_IMPORT_V2
+const {
+  chooseStorageFolder,
+} = require("./storage-folder-picker.cjs");
+
 // LUKE_AI_STORAGE_DESTINATION_MANAGER_IMPORT_V2
 const {
   StorageDestinationManager,
@@ -17200,6 +17205,116 @@ const server = http.createServer(async (req, res) => {
 
   // LUKE_AI_RUNTIME_INSTALL_PREFLIGHT_API_V2
   // LUKE_AI_STORAGE_DESTINATION_MANAGER_API_V2
+
+  // LUKE_AI_STORAGE_SETTINGS_API_V2
+
+  // GET /api/storage/settings
+  if (
+    req.url === "/api/storage/settings" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        policy:
+          storageDestinationManager
+            .getPolicy(),
+        storage:
+          storageDestinationManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // PUT /api/storage/settings
+  if (
+    req.url === "/api/storage/settings" &&
+    req.method === "PUT"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const policy =
+        storageDestinationManager
+          .updatePolicy(
+            body.policy
+          );
+
+      return json(res, 200, {
+        ok: true,
+        policy,
+        storage:
+          storageDestinationManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/choose-folder
+  if (
+    req.url === "/api/storage/choose-folder" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await chooseStorageFolder({
+          prompt:
+            body.prompt ||
+            "Choose a storage folder for LUKE AI STUDIO",
+          defaultLocation:
+            body.defaultLocation ||
+            null,
+        });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          cancelled:
+            error.cancelled ===
+            true,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   // GET /api/storage/status
   if (

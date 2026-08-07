@@ -338,3 +338,11 @@ else
   echo "FAIL: Node.js is required for Storage Destination Manager validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Storage Destination Dashboard validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-destination-dashboard.cjs
+else
+  echo "FAIL: Node.js is required for Storage Destination Dashboard validation"
+  exit 1
+fi

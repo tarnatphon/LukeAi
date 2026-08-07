@@ -153,6 +153,212 @@ class StorageDestinationManager {
     );
   }
 
+  // LUKE_AI_STORAGE_POLICY_MANAGEMENT_V1
+  getPolicy() {
+    return this.readPolicy();
+  }
+
+  updatePolicy(input) {
+    const current =
+      this.readPolicy();
+
+    const source =
+      input &&
+      typeof input === "object"
+        ? input
+        : {};
+
+    const allowedModes =
+      new Set([
+        "automatic",
+        "external",
+        "local",
+        "custom",
+      ]);
+
+    const selectionMode =
+      String(
+        source.selectionMode ??
+        current.selectionMode ??
+        "automatic"
+      ).trim();
+
+    if (
+      !allowedModes.has(
+        selectionMode
+      )
+    ) {
+      const error =
+        new Error(
+          "Unsupported storage selection mode."
+        );
+
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const preferred =
+      source.preferredDestination &&
+      typeof source.preferredDestination ===
+        "object"
+        ? source.preferredDestination
+        : {};
+
+    const localFallback =
+      source.localFallback &&
+      typeof source.localFallback ===
+        "object"
+        ? source.localFallback
+        : {};
+
+    const custom =
+      source.customDestination &&
+      typeof source.customDestination ===
+        "object"
+        ? source.customDestination
+        : {};
+
+    const volumeName =
+      String(
+        preferred.volumeName ??
+        current.preferredDestination
+          ?.volumeName ??
+        "EXTERNAL Drive"
+      )
+        .replaceAll("/", "")
+        .replaceAll("\\", "")
+        .trim();
+
+    if (!volumeName) {
+      const error =
+        new Error(
+          "External Drive name is required."
+        );
+
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const relativePath =
+      String(
+        preferred.relativePath ??
+        current.preferredDestination
+          ?.relativePath ??
+        "ai/ai-downloads"
+      )
+        .replace(/^[/\\]+/, "")
+        .trim();
+
+    if (
+      !relativePath ||
+      relativePath
+        .split(/[\\/]+/)
+        .includes("..")
+    ) {
+      const error =
+        new Error(
+          "External relative path is invalid."
+        );
+
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const localPath =
+      String(
+        localFallback.path ??
+        current.localFallback
+          ?.path ??
+        "~/Library/Application Support/LUKE AI STUDIO/downloads"
+      ).trim();
+
+    const customPath =
+      String(
+        custom.path ??
+        current.customDestination
+          ?.path ??
+        ""
+      ).trim();
+
+    if (
+      selectionMode ===
+        "custom" &&
+      !customPath
+    ) {
+      const error =
+        new Error(
+          "Custom destination path is required."
+        );
+
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const next = {
+      ...current,
+      selectionMode,
+      preferredDestination: {
+        ...(current.preferredDestination ||
+          {}),
+        type: "external",
+        volumeName,
+        relativePath,
+      },
+      localFallback: {
+        ...(current.localFallback ||
+          {}),
+        enabled:
+          localFallback.enabled !==
+          undefined
+            ? Boolean(
+                localFallback.enabled
+              )
+            : current.localFallback
+                ?.enabled !== false,
+        path:
+          localPath,
+      },
+      customDestination: {
+        ...(current.customDestination ||
+          {}),
+        enabled:
+          selectionMode ===
+          "custom",
+        path:
+          customPath,
+      },
+      transfer: {
+        ...(current.transfer || {}),
+        automaticallyTransferWhenAvailable:
+          false,
+        preserveLocalCopyAfterTransfer:
+          true,
+        requireConfirmationBeforeLocalDeletion:
+          true,
+        maximumConcurrentTransfers:
+          1,
+      },
+      security: {
+        ...(current.security || {}),
+        allowShell:
+          false,
+        allowAutomaticDeletion:
+          false,
+        allowPathOutsideApprovedRoots:
+          false,
+      },
+    };
+
+    writeJsonAtomic(
+      this.policyPath,
+      next
+    );
+
+    this.resolveActiveDestination();
+
+    return next;
+  }
+
   readState() {
     if (
       !fs.existsSync(
