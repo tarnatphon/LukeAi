@@ -34,6 +34,9 @@ import UnifiedTransferQueuePanel from "./UnifiedTransferQueuePanel.jsx";
 /* LUKE_AI_STORAGE_AVAILABILITY_WATCHER_IMPORT_V2 */
 import StorageAvailabilityWatcherPanel from "./StorageAvailabilityWatcherPanel.jsx";
 
+/* LUKE_AI_STORAGE_HEALTH_SCORE_IMPORT_V2 */
+import StorageHealthScorePanel from "./StorageHealthScorePanel.jsx";
+
 function formatDate(value) {
   if (!value) {
     return "";
@@ -3146,6 +3149,12 @@ export default function PersistentTextChat() {
         {/* LUKE_AI_CLOUD_STORAGE_PANEL_MOUNT_V2 */}
         {/* LUKE_AI_UNIFIED_TRANSFER_QUEUE_MOUNT_V1 */}
         {/* LUKE_AI_STORAGE_AVAILABILITY_WATCHER_MOUNT_V2 */}
+        {/* LUKE_AI_STORAGE_HEALTH_SCORE_MOUNT_V2 */}
+        <StorageHealthScorePanel
+          requestJson={requestJson}
+          setError={setError}
+        />
+
         <StorageAvailabilityWatcherPanel
           requestJson={requestJson}
           setError={setError}

@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_HEALTH_SCORER_IMPORT_V2
+const {
+  StorageHealthScorer,
+} = require("./storage-health-scorer.cjs");
+
 // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_IMPORT_V2
 const {
   StorageAvailabilityWatcher,
@@ -17262,6 +17267,20 @@ const s3CompatibleStorageAdapter =
   });
 
 // LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_BOOTSTRAP_V2
+// LUKE_AI_STORAGE_HEALTH_SCORER_BOOTSTRAP_V2
+const storageHealthScorer =
+  new StorageHealthScorer({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-health-score.json"
+    ),
+    providerCore:
+      unifiedStorageProviderCore,
+  });
+
 const unifiedStorageTransferQueue =
   new UnifiedStorageTransferQueue({
     statePath: path.join(
@@ -17275,6 +17294,8 @@ const unifiedStorageTransferQueue =
       unifiedStorageProviderCore,
     s3Adapter:
       s3CompatibleStorageAdapter,
+    healthScorer:
+      storageHealthScorer,
     maxConcurrent: 1,
   });
 
@@ -17801,6 +17822,83 @@ const server = http.createServer(async (req, res) => {
             .setIntervalMs(
               body.intervalMs
             ),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_HEALTH_SCORER_API_V2
+
+  if (
+    req.url === "/api/storage/health" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      health:
+        storageHealthScorer
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/health/evaluate" &&
+    req.method === "POST"
+  ) {
+    try {
+      const providers =
+        storageHealthScorer
+          .evaluateAll();
+
+      return json(res, 200, {
+        ok: true,
+        providers,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/health/select" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const selected =
+        storageHealthScorer
+          .selectBestProvider({
+            capability:
+              body.capability ||
+              "write",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        selected,
       });
     } catch (error) {
       return json(

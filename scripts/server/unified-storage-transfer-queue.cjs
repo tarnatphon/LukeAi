@@ -125,6 +125,7 @@ class UnifiedStorageTransferQueue {
     statePath,
     providerCore,
     s3Adapter,
+    healthScorer = null,
     maxConcurrent = 1,
   }) {
     this.statePath =
@@ -135,6 +136,9 @@ class UnifiedStorageTransferQueue {
 
     this.s3Adapter =
       s3Adapter;
+
+    this.healthScorer =
+      healthScorer;
 
     this.maxConcurrent =
       Math.max(
@@ -513,11 +517,17 @@ class UnifiedStorageTransferQueue {
               job.destinationProviderId
             );
       } else {
+        // LUKE_AI_SMART_PROVIDER_SELECTION_V1
         const selected =
-          this.providerCore
-            .selectProvider({
-              capability: "write",
-            });
+          this.healthScorer
+            ? this.healthScorer
+                .selectBestProvider({
+                  capability: "write",
+                })
+            : this.providerCore
+                .selectProvider({
+                  capability: "write",
+                });
 
         provider =
           selected.provider;
@@ -634,6 +644,16 @@ class UnifiedStorageTransferQueue {
           true;
       }
 
+      if (
+        this.healthScorer &&
+        provider?.id
+      ) {
+        this.healthScorer
+          .recordSuccess(
+            provider.id
+          );
+      }
+
       job.status =
         "completed";
 
@@ -663,6 +683,16 @@ class UnifiedStorageTransferQueue {
 
       return job;
     } catch (error) {
+      if (
+        this.healthScorer &&
+        job.destinationProviderId
+      ) {
+        this.healthScorer
+          .recordFailure(
+            job.destinationProviderId
+          );
+      }
+
       const retryable =
         isRetryableError(
           error
