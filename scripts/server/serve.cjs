@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_POLICY_IMPORT_V2
+const {
+  StoragePolicyManager,
+} = require("./storage-policy-manager.cjs");
+
 // LUKE_AI_STORAGE_HEALTH_SCORER_IMPORT_V2
 const {
   StorageHealthScorer,
@@ -17281,6 +17286,27 @@ const storageHealthScorer =
       unifiedStorageProviderCore,
   });
 
+// LUKE_AI_STORAGE_POLICY_BOOTSTRAP_V2
+const storagePolicyManager =
+  new StoragePolicyManager({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-policy-profiles.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-policy-state.json"
+    ),
+    healthScorer:
+      storageHealthScorer,
+  });
+
 const unifiedStorageTransferQueue =
   new UnifiedStorageTransferQueue({
     statePath: path.join(
@@ -17296,6 +17322,8 @@ const unifiedStorageTransferQueue =
       s3CompatibleStorageAdapter,
     healthScorer:
       storageHealthScorer,
+    policyManager:
+      storagePolicyManager,
     maxConcurrent: 1,
   });
 
@@ -17899,6 +17927,58 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         selected,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_POLICY_API_V2
+
+  if (
+    req.url === "/api/storage/policies" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      policies:
+        storagePolicyManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/policies/select" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storagePolicyManager
+          .selectForWorkload({
+            workloadType:
+              body.workloadType ||
+              "models",
+            capability:
+              body.capability ||
+              "write",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        result,
       });
     } catch (error) {
       return json(

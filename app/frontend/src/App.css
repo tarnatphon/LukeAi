@@ -7884,3 +7884,91 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_STORAGE_POLICY_PROFILES_STYLES_V2 */
+.storage-policy-profiles-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+}
+
+.storage-policy-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storage-policy-heading > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.storage-policy-heading > div:first-child {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.storage-policy-heading select {
+  padding: 8px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
+  color: inherit;
+}
+
+.storage-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-policy-grid article,
+.storage-policy-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-policy-grid header {
+  display: flex;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.storage-policy-grid span,
+.storage-policy-grid small,
+.storage-policy-selection span,
+.storage-policy-heading span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.65rem;
+}
+
+.storage-policy-grid details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+@media (max-width: 900px) {
+  .storage-policy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .storage-policy-heading {
+    flex-direction: column;
+  }
+
+  .storage-policy-grid {
+    grid-template-columns: 1fr;
+  }
+}

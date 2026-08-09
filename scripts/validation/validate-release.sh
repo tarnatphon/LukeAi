@@ -402,3 +402,11 @@ else
   echo "FAIL: Node.js is required for Storage Health Scoring validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Storage Policy Profiles validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-policy-profiles.cjs
+else
+  echo "FAIL: Node.js is required for Storage Policy Profiles validation"
+  exit 1
+fi

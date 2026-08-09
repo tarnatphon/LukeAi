@@ -37,6 +37,9 @@ import StorageAvailabilityWatcherPanel from "./StorageAvailabilityWatcherPanel.j
 /* LUKE_AI_STORAGE_HEALTH_SCORE_IMPORT_V2 */
 import StorageHealthScorePanel from "./StorageHealthScorePanel.jsx";
 
+/* LUKE_AI_STORAGE_POLICY_PROFILES_IMPORT_V2 */
+import StoragePolicyProfilesPanel from "./StoragePolicyProfilesPanel.jsx";
+
 function formatDate(value) {
   if (!value) {
     return "";
@@ -3150,6 +3153,12 @@ export default function PersistentTextChat() {
         {/* LUKE_AI_UNIFIED_TRANSFER_QUEUE_MOUNT_V1 */}
         {/* LUKE_AI_STORAGE_AVAILABILITY_WATCHER_MOUNT_V2 */}
         {/* LUKE_AI_STORAGE_HEALTH_SCORE_MOUNT_V2 */}
+        {/* LUKE_AI_STORAGE_POLICY_PROFILES_MOUNT_V2 */}
+        <StoragePolicyProfilesPanel
+          requestJson={requestJson}
+          setError={setError}
+        />
+
         <StorageHealthScorePanel
           requestJson={requestJson}
           setError={setError}

@@ -84,11 +84,18 @@ function main() {
     );
   }
 
-  requireText(
-    queue,
-    "LUKE_AI_SMART_PROVIDER_SELECTION_V1",
-    "Unified Queue"
-  );
+  if (
+    !queue.includes(
+      "LUKE_AI_SMART_PROVIDER_SELECTION_V1"
+    ) &&
+    !queue.includes(
+      "LUKE_AI_WORKLOAD_AWARE_ROUTING_V1"
+    )
+  ) {
+    throw new Error(
+      "Unified Queue missing Smart or Workload-Aware routing marker"
+    );
+  }
 
   for (const value of [
     "/api/storage/health",

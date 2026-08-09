@@ -126,6 +126,7 @@ class UnifiedStorageTransferQueue {
     providerCore,
     s3Adapter,
     healthScorer = null,
+    policyManager = null,
     maxConcurrent = 1,
   }) {
     this.statePath =
@@ -139,6 +140,9 @@ class UnifiedStorageTransferQueue {
 
     this.healthScorer =
       healthScorer;
+
+    this.policyManager =
+      policyManager;
 
     this.maxConcurrent =
       Math.max(
@@ -256,6 +260,13 @@ class UnifiedStorageTransferQueue {
       objectKey:
         input.objectKey ||
         null,
+      workloadType:
+        String(
+          input.workloadType ||
+          "models"
+        )
+          .trim()
+          .toLowerCase(),
       attempts: 0,
       maxAttempts:
         Math.max(
@@ -517,20 +528,53 @@ class UnifiedStorageTransferQueue {
               job.destinationProviderId
             );
       } else {
-        // LUKE_AI_SMART_PROVIDER_SELECTION_V1
-        const selected =
-          this.healthScorer
-            ? this.healthScorer
-                .selectBestProvider({
-                  capability: "write",
-                })
-            : this.providerCore
-                .selectProvider({
-                  capability: "write",
-                });
+        // LUKE_AI_WORKLOAD_AWARE_ROUTING_V1
+        if (
+          this.policyManager
+        ) {
+          const policySelection =
+            this.policyManager
+              .selectForWorkload({
+                workloadType:
+                  job.workloadType ||
+                  "models",
+                capability:
+                  "write",
+              });
 
-        provider =
-          selected.provider;
+          provider =
+            policySelection
+              .selected
+              .provider;
+
+          job.policySelection = {
+            workloadType:
+              policySelection
+                .profile.id,
+            providerId:
+              provider.id,
+            finalScore:
+              policySelection
+                .selected
+                .finalScore,
+          };
+        } else {
+          const selected =
+            this.healthScorer
+              ? this.healthScorer
+                  .selectBestProvider({
+                    capability:
+                      "write",
+                  })
+              : this.providerCore
+                  .selectProvider({
+                    capability:
+                      "write",
+                  });
+
+          provider =
+            selected.provider;
+        }
       }
 
       job.destinationProviderId =
