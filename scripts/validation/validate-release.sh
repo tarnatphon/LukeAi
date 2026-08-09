@@ -506,3 +506,11 @@ else
   echo "FAIL: Node.js is required for Image-to-Video Runtime Capability validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Image-to-Video Runtime UI Integration
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-runtime-ui-integration.cjs
+else
+  echo "FAIL: Node.js is required for Image-to-Video Runtime UI Integration validation"
+  exit 1
+fi

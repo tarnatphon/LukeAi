@@ -33,15 +33,15 @@
   --md-sys-color-on-surface: #0f172a;
   --md-sys-color-surface-variant: rgba(241, 245, 249, 0.8);
   --md-sys-color-on-surface-variant: #475569;
-  
+
   /* Text description variables - HIGH CONTRAST for readability */
   --md-sys-color-outline: #64748b;            /* Used for description texts in JSX */
   --md-sys-color-outline-variant: #94a3b8;    /* Used for sub-description texts in JSX */
-  
+
   /* Border variables - SOFT TRANSLUCENT borders */
   --border-color: rgba(15, 23, 42, 0.08);
   --border-color-muted: rgba(15, 23, 42, 0.05);
-  
+
   --md-sys-color-error: #ef4444;
   --md-sys-color-on-error: #ffffff;
   --md-sys-color-success: #10b981;
@@ -73,15 +73,15 @@ html[data-theme="dark"] {
   --md-sys-color-on-surface: #f4f4f5;
   --md-sys-color-surface-variant: rgba(26, 29, 41, 0.55);
   --md-sys-color-on-surface-variant: #a1a1aa;
-  
+
   /* Text description variables - HIGH CONTRAST for readability */
   --md-sys-color-outline: #a1a1aa;            /* Used for description texts in JSX */
   --md-sys-color-outline-variant: #71717a;    /* Used for sub-description texts in JSX */
-  
+
   /* Border variables - SOFT TRANSLUCENT borders */
   --border-color: rgba(255, 255, 255, 0.09);
   --border-color-muted: rgba(255, 255, 255, 0.05);
-  
+
   --md-sys-color-error: #f87171;
   --md-sys-color-on-error: #ffffff;
   --md-sys-color-success: #34d399;
@@ -383,7 +383,7 @@ html[data-theme="dark-oled"] body {
 
 body {
   background-color: var(--md-sys-color-background);
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, var(--md-sys-color-primary-container) 0px, transparent 50%),
     radial-gradient(at 100% 0%, var(--md-sys-color-secondary-container) 0px, transparent 40%);
   color: var(--md-sys-color-on-background);
@@ -895,8 +895,8 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 18px;
   padding: 10px 12px 8px;
-  transition: border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
-              box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+  transition: border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
               background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1922,8 +1922,8 @@ html[data-theme^="dark"] .m3-btn-error:hover:not(:disabled) {
   width: 100%;
   height: 5px;
   border-radius: var(--md-shape-corner-full);
-  background: linear-gradient(90deg, 
-    var(--md-sys-color-primary) var(--value, 50%), 
+  background: linear-gradient(90deg,
+    var(--md-sys-color-primary) var(--value, 50%),
     var(--border-color) var(--value, 50%)
   );
   outline: none;
@@ -2130,7 +2130,7 @@ html[data-theme^="dark"] .m3-segment-item:hover:not(.active):not(.disabled) {
 }
 
 .aspect-ratio-btn.active {
-  background: linear-gradient(135deg, 
+  background: linear-gradient(135deg,
     color-mix(in srgb, var(--md-sys-color-primary-container) 80%, transparent),
     color-mix(in srgb, var(--md-sys-color-secondary-container) 50%, transparent)
   ) !important;
@@ -3364,7 +3364,7 @@ html[data-theme^="dark"] .collapsible-card:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, 
+  background: linear-gradient(135deg,
     color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent),
     color-mix(in srgb, var(--md-sys-color-secondary) 8%, transparent)
   );
@@ -3448,7 +3448,7 @@ html[data-theme^="dark"] .settings-section-header:hover {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: linear-gradient(135deg, 
+  background: linear-gradient(135deg,
     color-mix(in srgb, var(--md-sys-color-primary) 15%, transparent),
     color-mix(in srgb, var(--md-sys-color-secondary) 10%, transparent)
   );
@@ -3557,7 +3557,7 @@ html[data-theme^="dark"] .settings-section-header:hover {
   font-size: 0.72rem;
   padding: 3px 10px;
   border-radius: 8px;
-  background: linear-gradient(135deg, 
+  background: linear-gradient(135deg,
     var(--md-sys-color-primary-container),
     color-mix(in srgb, var(--md-sys-color-secondary-container) 50%, var(--md-sys-color-primary-container))
   );
@@ -3696,48 +3696,48 @@ html[data-theme^="dark"] .settings-subsection:hover {
     padding: 16px;
     border-radius: 16px;
   }
-  
+
   .hardware-tier-header {
     gap: 12px;
   }
-  
+
   .hardware-tier-icon {
     width: 40px;
     height: 40px;
     font-size: 1.2rem;
   }
-  
+
   .hardware-tier-name {
     font-size: 1rem;
   }
-  
+
   .collapsible-header {
     padding: 14px 16px;
   }
-  
+
   .collapsible-content {
     padding: 0 16px 16px;
   }
-  
+
   .settings-section-header {
     padding: 12px 16px;
     margin: 24px 0 16px 0;
   }
-  
+
   .settings-section-icon {
     width: 36px;
     height: 36px;
   }
-  
+
   .settings-section-title {
     font-size: 1rem;
   }
-  
+
   .settings-page-header {
     padding: 18px 20px;
     margin-bottom: 20px;
   }
-  
+
   .settings-page-title {
     font-size: 1.2rem;
   }
@@ -3751,7 +3751,7 @@ html[data-theme^="dark"] .settings-subsection:hover {
   margin-bottom: 28px;
   padding: 24px 28px;
   border-radius: var(--md-shape-corner-large);
-  background: linear-gradient(135deg, 
+  background: linear-gradient(135deg,
     color-mix(in srgb, var(--md-sys-color-primary-container) 60%, transparent),
     color-mix(in srgb, var(--md-sys-color-secondary-container) 40%, transparent)
   );
@@ -8993,6 +8993,82 @@ html[data-theme^="dark"] .settings-subsection:hover {
   }
 
   .storage-simulation-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* LUKE_AI_I2V_RUNTIME_HEALTH_STYLES_V1 */
+.i2v-runtime-health {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 10px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.i2v-runtime-health-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.i2v-runtime-health-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.i2v-runtime-health-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.i2v-runtime-health-grid article {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
+}
+
+.i2v-runtime-health span,
+.i2v-runtime-health small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+}
+
+.i2v-runtime-health-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.i2v-runtime-health-safety {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .i2v-runtime-health-heading {
+    flex-direction: column;
+  }
+
+  .i2v-runtime-health-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 500px) {
+  .i2v-runtime-health-grid {
     grid-template-columns: 1fr;
   }
 }

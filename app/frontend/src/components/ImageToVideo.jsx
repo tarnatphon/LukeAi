@@ -1,3 +1,5 @@
+import { getImageToVideoRuntimeCapability } from "../services/api";
+import ImageToVideoRuntimeHealthCard from "./ImageToVideoRuntimeHealthCard.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Film, Upload, Play, CheckCircle2, AlertTriangle, Cpu, HardDrive, Plus, Trash2, Sparkles, ShieldCheck, Download, Wrench } from "lucide-react";
 import { getImageToVideoCompatibility, generateImageToVideo, getImageToVideoCapabilityStatus, installImageToVideoCapability } from "../services/api";
@@ -12,7 +14,71 @@ function readImage(file) {
   });
 }
 
-export default function ImageToVideo({ specs, showAlert }) {
+export default function ImageToVideo({
+
+ specs, showAlert }) {
+
+  // LUKE_AI_I2V_RUNTIME_HEALTH_STATE_V1
+    const [
+      runtimeCapability,
+      setRuntimeCapability,
+    ] = useState(null);
+
+    const [
+      runtimeCapabilityLoading,
+      setRuntimeCapabilityLoading,
+    ] = useState(true);
+
+    const [
+      runtimeCapabilityError,
+      setRuntimeCapabilityError,
+    ] = useState("");
+
+    const refreshRuntimeCapability =
+      useCallback(
+        async () => {
+          setRuntimeCapabilityLoading(
+            true,
+          );
+
+          try {
+            const runtime =
+              await getImageToVideoRuntimeCapability();
+
+            setRuntimeCapability(
+              runtime,
+            );
+
+            setRuntimeCapabilityError(
+              "",
+            );
+
+            return runtime;
+          } catch (error) {
+            setRuntimeCapability(
+              null,
+            );
+
+            setRuntimeCapabilityError(
+              error instanceof Error
+                ? error.message
+                : String(error),
+            );
+
+            return null;
+          } finally {
+            setRuntimeCapabilityLoading(
+              false,
+            );
+          }
+        },
+        [],
+      );
+
+    useEffect(() => {
+      refreshRuntimeCapability();
+    }, [refreshRuntimeCapability]);
+
   const [catalog, setCatalog] = useState([]);
   const [source, setSource] = useState(null);
   const [references, setReferences] = useState([]);
@@ -100,6 +166,22 @@ export default function ImageToVideo({ specs, showAlert }) {
     setBusy(true);
     setStatus("Automatic Match is analysing the computer and locking the reference appearance…");
     try {
+      // LUKE_AI_I2V_GENERATE_RUNTIME_GATE_V1
+      if (
+        runtimeCapability?.ready !== true
+      ) {
+        const currentRuntime =
+          await refreshRuntimeCapability();
+
+        if (
+          currentRuntime?.ready !== true
+        ) {
+          throw new Error(
+            "Image-to-Video runtime is not ready. Check Torch, MPS/CUDA, required packages and FFmpeg before generating.",
+          );
+        }
+      }
+
       const result = await generateImageToVideo({
         modelId: "auto",
         imageDataUrl: source.dataUrl,
@@ -121,6 +203,15 @@ export default function ImageToVideo({ specs, showAlert }) {
 
   return <div style={{ padding: 24, overflow: "auto", height: "100%" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+
+      {/* LUKE_AI_I2V_RUNTIME_HEALTH_MOUNT_V1 */}
+      <ImageToVideoRuntimeHealthCard
+        runtime={runtimeCapability}
+        loading={runtimeCapabilityLoading}
+        error={runtimeCapabilityError}
+        onRefresh={refreshRuntimeCapability}
+      />
+
       <Film size={28}/><div><h2 style={{ margin: 0 }}>Automatic Image to Video</h2><div style={{ opacity: .72 }}>Upload images only. LUKE AI selects and applies every setting automatically.</div></div>
     </div>
 

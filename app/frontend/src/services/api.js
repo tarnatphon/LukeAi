@@ -1255,7 +1255,7 @@ export async function importModelFile(sourcePath, onProgress, signal) {
 
   if (isTauri()) {
     const { listen } = await import("@tauri-apps/api/event");
-    
+
     let unlisten = null;
     if (onProgress) {
       unlisten = await listen("import-progress", (event) => {
@@ -1275,7 +1275,7 @@ export async function importModelFile(sourcePath, onProgress, signal) {
   // Fallback simulation in browser
   const filename = sourcePath.split(/[\\/]/).pop() || "imported_model.gguf";
   console.log(`Web Mode: Simulating copying ${filename} to USB models folder`);
-  
+
   const totalSteps = 40;
   const start = Date.now();
 
@@ -1529,4 +1529,40 @@ export async function generateImageToVideo(payload) {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
   });
   return await readJsonResponse(res, "Invalid image-to-video generation response.");
+}
+
+// LUKE_AI_I2V_RUNTIME_CAPABILITY_SERVICE_V1
+export async function getImageToVideoRuntimeCapability() {
+  const response =
+    await fetch(
+      "/api/capabilities/image-to-video/runtime",
+      {
+        method: "GET",
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  let data = {};
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      `Image-to-Video runtime health request failed (${response.status})`,
+    );
+  }
+
+  return (
+    data?.runtime ||
+    data
+  );
 }
