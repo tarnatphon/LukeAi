@@ -410,3 +410,11 @@ else
   echo "FAIL: Node.js is required for Storage Policy Profiles validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Automatic Workload Detection validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-workload-detector.cjs
+else
+  echo "FAIL: Node.js is required for Automatic Workload Detection validation"
+  exit 1
+fi

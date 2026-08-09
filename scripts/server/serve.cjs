@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_WORKLOAD_DETECTOR_IMPORT_V2
+const {
+  StorageWorkloadDetector,
+} = require("./storage-workload-detector.cjs");
+
 // LUKE_AI_STORAGE_POLICY_IMPORT_V2
 const {
   StoragePolicyManager,
@@ -17307,6 +17312,18 @@ const storagePolicyManager =
       storageHealthScorer,
   });
 
+// LUKE_AI_STORAGE_WORKLOAD_DETECTOR_BOOTSTRAP_V2
+const storageWorkloadDetector =
+  new StorageWorkloadDetector({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-workload-detection.json"
+    ),
+  });
+
 const unifiedStorageTransferQueue =
   new UnifiedStorageTransferQueue({
     statePath: path.join(
@@ -17324,6 +17341,8 @@ const unifiedStorageTransferQueue =
       storageHealthScorer,
     policyManager:
       storagePolicyManager,
+    workloadDetector:
+      storageWorkloadDetector,
     maxConcurrent: 1,
   });
 
@@ -17979,6 +17998,61 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_WORKLOAD_DETECTOR_API_V2
+
+  if (
+    req.url === "/api/storage/workload" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      workload:
+        storageWorkloadDetector
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/workload/detect" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const detection =
+        storageWorkloadDetector
+          .detect({
+            sourcePath:
+              body.sourcePath,
+            workloadType:
+              body.workloadType ||
+              null,
+            manualOverride:
+              Boolean(
+                body.manualOverride
+              ),
+          });
+
+      return json(res, 200, {
+        ok: true,
+        detection,
       });
     } catch (error) {
       return json(

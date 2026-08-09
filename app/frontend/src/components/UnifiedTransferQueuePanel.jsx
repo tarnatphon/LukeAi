@@ -22,6 +22,8 @@ export default function UnifiedTransferQueuePanel({
       destinationPath: "",
       objectKey: "",
       priority: 100,
+      workloadType: "models",
+      workloadOverride: false,
     });
 
   const refresh =
@@ -111,6 +113,10 @@ export default function UnifiedTransferQueuePanel({
                     Number(
                       form.priority,
                     ) || 100,
+                  workloadType:
+                    form.workloadType,
+                  workloadOverride:
+                    form.workloadOverride,
                 },
               }),
             },
@@ -302,6 +308,45 @@ export default function UnifiedTransferQueuePanel({
           }
         />
 
+        {/* LUKE_AI_QUEUE_WORKLOAD_OVERRIDE_UI_V2 */}
+        <select
+          value={form.workloadType}
+          disabled={!form.workloadOverride}
+          onChange={(event) =>
+            setForm(
+              (current) => ({
+                ...current,
+                workloadType:
+                  event.target.value,
+              }),
+            )
+          }
+        >
+          <option value="models">Models</option>
+          <option value="images">Images</option>
+          <option value="video">Video</option>
+          <option value="backups">Backups</option>
+          <option value="temporary">Temporary</option>
+        </select>
+
+        <label className="unified-transfer-workload-override">
+          <input
+            type="checkbox"
+            checked={form.workloadOverride}
+            onChange={(event) =>
+              setForm(
+                (current) => ({
+                  ...current,
+                  workloadOverride:
+                    event.target.checked,
+                }),
+              )
+            }
+          />
+
+          Manual Workload Override
+        </label>
+
         <button
           type="button"
           className="m3-btn m3-btn-filled"
@@ -338,6 +383,18 @@ export default function UnifiedTransferQueuePanel({
                 {job
                   .destinationProviderId ||
                   "Auto"}
+              </small>
+
+              <small>
+                Workload:
+                {" "}
+                {job.workloadType ||
+                  "Detecting"}
+                {" "}
+                {job.workloadDetection
+                  ?.manualOverride
+                  ? "(Manual)"
+                  : "(Auto)"}
               </small>
 
               <small>

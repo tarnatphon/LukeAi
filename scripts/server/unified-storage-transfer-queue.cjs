@@ -127,6 +127,7 @@ class UnifiedStorageTransferQueue {
     s3Adapter,
     healthScorer = null,
     policyManager = null,
+    workloadDetector = null,
     maxConcurrent = 1,
   }) {
     this.statePath =
@@ -143,6 +144,9 @@ class UnifiedStorageTransferQueue {
 
     this.policyManager =
       policyManager;
+
+    this.workloadDetector =
+      workloadDetector;
 
     this.maxConcurrent =
       Math.max(
@@ -260,13 +264,23 @@ class UnifiedStorageTransferQueue {
       objectKey:
         input.objectKey ||
         null,
+      // LUKE_AI_AUTOMATIC_WORKLOAD_DETECTION_V1
       workloadType:
-        String(
-          input.workloadType ||
-          "models"
-        )
-          .trim()
-          .toLowerCase(),
+        null,
+      workloadDetection:
+        null,
+      workloadOverride:
+        Boolean(
+          input.workloadOverride
+        ),
+      requestedWorkloadType:
+        input.workloadType
+          ? String(
+              input.workloadType
+            )
+              .trim()
+              .toLowerCase()
+          : null,
       attempts: 0,
       maxAttempts:
         Math.max(
@@ -288,6 +302,46 @@ class UnifiedStorageTransferQueue {
       error: null,
       result: null,
     };
+
+    if (
+      this.workloadDetector
+    ) {
+      const detected =
+        this.workloadDetector
+          .detect({
+            sourcePath:
+              job.sourcePath,
+            workloadType:
+              job.requestedWorkloadType,
+            manualOverride:
+              job.workloadOverride,
+          });
+
+      job.workloadType =
+        detected.workloadType;
+
+      job.workloadDetection =
+        detected;
+    } else {
+      job.workloadType =
+        job.requestedWorkloadType ||
+        "models";
+
+      job.workloadDetection = {
+        workloadType:
+          job.workloadType,
+        confidence:
+          job.workloadOverride
+            ? 1
+            : 0,
+        reason:
+          job.workloadOverride
+            ? "manual-override"
+            : "detector-unavailable",
+        manualOverride:
+          job.workloadOverride,
+      };
+    }
 
     const state =
       this.readState();

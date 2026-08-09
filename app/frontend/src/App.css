@@ -7972,3 +7972,87 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_STORAGE_WORKLOAD_DETECTION_STYLES_V2 */
+.storage-workload-detection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+}
+
+.storage-workload-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.storage-workload-heading span,
+.storage-workload-result span,
+.storage-workload-history small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.storage-workload-detection-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.storage-workload-detection-form input,
+.unified-transfer-form select {
+  padding: 9px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
+  color: inherit;
+}
+
+.storage-workload-result,
+.storage-workload-history {
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-workload-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.storage-workload-history > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.storage-workload-history article {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.unified-transfer-workload-override {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.72rem;
+}
+
+.unified-transfer-workload-override input {
+  width: auto;
+}
+
+@media (max-width: 650px) {
+  .storage-workload-detection-form {
+    grid-template-columns: 1fr;
+  }
+}
