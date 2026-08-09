@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_RECOVERY_READINESS_CERTIFIER_IMPORT_V1
+const {
+  StorageRecoveryReadinessCertifier,
+} = require("./storage-recovery-readiness-certifier.cjs");
+
 // LUKE_AI_STORAGE_RECOVERY_SIMULATION_IMPORT_V1
 const {
   StorageRecoverySimulationManager,
@@ -17582,6 +17587,29 @@ const storageRecoverySimulationManager =
     ),
   });
 
+// LUKE_AI_STORAGE_RECOVERY_READINESS_CERTIFIER_BOOTSTRAP_V1
+const storageRecoveryReadinessCertifier =
+  new StorageRecoveryReadinessCertifier({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-recovery-readiness-certification.json"
+    ),
+
+    disasterRecoveryDashboard:
+      storageDisasterRecoveryDashboard,
+
+    recoveryRunbookManager:
+      storageRecoveryRunbookManager,
+
+    recoverySimulationManager:
+      storageRecoverySimulationManager,
+  });
+
+
+
 
 
 
@@ -17613,6 +17641,48 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_STORAGE_RECOVERY_RUNBOOK_API_V1
 
   // LUKE_AI_STORAGE_RECOVERY_SIMULATION_API_V1
+
+  // LUKE_AI_STORAGE_RECOVERY_READINESS_CERTIFIER_API_V1
+
+  if (
+    req.url === "/api/storage/recovery-certification" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      certification:
+        storageRecoveryReadinessCertifier
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/recovery-certification/run" &&
+    req.method === "POST"
+  ) {
+    try {
+      const certification =
+        storageRecoveryReadinessCertifier
+          .certify();
+
+      return json(res, 200, {
+        ok: true,
+        certification,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   if (
     req.url === "/api/storage/recovery-simulation" &&

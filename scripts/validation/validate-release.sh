@@ -490,3 +490,11 @@ else
   echo "FAIL: Node.js is required for Storage Recovery Simulation validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Storage Recovery Readiness Certification validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-recovery-readiness-certifier.cjs
+else
+  echo "FAIL: Node.js is required for Storage Recovery Readiness Certification validation"
+  exit 1
+fi
