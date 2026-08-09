@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_ARCHIVE_RESTORE_IMPORT_V2
+const {
+  StorageArchiveRestoreManager,
+} = require("./storage-archive-restore-manager.cjs");
+
 // LUKE_AI_STORAGE_SAFE_ARCHIVE_IMPORT_V2
 const {
   StorageSafeArchiveManager,
@@ -17414,6 +17419,22 @@ const storageSafeArchiveManager =
       unifiedStorageTransferQueue,
   });
 
+// LUKE_AI_STORAGE_ARCHIVE_RESTORE_BOOTSTRAP_V2
+const storageArchiveRestoreManager =
+  new StorageArchiveRestoreManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-archive-restore-state.json"
+    ),
+    safeArchiveManager:
+      storageSafeArchiveManager,
+    transferQueue:
+      unifiedStorageTransferQueue,
+  });
+
 // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_BOOTSTRAP_V2
 const storageAvailabilityWatcher =
   new StorageAvailabilityWatcher({
@@ -18310,6 +18331,109 @@ const server = http.createServer(async (req, res) => {
   }
 
   // LUKE_AI_STORAGE_SAFE_ARCHIVE_API_V2
+
+  // LUKE_AI_STORAGE_ARCHIVE_RESTORE_API_V2
+
+  if (
+    req.url === "/api/storage/restore" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      restore:
+        storageArchiveRestoreManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/restore/request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const restore =
+        storageArchiveRestoreManager
+          .requestRestore({
+            archiveId:
+              body.archiveId,
+            destinationPath:
+              body.destinationPath,
+            restoreAsNew:
+              Boolean(
+                body.restoreAsNew
+              ),
+          });
+
+      return json(res, 200, {
+        ok: true,
+        restore,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/restore/local" &&
+    req.method === "POST"
+  ) {
+    let body = null;
+
+    try {
+      body =
+        await readJsonRequestBody(req);
+
+      const restore =
+        await storageArchiveRestoreManager
+          .restoreLocalArchive({
+            restoreId:
+              body.restoreId,
+            sourceArchivePath:
+              body.sourceArchivePath,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        restore,
+      });
+    } catch (error) {
+      if (
+        body &&
+        body.restoreId
+      ) {
+        storageArchiveRestoreManager
+          .markFailed(
+            body.restoreId,
+            error
+          );
+      }
+
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   if (
     req.url === "/api/storage/archive" &&
