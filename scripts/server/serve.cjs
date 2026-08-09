@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_DISASTER_RECOVERY_IMPORT_V1
+const {
+  StorageDisasterRecoveryDashboard,
+} = require("./storage-disaster-recovery-dashboard.cjs");
+
 // LUKE_AI_DEEP_CLOUD_INTEGRITY_IMPORT_V1
 const {
   StorageDeepCloudIntegrityManager,
@@ -17484,8 +17489,6 @@ const storageDeepCloudIntegrityManager =
       s3CompatibleStorageAdapter,
   });
 
-
-
 // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_BOOTSTRAP_V2
 const storageAvailabilityWatcher =
   new StorageAvailabilityWatcher({
@@ -17500,6 +17503,47 @@ const storageAvailabilityWatcher =
       unifiedStorageProviderCore,
     transferQueue:
       unifiedStorageTransferQueue,
+  });
+
+
+
+// LUKE_AI_STORAGE_DISASTER_RECOVERY_BOOTSTRAP_V1
+const storageDisasterRecoveryDashboard =
+  new StorageDisasterRecoveryDashboard({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-disaster-recovery-state.json"
+    ),
+
+    healthScorer:
+      storageHealthScorer,
+
+    capacityManager:
+      storageCapacityManager,
+
+    lifecycleManager:
+      storageLifecycleManager,
+
+    safeArchiveManager:
+      storageSafeArchiveManager,
+
+    restoreManager:
+      storageArchiveRestoreManager,
+
+    integrityScanner:
+      storageIntegrityScanner,
+
+    deepCloudIntegrityManager:
+      storageDeepCloudIntegrityManager,
+
+    availabilityWatcher:
+      storageAvailabilityWatcher,
+
+    providerCore:
+      unifiedStorageProviderCore,
   });
 
 storageAvailabilityWatcher.start();
@@ -17523,6 +17567,62 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_STORAGE_INTEGRITY_API_V2
 
   // LUKE_AI_DEEP_CLOUD_INTEGRITY_API_V1
+
+  // LUKE_AI_STORAGE_DISASTER_RECOVERY_API_V1
+
+  if (
+    req.url === "/api/storage/disaster-recovery" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        disasterRecovery:
+          storageDisasterRecoveryDashboard
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/disaster-recovery/refresh" &&
+    req.method === "POST"
+  ) {
+    try {
+      const summary =
+        storageDisasterRecoveryDashboard
+          .generateSummary();
+
+      return json(res, 200, {
+        ok: true,
+        summary,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   if (
     req.url === "/api/storage/integrity/cloud" &&

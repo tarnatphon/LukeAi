@@ -466,3 +466,11 @@ else
   echo "FAIL: Node.js is required for Deep Cloud Integrity Verification"
   exit 1
 fi
+
+# LUKE AI STUDIO Storage Disaster Recovery Dashboard validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-disaster-recovery-dashboard.cjs
+else
+  echo "FAIL: Node.js is required for Storage Disaster Recovery Dashboard validation"
+  exit 1
+fi
