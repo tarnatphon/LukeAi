@@ -1,3 +1,8 @@
+// LUKE_AI_IMAGE_TO_VIDEO_RUNTIME_CAPABILITY_IMPORT_V2
+const {
+  ImageToVideoRuntimeCapabilityManager,
+} = require("./image-to-video-runtime-capability-manager.cjs");
+
 // LUKE_AI_STORAGE_RECOVERY_READINESS_CERTIFIER_IMPORT_V1
 const {
   StorageRecoveryReadinessCertifier,
@@ -23233,6 +23238,38 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
 
 
   // GET /api/capabilities/image-to-video/status
+  // LUKE_AI_IMAGE_TO_VIDEO_RUNTIME_CAPABILITY_API_V2
+  if (
+    req.url === "/api/capabilities/image-to-video/runtime" &&
+    req.method === "GET"
+  ) {
+    try {
+      const runtimeCapabilityManager =
+        new ImageToVideoRuntimeCapabilityManager({
+          root: ROOT,
+        });
+
+      return json(res, 200, {
+        ok: true,
+        runtime:
+          runtimeCapabilityManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
   if (req.url === "/api/capabilities/image-to-video/status" && req.method === "GET") {
     const runtimeDir = path.join(ROOT, "app", "runtimes", "image-to-video");
     const installedPath = path.join(runtimeDir, "installed.json");
