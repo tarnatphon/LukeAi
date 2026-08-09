@@ -8442,3 +8442,104 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_STORAGE_INTEGRITY_STYLES_V2 */
+.storage-integrity-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+}
+
+.storage-integrity-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storage-integrity-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.storage-integrity-heading span,
+.storage-integrity-panel small,
+.storage-integrity-panel span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.storage-integrity-controls,
+.storage-integrity-status,
+.storage-integrity-safety {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.storage-integrity-controls input {
+  width: 110px;
+  padding: 9px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
+  color: inherit;
+}
+
+.storage-integrity-status,
+.storage-integrity-safety {
+  padding: 9px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+}
+
+.storage-integrity-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-integrity-summary article,
+.storage-integrity-results article {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-integrity-summary article {
+  text-align: center;
+}
+
+.storage-integrity-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.storage-integrity-results header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .storage-integrity-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .storage-integrity-heading {
+    flex-direction: column;
+  }
+
+  .storage-integrity-summary {
+    grid-template-columns: 1fr;
+  }
+}

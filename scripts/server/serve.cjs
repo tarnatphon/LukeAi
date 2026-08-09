@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_INTEGRITY_IMPORT_V2
+const {
+  StorageIntegrityScanner,
+} = require("./storage-integrity-scanner.cjs");
+
 // LUKE_AI_STORAGE_ARCHIVE_RESTORE_IMPORT_V2
 const {
   StorageArchiveRestoreManager,
@@ -17435,6 +17440,30 @@ const storageArchiveRestoreManager =
       unifiedStorageTransferQueue,
   });
 
+// LUKE_AI_STORAGE_INTEGRITY_BOOTSTRAP_V2
+const storageIntegrityScanner =
+  new StorageIntegrityScanner({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-integrity-settings.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-integrity-state.json"
+    ),
+    safeArchiveManager:
+      storageSafeArchiveManager,
+    restoreManager:
+      storageArchiveRestoreManager,
+  });
+
+
 // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_BOOTSTRAP_V2
 const storageAvailabilityWatcher =
   new StorageAvailabilityWatcher({
@@ -17469,6 +17498,96 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_STORAGE_KEYCHAIN_API_V1
 
   // POST /api/storage/credentials
+  // LUKE_AI_STORAGE_INTEGRITY_API_V2
+
+  if (
+    req.url === "/api/storage/integrity" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      integrity:
+        storageIntegrityScanner
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/integrity/scan" &&
+    req.method === "POST"
+  ) {
+    try {
+      const scan =
+        await storageIntegrityScanner
+          .runScan();
+
+      return json(res, 200, {
+        ok: true,
+        scan,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity/scheduler/start" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const scheduler =
+        storageIntegrityScanner
+          .startScheduler(
+            body.intervalMinutes ||
+            null
+          );
+
+      return json(res, 200, {
+        ok: true,
+        scheduler,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity/scheduler/stop" &&
+    req.method === "POST"
+  ) {
+    const scheduler =
+      storageIntegrityScanner
+        .stopScheduler();
+
+    return json(res, 200, {
+      ok: true,
+      scheduler,
+    });
+  }
+
   if (
     req.url === "/api/storage/credentials" &&
     req.method === "POST"

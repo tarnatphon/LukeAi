@@ -49,6 +49,9 @@ import StorageLifecyclePlannerPanel from "./StorageLifecyclePlannerPanel.jsx";
 /* LUKE_AI_STORAGE_ARCHIVE_RESTORE_IMPORT_V2 */
 import StorageArchiveRestorePanel from "./StorageArchiveRestorePanel.jsx";
 
+/* LUKE_AI_STORAGE_INTEGRITY_IMPORT_V2 */
+import StorageIntegrityPanel from "./StorageIntegrityPanel.jsx";
+
 function formatDate(value) {
   if (!value) {
     return "";
@@ -3166,6 +3169,12 @@ export default function PersistentTextChat() {
         {/* LUKE_AI_STORAGE_WORKLOAD_DETECTION_MOUNT_V2 */}
         {/* LUKE_AI_STORAGE_LIFECYCLE_MOUNT_V2 */}
         {/* LUKE_AI_STORAGE_ARCHIVE_RESTORE_MOUNT_V2 */}
+        {/* LUKE_AI_STORAGE_INTEGRITY_MOUNT_V2 */}
+        <StorageIntegrityPanel
+          requestJson={requestJson}
+          setError={setError}
+        />
+
         <StorageArchiveRestorePanel
           requestJson={requestJson}
           setError={setError}
