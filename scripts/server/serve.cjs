@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_RECOVERY_SIMULATION_IMPORT_V1
+const {
+  StorageRecoverySimulationManager,
+} = require("./storage-recovery-simulation-manager.cjs");
+
 // LUKE_AI_STORAGE_RECOVERY_RUNBOOK_IMPORT_V1
 const {
   StorageRecoveryRunbookManager,
@@ -17565,6 +17570,20 @@ const storageRecoveryRunbookManager =
       storageDisasterRecoveryDashboard,
   });
 
+// LUKE_AI_STORAGE_RECOVERY_SIMULATION_BOOTSTRAP_V1
+const storageRecoverySimulationManager =
+  new StorageRecoverySimulationManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-recovery-simulation-state.json"
+    ),
+  });
+
+
+
 
 
 storageAvailabilityWatcher.start();
@@ -17592,6 +17611,81 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_STORAGE_DISASTER_RECOVERY_API_V1
 
   // LUKE_AI_STORAGE_RECOVERY_RUNBOOK_API_V1
+
+  // LUKE_AI_STORAGE_RECOVERY_SIMULATION_API_V1
+
+  if (
+    req.url === "/api/storage/recovery-simulation" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      simulation:
+        storageRecoverySimulationManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/recovery-simulation/run" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storageRecoverySimulationManager
+          .runScenario(
+            body.scenarioId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/recovery-simulation/run-all" &&
+    req.method === "POST"
+  ) {
+    try {
+      const result =
+        storageRecoverySimulationManager
+          .runAll();
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   if (
     req.url === "/api/storage/recovery-runbook" &&
