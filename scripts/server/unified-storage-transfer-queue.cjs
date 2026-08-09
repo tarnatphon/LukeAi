@@ -128,6 +128,7 @@ class UnifiedStorageTransferQueue {
     healthScorer = null,
     policyManager = null,
     workloadDetector = null,
+    capacityManager = null,
     maxConcurrent = 1,
   }) {
     this.statePath =
@@ -147,6 +148,9 @@ class UnifiedStorageTransferQueue {
 
     this.workloadDetector =
       workloadDetector;
+
+    this.capacityManager =
+      capacityManager;
 
     this.maxConcurrent =
       Math.max(
@@ -634,6 +638,81 @@ class UnifiedStorageTransferQueue {
       job.destinationProviderId =
         provider.id;
 
+      // LUKE_AI_STORAGE_CAPACITY_GUARD_V1
+      if (
+        this.capacityManager
+      ) {
+        const requiredBytes =
+          this.capacityManager
+            .estimateSourceBytes(
+              job.sourcePath
+            );
+
+        if (
+          Number.isFinite(
+            requiredBytes
+          )
+        ) {
+          const forecast =
+            this.capacityManager
+              .forecast({
+                workloadType:
+                  job.workloadType ||
+                  "temporary",
+                sourcePath:
+                  job.sourcePath,
+                requiredBytes,
+              });
+
+          const targetCapacity =
+            forecast.providers.find(
+              (item) =>
+                item.providerId ===
+                provider.id
+            );
+
+          if (
+            targetCapacity &&
+            !targetCapacity.sufficient
+          ) {
+            const error =
+              new Error(
+                "Destination provider does not have enough safe free space."
+              );
+
+            error.code =
+              "ENOSPC";
+
+            error.statusCode =
+              409;
+
+            throw error;
+          }
+
+          job.capacityForecast = {
+            requiredBytes,
+            providerId:
+              provider.id,
+            level:
+              targetCapacity
+                ?.level ||
+              "unknown",
+          };
+
+          this.capacityManager
+            .reserve({
+              jobId:
+                job.id,
+              providerId:
+                provider.id,
+              requiredBytes,
+              workloadType:
+                job.workloadType ||
+                "temporary",
+            });
+        }
+      }
+
       if (
         provider.category ===
           "cloud" &&
@@ -752,6 +831,15 @@ class UnifiedStorageTransferQueue {
           );
       }
 
+      if (
+        this.capacityManager
+      ) {
+        this.capacityManager
+          .release(
+            job.id
+          );
+      }
+
       job.status =
         "completed";
 
@@ -781,6 +869,15 @@ class UnifiedStorageTransferQueue {
 
       return job;
     } catch (error) {
+      if (
+        this.capacityManager
+      ) {
+        this.capacityManager
+          .release(
+            job.id
+          );
+      }
+
       if (
         this.healthScorer &&
         job.destinationProviderId

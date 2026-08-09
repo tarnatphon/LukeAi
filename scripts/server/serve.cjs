@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_CAPACITY_IMPORT_V1
+const {
+  StorageCapacityManager,
+} = require("./storage-capacity-manager.cjs");
+
 // LUKE_AI_STORAGE_WORKLOAD_DETECTOR_IMPORT_V2
 const {
   StorageWorkloadDetector,
@@ -17324,6 +17329,22 @@ const storageWorkloadDetector =
     ),
   });
 
+// LUKE_AI_STORAGE_CAPACITY_BOOTSTRAP_V1
+const storageCapacityManager =
+  new StorageCapacityManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-capacity-state.json"
+    ),
+    healthScorer:
+      storageHealthScorer,
+    policyManager:
+      storagePolicyManager,
+  });
+
 const unifiedStorageTransferQueue =
   new UnifiedStorageTransferQueue({
     statePath: path.join(
@@ -17343,6 +17364,8 @@ const unifiedStorageTransferQueue =
       storagePolicyManager,
     workloadDetector:
       storageWorkloadDetector,
+    capacityManager:
+      storageCapacityManager,
     maxConcurrent: 1,
   });
 
@@ -18053,6 +18076,61 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         detection,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_CAPACITY_API_V1
+
+  if (
+    req.url === "/api/storage/capacity" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      capacity:
+        storageCapacityManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/capacity/forecast" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const forecast =
+        storageCapacityManager
+          .forecast({
+            workloadType:
+              body.workloadType ||
+              "temporary",
+            sourcePath:
+              body.sourcePath ||
+              null,
+            requiredBytes:
+              body.requiredBytes ??
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        forecast,
       });
     } catch (error) {
       return json(
