@@ -8150,3 +8150,105 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_STORAGE_LIFECYCLE_STYLES_V2 */
+.storage-lifecycle-planner-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+}
+
+.storage-lifecycle-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storage-lifecycle-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.storage-lifecycle-heading span,
+.storage-lifecycle-planner-panel small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.storage-lifecycle-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.storage-lifecycle-form input {
+  padding: 9px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
+  color: inherit;
+}
+
+.storage-lifecycle-rules {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-lifecycle-rules article,
+.storage-lifecycle-summary,
+.storage-lifecycle-files {
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-lifecycle-rules article,
+.storage-lifecycle-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.storage-lifecycle-files > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.storage-lifecycle-files article {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.storage-lifecycle-files header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 1000px) {
+  .storage-lifecycle-rules {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .storage-lifecycle-heading {
+    flex-direction: column;
+  }
+
+  .storage-lifecycle-form,
+  .storage-lifecycle-rules {
+    grid-template-columns: 1fr;
+  }
+}

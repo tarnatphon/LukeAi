@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_LIFECYCLE_IMPORT_V2
+const {
+  StorageLifecycleManager,
+} = require("./storage-lifecycle-manager.cjs");
+
 // LUKE_AI_STORAGE_CAPACITY_IMPORT_V1
 const {
   StorageCapacityManager,
@@ -17345,6 +17350,27 @@ const storageCapacityManager =
       storagePolicyManager,
   });
 
+// LUKE_AI_STORAGE_LIFECYCLE_BOOTSTRAP_V2
+const storageLifecycleManager =
+  new StorageLifecycleManager({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-lifecycle-rules.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-lifecycle-state.json"
+    ),
+    workloadDetector:
+      storageWorkloadDetector,
+  });
+
 const unifiedStorageTransferQueue =
   new UnifiedStorageTransferQueue({
     statePath: path.join(
@@ -18131,6 +18157,123 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         forecast,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_LIFECYCLE_API_V2
+
+  if (
+    req.url === "/api/storage/lifecycle" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      lifecycle:
+        storageLifecycleManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/lifecycle/plan" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const plan =
+        storageLifecycleManager
+          .createPlan({
+            rootPath:
+              body.rootPath,
+            maxFiles:
+              body.maxFiles ||
+              5000,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        plan,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/lifecycle/protect" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storageLifecycleManager
+          .protectPath(
+            body.path
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/lifecycle/unprotect" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storageLifecycleManager
+          .unprotectPath(
+            body.path
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
       });
     } catch (error) {
       return json(

@@ -426,3 +426,11 @@ else
   echo "FAIL: Node.js is required for Storage Capacity Management validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Storage Lifecycle Rules validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-lifecycle-manager.cjs
+else
+  echo "FAIL: Node.js is required for Storage Lifecycle Rules validation"
+  exit 1
+fi

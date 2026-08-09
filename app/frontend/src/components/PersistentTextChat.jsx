@@ -43,6 +43,9 @@ import StoragePolicyProfilesPanel from "./StoragePolicyProfilesPanel.jsx";
 /* LUKE_AI_STORAGE_WORKLOAD_DETECTION_IMPORT_V2 */
 import StorageWorkloadDetectionPanel from "./StorageWorkloadDetectionPanel.jsx";
 
+/* LUKE_AI_STORAGE_LIFECYCLE_IMPORT_V2 */
+import StorageLifecyclePlannerPanel from "./StorageLifecyclePlannerPanel.jsx";
+
 function formatDate(value) {
   if (!value) {
     return "";
@@ -3158,6 +3161,12 @@ export default function PersistentTextChat() {
         {/* LUKE_AI_STORAGE_HEALTH_SCORE_MOUNT_V2 */}
         {/* LUKE_AI_STORAGE_POLICY_PROFILES_MOUNT_V2 */}
         {/* LUKE_AI_STORAGE_WORKLOAD_DETECTION_MOUNT_V2 */}
+        {/* LUKE_AI_STORAGE_LIFECYCLE_MOUNT_V2 */}
+        <StorageLifecyclePlannerPanel
+          requestJson={requestJson}
+          setError={setError}
+        />
+
         <StorageWorkloadDetectionPanel
           requestJson={requestJson}
           setError={setError}
