@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_SAFE_ARCHIVE_IMPORT_V2
+const {
+  StorageSafeArchiveManager,
+} = require("./storage-safe-archive-manager.cjs");
+
 // LUKE_AI_STORAGE_LIFECYCLE_IMPORT_V2
 const {
   StorageLifecycleManager,
@@ -17395,6 +17400,20 @@ const unifiedStorageTransferQueue =
     maxConcurrent: 1,
   });
 
+// LUKE_AI_STORAGE_SAFE_ARCHIVE_BOOTSTRAP_V2
+const storageSafeArchiveManager =
+  new StorageSafeArchiveManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-safe-archive-state.json"
+    ),
+    transferQueue:
+      unifiedStorageTransferQueue,
+  });
+
 // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_BOOTSTRAP_V2
 const storageAvailabilityWatcher =
   new StorageAvailabilityWatcher({
@@ -18274,6 +18293,198 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_SAFE_ARCHIVE_API_V2
+
+  if (
+    req.url === "/api/storage/archive" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      archive:
+        storageSafeArchiveManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/archive/request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const archive =
+        await storageSafeArchiveManager
+          .requestArchive({
+            sourcePath:
+              body.sourcePath,
+            destinationProviderId:
+              body.destinationProviderId ||
+              null,
+            destinationPath:
+              body.destinationPath ||
+              null,
+            objectKey:
+              body.objectKey ||
+              null,
+            workloadType:
+              body.workloadType ||
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        archive,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/sync" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const archive =
+        storageSafeArchiveManager
+          .syncArchive(
+            body.archiveId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        archive,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/cleanup/request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const request =
+        storageSafeArchiveManager
+          .requestCleanup(
+            body.archiveId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        request,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/cleanup/confirm" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await storageSafeArchiveManager
+          .confirmCleanup(
+            body.requestId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/cleanup/cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const request =
+        storageSafeArchiveManager
+          .cancelCleanup(
+            body.requestId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        request,
       });
     } catch (error) {
       return json(

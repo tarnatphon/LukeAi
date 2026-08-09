@@ -434,3 +434,11 @@ else
   echo "FAIL: Node.js is required for Storage Lifecycle Rules validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Safe Archive Workflow validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-safe-archive-manager.cjs
+else
+  echo "FAIL: Node.js is required for Safe Archive Workflow validation"
+  exit 1
+fi
