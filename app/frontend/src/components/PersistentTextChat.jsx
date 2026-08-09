@@ -52,6 +52,9 @@ import StorageArchiveRestorePanel from "./StorageArchiveRestorePanel.jsx";
 /* LUKE_AI_STORAGE_INTEGRITY_IMPORT_V2 */
 import StorageIntegrityPanel from "./StorageIntegrityPanel.jsx";
 
+/* LUKE_AI_DEEP_CLOUD_INTEGRITY_IMPORT_V1 */
+import StorageDeepCloudIntegrityPanel from "./StorageDeepCloudIntegrityPanel.jsx";
+
 function formatDate(value) {
   if (!value) {
     return "";
@@ -3170,6 +3173,12 @@ export default function PersistentTextChat() {
         {/* LUKE_AI_STORAGE_LIFECYCLE_MOUNT_V2 */}
         {/* LUKE_AI_STORAGE_ARCHIVE_RESTORE_MOUNT_V2 */}
         {/* LUKE_AI_STORAGE_INTEGRITY_MOUNT_V2 */}
+        {/* LUKE_AI_DEEP_CLOUD_INTEGRITY_MOUNT_V1 */}
+        <StorageDeepCloudIntegrityPanel
+          requestJson={requestJson}
+          setError={setError}
+        />
+
         <StorageIntegrityPanel
           requestJson={requestJson}
           setError={setError}

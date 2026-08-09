@@ -458,3 +458,11 @@ else
   echo "FAIL: Node.js is required for Storage Integrity Scanner validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Deep Cloud Integrity Verification
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-deep-cloud-integrity.cjs
+else
+  echo "FAIL: Node.js is required for Deep Cloud Integrity Verification"
+  exit 1
+fi

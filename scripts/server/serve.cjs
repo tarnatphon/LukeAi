@@ -1,3 +1,8 @@
+// LUKE_AI_DEEP_CLOUD_INTEGRITY_IMPORT_V1
+const {
+  StorageDeepCloudIntegrityManager,
+} = require("./storage-deep-cloud-integrity-manager.cjs");
+
 // LUKE_AI_STORAGE_INTEGRITY_IMPORT_V2
 const {
   StorageIntegrityScanner,
@@ -17463,6 +17468,23 @@ const storageIntegrityScanner =
       storageArchiveRestoreManager,
   });
 
+// LUKE_AI_DEEP_CLOUD_INTEGRITY_BOOTSTRAP_V1
+const storageDeepCloudIntegrityManager =
+  new StorageDeepCloudIntegrityManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-deep-cloud-integrity-state.json"
+    ),
+    safeArchiveManager:
+      storageSafeArchiveManager,
+    s3Adapter:
+      s3CompatibleStorageAdapter,
+  });
+
+
 
 // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_BOOTSTRAP_V2
 const storageAvailabilityWatcher =
@@ -17499,6 +17521,93 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/storage/credentials
   // LUKE_AI_STORAGE_INTEGRITY_API_V2
+
+  // LUKE_AI_DEEP_CLOUD_INTEGRITY_API_V1
+
+  if (
+    req.url === "/api/storage/integrity/cloud" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      cloudIntegrity:
+        storageDeepCloudIntegrityManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/integrity/cloud/verify" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const storage =
+        storageDestinationManager
+          .resolveActiveDestination();
+
+      const verification =
+        await storageDeepCloudIntegrityManager
+          .verifyArchive({
+            archiveId:
+              body.archiveId,
+            approvedRoot:
+              storage.destination.path,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        verification,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity/cloud/alerts/acknowledge" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const alert =
+        storageDeepCloudIntegrityManager
+          .acknowledgeAlert(
+            body.alertId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        alert,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   if (
     req.url === "/api/storage/integrity" &&
