@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_RECOVERY_RUNBOOK_IMPORT_V1
+const {
+  StorageRecoveryRunbookManager,
+} = require("./storage-recovery-runbook-manager.cjs");
+
 // LUKE_AI_STORAGE_DISASTER_RECOVERY_IMPORT_V1
 const {
   StorageDisasterRecoveryDashboard,
@@ -17546,6 +17551,22 @@ const storageDisasterRecoveryDashboard =
       unifiedStorageProviderCore,
   });
 
+// LUKE_AI_STORAGE_RECOVERY_RUNBOOK_BOOTSTRAP_V1
+const storageRecoveryRunbookManager =
+  new StorageRecoveryRunbookManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-recovery-runbook-state.json"
+    ),
+    disasterRecoveryDashboard:
+      storageDisasterRecoveryDashboard,
+  });
+
+
+
 storageAvailabilityWatcher.start();
 
 const server = http.createServer(async (req, res) => {
@@ -17569,6 +17590,62 @@ const server = http.createServer(async (req, res) => {
   // LUKE_AI_DEEP_CLOUD_INTEGRITY_API_V1
 
   // LUKE_AI_STORAGE_DISASTER_RECOVERY_API_V1
+
+  // LUKE_AI_STORAGE_RECOVERY_RUNBOOK_API_V1
+
+  if (
+    req.url === "/api/storage/recovery-runbook" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        recoveryRunbook:
+          storageRecoveryRunbookManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/recovery-runbook/refresh" &&
+    req.method === "POST"
+  ) {
+    try {
+      const runbook =
+        storageRecoveryRunbookManager
+          .createRunbook();
+
+      return json(res, 200, {
+        ok: true,
+        runbook,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   if (
     req.url === "/api/storage/disaster-recovery" &&

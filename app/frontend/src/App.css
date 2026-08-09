@@ -8784,3 +8784,140 @@ html[data-theme^="dark"] .settings-subsection:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* LUKE_AI_STORAGE_RECOVERY_RUNBOOK_STYLES_V1 */
+.storage-recovery-runbook-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+}
+
+.storage-runbook-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storage-runbook-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.storage-recovery-runbook-panel span,
+.storage-recovery-runbook-panel small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+.storage-runbook-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-runbook-summary article {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+  text-align: center;
+}
+
+.storage-runbook-summary article strong {
+  font-size: 1.3rem;
+}
+
+.storage-runbook-procedures {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.storage-runbook-procedure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 10px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-runbook-procedure > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storage-runbook-procedure > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.storage-runbook-procedure p {
+  margin: 0;
+}
+
+.storage-runbook-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.storage-runbook-step {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+  border-radius: 8px;
+  background:
+    var(--md-sys-color-surface-container-low);
+}
+
+.storage-runbook-step > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.storage-runbook-step button {
+  align-self: flex-start;
+}
+
+.storage-runbook-safety {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+}
+
+@media (max-width: 800px) {
+  .storage-runbook-summary {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .storage-runbook-heading {
+    flex-direction: column;
+  }
+
+  .storage-runbook-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .storage-runbook-procedure > header,
+  .storage-runbook-step > div {
+    flex-direction: column;
+  }
+}

@@ -474,3 +474,11 @@ else
   echo "FAIL: Node.js is required for Storage Disaster Recovery Dashboard validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Storage Recovery Runbook validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-storage-recovery-runbook-manager.cjs
+else
+  echo "FAIL: Node.js is required for Storage Recovery Runbook validation"
+  exit 1
+fi
