@@ -7719,3 +7719,85 @@ html[data-theme^="dark"] .settings-subsection:hover {
     flex-direction: column;
   }
 }
+
+/* LUKE_AI_STORAGE_AVAILABILITY_WATCHER_STYLES_V2 */
+.storage-availability-watcher-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border-top: 1px solid var(--border-color-muted);
+}
+
+.storage-watcher-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storage-watcher-heading > div {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.storage-watcher-heading > div:first-child {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.storage-watcher-status,
+.storage-watcher-providers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-watcher-status > div,
+.storage-watcher-providers article,
+.storage-watcher-events {
+  padding: 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 9px;
+  background: var(--md-sys-color-surface);
+}
+
+.storage-watcher-status > div,
+.storage-watcher-providers article {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.storage-watcher-events > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.storage-watcher-events article {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.storage-availability-watcher-panel span,
+.storage-availability-watcher-panel small {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+}
+
+@media (max-width: 720px) {
+  .storage-watcher-heading {
+    flex-direction: column;
+  }
+
+  .storage-watcher-status,
+  .storage-watcher-providers {
+    grid-template-columns: 1fr;
+  }
+}

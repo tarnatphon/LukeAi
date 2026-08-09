@@ -762,6 +762,54 @@ class UnifiedStorageTransferQueue {
     }
   }
 
+  // LUKE_AI_QUEUE_WAKE_WAITING_JOBS_V1
+  wakeWaitingJobs({
+    providerId = null,
+  } = {}) {
+    const state =
+      this.readState();
+
+    let changed = 0;
+
+    for (const job of state.jobs || []) {
+      if (
+        job.status !== "waiting"
+      ) {
+        continue;
+      }
+
+      if (
+        providerId &&
+        job.destinationProviderId &&
+        job.destinationProviderId !==
+          providerId
+      ) {
+        continue;
+      }
+
+      job.status =
+        "queued";
+
+      job.nextRetryAt =
+        null;
+
+      job.error =
+        null;
+
+      changed += 1;
+    }
+
+    if (changed > 0) {
+      this.writeState(state);
+      this.start();
+    }
+
+    return {
+      changed,
+      providerId,
+    };
+  }
+
   async processLoop() {
     const initial =
       this.readState();

@@ -1,3 +1,8 @@
+// LUKE_AI_STORAGE_AVAILABILITY_WATCHER_IMPORT_V2
+const {
+  StorageAvailabilityWatcher,
+} = require("./storage-availability-watcher.cjs");
+
 // LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_IMPORT_V2
 const {
   UnifiedStorageTransferQueue,
@@ -17273,6 +17278,24 @@ const unifiedStorageTransferQueue =
     maxConcurrent: 1,
   });
 
+// LUKE_AI_STORAGE_AVAILABILITY_WATCHER_BOOTSTRAP_V2
+const storageAvailabilityWatcher =
+  new StorageAvailabilityWatcher({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-availability-watcher.json"
+    ),
+    providerCore:
+      unifiedStorageProviderCore,
+    transferQueue:
+      unifiedStorageTransferQueue,
+  });
+
+storageAvailabilityWatcher.start();
+
 const server = http.createServer(async (req, res) => {
   // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
 
@@ -17696,6 +17719,103 @@ const server = http.createServer(async (req, res) => {
   }
 
   // LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_API_V2
+
+  // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_API_V2
+
+  if (
+    req.url === "/api/storage/watcher" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      watcher:
+        storageAvailabilityWatcher
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/watcher/scan" &&
+    req.method === "POST"
+  ) {
+    try {
+      const result =
+        await storageAvailabilityWatcher
+          .scan();
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/watcher/start" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      watcher:
+        storageAvailabilityWatcher
+          .setEnabled(true),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/watcher/stop" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      watcher:
+        storageAvailabilityWatcher
+          .setEnabled(false),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/watcher/interval" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      return json(res, 200, {
+        ok: true,
+        watcher:
+          storageAvailabilityWatcher
+            .setIntervalMs(
+              body.intervalMs
+            ),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
 
   // GET /api/storage/queue
   if (
