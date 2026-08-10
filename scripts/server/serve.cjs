@@ -1,3 +1,69 @@
+// LUKE_AI_I2V_JOB_MANAGER_IMPORT_V1
+const {
+  ImageToVideoJobManager,
+} = require("./image-to-video-job-manager.cjs");
+
+// LUKE_AI_I2V_JOB_MANAGER_SINGLETON_V1
+let imageToVideoJobManagerInstance = null;
+
+function getImageToVideoJobManager() {
+  if (
+    imageToVideoJobManagerInstance === null
+  ) {
+    imageToVideoJobManagerInstance =
+      new ImageToVideoJobManager({
+        statePath: path.join(
+          ROOT,
+          "app",
+          "runtime-state",
+          "image-to-video",
+          "jobs.json"
+        ),
+        maxHistory: 200,
+      });
+  }
+
+  return imageToVideoJobManagerInstance;
+}
+
+async function readImageToVideoJobBody(req) {
+  const chunks = [];
+
+  for await (const chunk of req) {
+    chunks.push(
+      Buffer.isBuffer(chunk)
+        ? chunk
+        : Buffer.from(chunk)
+    );
+  }
+
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  const text =
+    Buffer.concat(chunks)
+      .toString("utf8")
+      .trim();
+
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const error =
+      new Error(
+        "Invalid JSON request body."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+
 // LUKE_AI_IMAGE_TO_VIDEO_RUNTIME_CAPABILITY_IMPORT_V2
 const {
   ImageToVideoRuntimeCapabilityManager,
@@ -23333,6 +23399,299 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
   }
 
   // POST /api/image-to-video/generate
+  // LUKE_AI_I2V_JOB_API_V1
+  {
+    const imageToVideoJobUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    const imageToVideoJobPath =
+      imageToVideoJobUrl.pathname;
+
+    if (
+      imageToVideoJobPath ===
+        "/api/image-to-video/jobs" &&
+      req.method === "POST"
+    ) {
+      try {
+        const body =
+          await readImageToVideoJobBody(
+            req
+          );
+
+        const payload =
+          body?.payload &&
+          typeof body.payload ===
+            "object" &&
+          !Array.isArray(
+            body.payload
+          )
+            ? body.payload
+            : body;
+
+        if (
+          !payload ||
+          typeof payload !==
+            "object" ||
+          Array.isArray(payload) ||
+          Object.keys(payload)
+            .length === 0
+        ) {
+          return json(
+            res,
+            400,
+            {
+              ok: false,
+              error:
+                "Image-to-Video generation payload is required.",
+            }
+          );
+        }
+
+        const manager =
+          getImageToVideoJobManager();
+
+        const job =
+          manager.createJob({
+            payload,
+          });
+
+        return json(
+          res,
+          202,
+          {
+            ok: true,
+            job,
+          }
+        );
+
+      } catch (error) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+    }
+
+    if (
+      imageToVideoJobPath ===
+        "/api/image-to-video/jobs" &&
+      req.method === "GET"
+    ) {
+      try {
+        const manager =
+          getImageToVideoJobManager();
+
+        const state =
+          imageToVideoJobUrl
+            .searchParams
+            .get("state");
+
+        const limit =
+          imageToVideoJobUrl
+            .searchParams
+            .get("limit");
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            jobs:
+              manager.listJobs({
+                state:
+                  state || null,
+                limit:
+                  limit || 50,
+              }),
+            summary:
+              manager.getSummary(),
+          }
+        );
+
+      } catch (error) {
+        return json(
+          res,
+          500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+    }
+
+    if (
+      imageToVideoJobPath ===
+        "/api/image-to-video/jobs/summary" &&
+      req.method === "GET"
+    ) {
+      try {
+        const manager =
+          getImageToVideoJobManager();
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            summary:
+              manager.getSummary(),
+          }
+        );
+
+      } catch (error) {
+        return json(
+          res,
+          500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+    }
+
+    const imageToVideoJobMatch =
+      imageToVideoJobPath.match(
+        /^\/api\/image-to-video\/jobs\/([^/]+)(?:\/(cancel|retry))?$/
+      );
+
+    if (imageToVideoJobMatch) {
+      const jobId =
+        decodeURIComponent(
+          imageToVideoJobMatch[1]
+        );
+
+      const action =
+        imageToVideoJobMatch[2] ||
+        null;
+
+      if (
+        action === null &&
+        req.method === "GET"
+      ) {
+        const manager =
+          getImageToVideoJobManager();
+
+        const job =
+          manager.getJob(
+            jobId
+          );
+
+        if (!job) {
+          return json(
+            res,
+            404,
+            {
+              ok: false,
+              error:
+                "Image-to-Video job not found.",
+            }
+          );
+        }
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            job,
+          }
+        );
+      }
+
+      if (
+        action === "cancel" &&
+        req.method === "POST"
+      ) {
+        try {
+          const manager =
+            getImageToVideoJobManager();
+
+          const job =
+            manager.cancelJob(
+              jobId
+            );
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+              job,
+            }
+          );
+
+        } catch (error) {
+          return json(
+            res,
+            error.statusCode || 409,
+            {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            }
+          );
+        }
+      }
+
+      if (
+        action === "retry" &&
+        req.method === "POST"
+      ) {
+        try {
+          const manager =
+            getImageToVideoJobManager();
+
+          const job =
+            manager.retryJob(
+              jobId
+            );
+
+          return json(
+            res,
+            202,
+            {
+              ok: true,
+              job,
+            }
+          );
+
+        } catch (error) {
+          return json(
+            res,
+            error.statusCode || 409,
+            {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            }
+          );
+        }
+      }
+    }
+  }
+
   if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
     try {
       const body = await readJsonBody(req, res);
