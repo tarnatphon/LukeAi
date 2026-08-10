@@ -514,3 +514,11 @@ else
   echo "FAIL: Node.js is required for Image-to-Video Runtime UI Integration validation"
   exit 1
 fi
+
+# LUKE AI STUDIO Image-to-Video Offline Worker validation
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-offline-worker.cjs
+else
+  echo "FAIL: Node.js is required for Image-to-Video Offline Worker validation"
+  exit 1
+fi

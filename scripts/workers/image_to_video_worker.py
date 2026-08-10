@@ -92,10 +92,18 @@ def main():
     if args.references and Path(args.references).exists(): refs = json.loads(Path(args.references).read_text())
     if refs and args.reference_lock != "0": source = fit_frame(prepare_reference_frame(source, refs, device, dtype, automatic_match))
 
-    pipe = StableVideoDiffusionPipeline.from_pretrained(repo, torch_dtype=dtype, variant="fp16")
+    # LUKE_AI_I2V_LOCAL_ONLY_MODEL_V2
+    pipe = StableVideoDiffusionPipeline.from_pretrained(repo, torch_dtype=dtype, variant="fp16",
+        local_files_only=True,
+    )
     if device == "cuda": pipe.enable_model_cpu_offload()
     else: pipe.to(device)
-    pipe.enable_vae_slicing(); pipe.enable_vae_tiling()
+    # LUKE_AI_I2V_DIFFUSERS_COMPAT_V1
+    if hasattr(pipe, "enable_vae_slicing"):
+        pipe.enable_vae_slicing()
+
+    if hasattr(pipe, "enable_vae_tiling"):
+        pipe.enable_vae_tiling()
     # Low motion and low augmentation preserve the reference more faithfully.
     frames = pipe(
         source,
