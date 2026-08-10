@@ -522,3 +522,10 @@ else
   echo "FAIL: Node.js is required for Image-to-Video Offline Worker validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-job-manager.cjs
+else
+  echo "FAIL: Node.js is required for Production Image-to-Video Job Manager validation"
+  exit 1
+fi
