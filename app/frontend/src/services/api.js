@@ -1566,3 +1566,111 @@ export async function getImageToVideoRuntimeCapability() {
     data
   );
 }
+
+// LUKE_AI_I2V_ASYNC_JOB_SERVICE_V1
+async function requestImageToVideoJobApi(
+  url,
+  options = {},
+) {
+  const response =
+    await fetch(
+      url,
+      {
+        ...options,
+        headers: {
+          Accept:
+            "application/json",
+          ...(options.body
+            ? {
+                "Content-Type":
+                  "application/json",
+              }
+            : {}),
+          ...(options.headers || {}),
+        },
+      },
+    );
+
+  let data = {};
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      `Image-to-Video job request failed (${response.status})`,
+    );
+  }
+
+  return data;
+}
+
+export async function createImageToVideoJob(
+  payload,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      "/api/image-to-video/jobs",
+      {
+        method: "POST",
+        body:
+          JSON.stringify({
+            payload,
+          }),
+      },
+    );
+
+  return data.job;
+}
+
+export async function getImageToVideoJob(
+  jobId,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      `/api/image-to-video/jobs/${encodeURIComponent(jobId)}`,
+    );
+
+  return data.job;
+}
+
+export async function listImageToVideoJobs(
+  limit = 20,
+) {
+  return requestImageToVideoJobApi(
+    `/api/image-to-video/jobs?limit=${encodeURIComponent(limit)}`,
+  );
+}
+
+export async function cancelImageToVideoJob(
+  jobId,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      `/api/image-to-video/jobs/${encodeURIComponent(jobId)}/cancel`,
+      {
+        method: "POST",
+      },
+    );
+
+  return data.job;
+}
+
+export async function retryImageToVideoJob(
+  jobId,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      `/api/image-to-video/jobs/${encodeURIComponent(jobId)}/retry`,
+      {
+        method: "POST",
+      },
+    );
+
+  return data.job;
+}

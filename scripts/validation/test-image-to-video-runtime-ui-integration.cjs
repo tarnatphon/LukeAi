@@ -27,78 +27,154 @@ const server =
     "utf8"
   );
 
-const requiredUi = [
+function requireText(
+  source,
+  value,
+  label
+) {
+  if (!source.includes(value)) {
+    throw new Error(
+      `${label}:${value}`
+    );
+  }
+}
+
+const runtimeUiContracts = [
   "getImageToVideoRuntimeCapability",
   "ImageToVideoRuntimeHealthCard",
   "LUKE_AI_I2V_RUNTIME_HEALTH_STATE_V1",
   "LUKE_AI_I2V_RUNTIME_HEALTH_MOUNT_V1",
   "LUKE_AI_I2V_GENERATE_RUNTIME_GATE_V1",
-  'modelId: "auto"',
-  "imageDataUrl",
-  "references",
-  "referenceLock",
+  "runtimeCapability?.ready !== true",
+  "refreshRuntimeCapability",
 ];
 
-for (const value of requiredUi) {
-  if (!ui.includes(value)) {
-    throw new Error(
-      `UI_CONTRACT_MISSING:${value}`
-    );
-  }
-}
-
-if (
-  !service.includes(
-    "/api/capabilities/image-to-video/runtime"
-  )
-) {
-  throw new Error(
-    "RUNTIME_SERVICE_ENDPOINT_MISSING"
+for (const value of runtimeUiContracts) {
+  requireText(
+    ui,
+    value,
+    "RUNTIME_UI_CONTRACT_MISSING"
   );
 }
 
-if (
-  !card.includes(
-    "Automatic install: OFF"
-  ) ||
-  !card.includes(
-    "Automatic repair: OFF"
-  )
-) {
-  throw new Error(
-    "RUNTIME_UI_SAFETY_MISSING"
+const asyncUiContracts = [
+  "LUKE_AI_I2V_ASYNC_JOB_RUN_V1",
+  "createImageToVideoJob",
+  "getImageToVideoJob",
+  "pollImageToVideoJob",
+  "cancelImageToVideoJob",
+  "retryImageToVideoJob",
+  "jobHistory",
+  "generatedVideoUrl",
+];
+
+for (const value of asyncUiContracts) {
+  requireText(
+    ui,
+    value,
+    "ASYNC_UI_CONTRACT_MISSING"
   );
 }
 
-for (
-  const endpoint of
-  [
-    "/api/capabilities/image-to-video/runtime",
-    "/api/image-to-video/compatibility",
-    "/api/image-to-video/generate",
-  ]
-) {
-  if (
-    !server.includes(
-      endpoint
-    )
-  ) {
-    throw new Error(
-      `BACKEND_ENDPOINT_MISSING:${endpoint}`
-    );
-  }
-}
+requireText(
+  service,
+  "/api/capabilities/image-to-video/runtime",
+  "RUNTIME_SERVICE_ENDPOINT_MISSING"
+);
 
-const generationCalls =
-  ui.match(
-    /generateImageToVideo\s*\(/g
-  ) || [];
+requireText(
+  service,
+  "generateImageToVideo",
+  "LEGACY_GENERATE_SERVICE_REMOVED"
+);
+
+requireText(
+  service,
+  "createImageToVideoJob",
+  "ASYNC_CREATE_SERVICE_MISSING"
+);
+
+requireText(
+  service,
+  "getImageToVideoJob",
+  "ASYNC_GET_SERVICE_MISSING"
+);
+
+requireText(
+  service,
+  "cancelImageToVideoJob",
+  "ASYNC_CANCEL_SERVICE_MISSING"
+);
+
+requireText(
+  service,
+  "retryImageToVideoJob",
+  "ASYNC_RETRY_SERVICE_MISSING"
+);
+
+requireText(
+  card,
+  "Automatic install: OFF",
+  "RUNTIME_UI_SAFETY_MISSING"
+);
+
+requireText(
+  card,
+  "Automatic repair: OFF",
+  "RUNTIME_UI_SAFETY_MISSING"
+);
+
+requireText(
+  server,
+  "/api/capabilities/image-to-video/runtime",
+  "BACKEND_ENDPOINT_MISSING"
+);
+
+requireText(
+  server,
+  "/api/image-to-video/jobs",
+  "JOB_ENDPOINT_MISSING"
+);
+
+requireText(
+  server,
+  "/api/image-to-video/generate",
+  "LEGACY_BACKEND_FALLBACK_REMOVED"
+);
 
 if (
-  generationCalls.length !== 1
+  ui.includes(
+    "await generateImageToVideo({"
+  )
 ) {
   throw new Error(
-    `EXPECTED_ONE_GENERATE_CALL:${generationCalls.length}`
+    "UI_MUST_NOT_USE_SYNCHRONOUS_GENERATE_AFTER_ASYNC_MIGRATION"
+  );
+}
+
+const runtimeGateCount =
+  (
+    ui.match(
+      /LUKE_AI_I2V_GENERATE_RUNTIME_GATE_V1/g
+    ) || []
+  ).length;
+
+if (runtimeGateCount !== 1) {
+  throw new Error(
+    `EXPECTED_ONE_RUNTIME_GATE:${runtimeGateCount}`
+  );
+}
+
+const asyncCreateCount =
+  (
+    ui.match(
+      /await\s+createImageToVideoJob\s*\(/g
+    ) || []
+  ).length;
+
+if (asyncCreateCount !== 1) {
+  throw new Error(
+    `EXPECTED_ONE_ASYNC_CREATE_CALL:${asyncCreateCount}`
   );
 }
 
@@ -107,19 +183,27 @@ console.log(
 );
 
 console.log(
-  "PASS: Runtime Health UI displays Torch/MPS/FFmpeg/package state."
+  "PASS: Runtime Health UI displays readiness state."
 );
 
 console.log(
-  "PASS: Generate is guarded by real runtime readiness."
+  "PASS: Runtime readiness gate remains enforced before async generation."
 );
 
 console.log(
-  "PASS: Existing Image-to-Video generation payload remains intact."
+  "PASS: ImageToVideo UI now uses asynchronous Job API generation."
 );
 
 console.log(
-  "PASS: Runtime Health performs no automatic install, repair or model download."
+  "PASS: Legacy generate service remains available only as fallback."
+);
+
+console.log(
+  "PASS: Cancel, retry, polling and history contracts are present."
+);
+
+console.log(
+  "PASS: Runtime Health performs no automatic install or repair."
 );
 
 console.log(

@@ -1,3 +1,12 @@
+// LUKE_AI_I2V_ASYNC_JOB_IMPORT_V1
+import {
+  createImageToVideoJob,
+  getImageToVideoJob,
+  listImageToVideoJobs,
+  cancelImageToVideoJob,
+  retryImageToVideoJob,
+} from "../services/api";
+
 import { getImageToVideoRuntimeCapability } from "../services/api";
 import ImageToVideoRuntimeHealthCard from "./ImageToVideoRuntimeHealthCard.jsx";
 import React, { useEffect, useMemo, useState } from "react";
@@ -161,10 +170,263 @@ export default function ImageToVideo({
     catch (error) { showAlert?.({ title: "Source Image", message: error.message, danger: true }); }
   };
 
+  // LUKE_AI_I2V_ASYNC_JOB_STATE_V1
+  const [
+    activeJob,
+    setActiveJob,
+  ] = useState(null);
+
+  const [
+    jobHistory,
+    setJobHistory,
+  ] = useState([]);
+
+  const [
+    generatedVideoUrl,
+    setGeneratedVideoUrl,
+  ] = useState("");
+
+  const refreshJobHistory =
+    useCallback(
+      async () => {
+        try {
+          const result =
+            await listImageToVideoJobs(
+              12,
+            );
+
+          setJobHistory(
+            Array.isArray(
+              result?.jobs,
+            )
+              ? result.jobs
+              : [],
+          );
+        } catch {
+        }
+      },
+      [],
+    );
+
+  useEffect(() => {
+    refreshJobHistory();
+  }, [refreshJobHistory]);
+
+  const normalizeVideoUrl =
+    (value) => {
+      const url =
+        String(
+          value || "",
+        );
+
+      if (
+        url.startsWith(
+          "app/outputs/",
+        )
+      ) {
+        return (
+          "/" +
+          url.slice(
+            "app/".length,
+          )
+        );
+      }
+
+      return url;
+    };
+
+  const pollImageToVideoJob =
+    async (jobId) => {
+      for (;;) {
+        const job =
+          await getImageToVideoJob(
+            jobId,
+          );
+
+        setActiveJob(
+          job,
+        );
+
+        const percent =
+          Math.round(
+            Number(
+              job?.progress
+                ?.percent || 0,
+            ),
+          );
+
+        if (
+          job.state ===
+          "queued"
+        ) {
+          setStatus(
+            "Image-to-Video job queued…",
+          );
+        } else if (
+          job.state ===
+          "running" ||
+          job.state ===
+          "cancelling"
+        ) {
+          setStatus(
+            job?.progress
+              ?.message ||
+              `Creating video… ${percent}%`,
+          );
+        }
+
+        if (
+          job.state ===
+          "completed"
+        ) {
+          const output =
+            normalizeVideoUrl(
+              job?.output
+                ?.videoUrl ||
+              job?.output
+                ?.output ||
+              job?.output
+                ?.worker
+                ?.output,
+            );
+
+          setGeneratedVideoUrl(
+            output,
+          );
+
+          setStatus(
+            "Automatic Image-to-Video completed.",
+          );
+
+          await refreshJobHistory();
+
+          return job;
+        }
+
+        if (
+          job.state ===
+          "cancelled"
+        ) {
+          setStatus(
+            "Image-to-Video generation cancelled.",
+          );
+
+          await refreshJobHistory();
+
+          return job;
+        }
+
+        if (
+          job.state ===
+          "failed"
+        ) {
+          await refreshJobHistory();
+
+          throw new Error(
+            job?.error
+              ?.message ||
+              "Image-to-Video generation failed.",
+          );
+        }
+
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              1000,
+            ),
+        );
+      }
+    };
+
+  const cancelActiveJob =
+    async () => {
+      if (!activeJob?.id) {
+        return;
+      }
+
+      try {
+        const job =
+          await cancelImageToVideoJob(
+            activeJob.id,
+          );
+
+        setActiveJob(
+          job,
+        );
+
+        setStatus(
+          "Cancelling Image-to-Video generation…",
+        );
+      } catch (error) {
+        showAlert?.({
+          title:
+            "Cancel Image-to-Video",
+          message:
+            error.message,
+          danger: true,
+        });
+      }
+    };
+
+  const retryJob =
+    async (jobId) => {
+      setBusy(true);
+      setGeneratedVideoUrl("");
+
+      try {
+        const job =
+          await retryImageToVideoJob(
+            jobId,
+          );
+
+        setActiveJob(
+          job,
+        );
+
+        setStatus(
+          "Retry queued…",
+        );
+
+        await pollImageToVideoJob(
+          job.id,
+        );
+      } catch (error) {
+        setStatus(
+          error.message,
+        );
+
+        showAlert?.({
+          title:
+            "Retry Image-to-Video",
+          message:
+            error.message,
+          danger: true,
+        });
+      } finally {
+        setBusy(false);
+      }
+    };
+
+  // LUKE_AI_I2V_ASYNC_JOB_RUN_V1
   const run = async () => {
-    if (!source || !automaticModel || automaticModel.compatibility.status === "blocked") return;
+    if (
+      !source ||
+      !automaticModel ||
+      automaticModel
+        .compatibility
+        .status === "blocked"
+    ) {
+      return;
+    }
+
     setBusy(true);
-    setStatus("Automatic Match is analysing the computer and locking the reference appearance…");
+    setGeneratedVideoUrl("");
+
+    setStatus(
+      "Automatic Match is analysing the computer and locking the reference appearance…",
+    );
+
     try {
       // LUKE_AI_I2V_GENERATE_RUNTIME_GATE_V1
       if (
@@ -182,20 +444,53 @@ export default function ImageToVideo({
         }
       }
 
-      const result = await generateImageToVideo({
-        modelId: "auto",
-        imageDataUrl: source.dataUrl,
-        references: references.map((item) => ({ ...item, type: "auto", weight: 1 })),
-        referenceLock: true,
-        automaticMatch: true,
-        prompt: "",
-        seconds: 5,
-      });
-      setStatus(result.message || "Automatic Reference Match completed.");
+      const job =
+        await createImageToVideoJob({
+          modelId: "auto",
+          imageDataUrl:
+            source.dataUrl,
+          references:
+            references.map(
+              (item) => ({
+                ...item,
+                type: "auto",
+                weight: 1,
+              }),
+            ),
+          referenceLock: true,
+          automaticMatch: true,
+          prompt: "",
+          seconds: 5,
+        });
+
+      setActiveJob(
+        job,
+      );
+
+      setStatus(
+        job?.state === "running"
+          ? "Image-to-Video generation started…"
+          : "Image-to-Video job queued…",
+      );
+
+      await pollImageToVideoJob(
+        job.id,
+      );
     } catch (error) {
-      setStatus(error.message);
-      showAlert?.({ title: "Automatic Image-to-Video", message: error.message, danger: true });
-    } finally { setBusy(false); }
+      setStatus(
+        error.message,
+      );
+
+      showAlert?.({
+        title:
+          "Automatic Image-to-Video",
+        message:
+          error.message,
+        danger: true,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const runtimeReady = capability.installed === true || capability.state === "ready";
@@ -253,7 +548,7 @@ export default function ImageToVideo({
         </div> : <p>Checking compatible local video models…</p>}
         {!runtimeReady && <div style={{ marginTop:16, padding:14, border:"1px solid var(--border-color)", borderRadius:12 }}>
           <div style={{display:"flex", alignItems:"center", gap:8, fontWeight:700}}><Download size={18}/> Image-to-Video is not installed</div>
-          <p style={{opacity:.76}}>{capability.message || "Install the isolated runtime and required AI components. The video model downloads automatically on first generation."}</p>
+          <p style={{opacity:.76}}>{capability.message || "Install the isolated runtime and required AI components. Video models are installed explicitly and generation never downloads model weights silently."}</p>
           <button type="button" onClick={()=>installCapability(capability.state === "error")} disabled={installing} style={{width:"100%", padding:12, display:"flex", justifyContent:"center", gap:8}}>
             {capability.state === "error" ? <Wrench size={18}/> : <Download size={18}/>}
             {installing ? (capability.message || "Installing…") : capability.state === "error" ? "Repair Image-to-Video" : "Install Image-to-Video"}
@@ -264,6 +559,288 @@ export default function ImageToVideo({
         <button onClick={run} disabled={busy || !source || blocked} style={{ width:"100%", marginTop:18, padding:13, display:"flex", justifyContent:"center", gap:8 }}><Play size={18}/>{busy ? "Creating automatically…" : "Create Video Automatically"}</button>
         {!source && <p style={{opacity:.66}}>Upload the main image to enable automatic generation.</p>}
         {status && <p style={{ marginTop:12 }}>{status}</p>}
+
+        {/* LUKE_AI_I2V_ASYNC_JOB_UI_V1 */}
+        {activeJob && (
+          <div
+            style={{
+              marginTop: 14,
+              padding: 14,
+              border:
+                "1px solid var(--border-color)",
+              borderRadius: 12,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                gap: 10,
+                alignItems:
+                  "center",
+              }}
+            >
+              <strong>
+                Generation Job
+              </strong>
+
+              <span>
+                {activeJob.state}
+              </span>
+            </div>
+
+            <div
+              style={{
+                height: 8,
+                marginTop: 10,
+                borderRadius: 999,
+                overflow:
+                  "hidden",
+                background:
+                  "var(--md-sys-color-surface-container)",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width:
+                    `${Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        Number(
+                          activeJob
+                            ?.progress
+                            ?.percent ||
+                            0,
+                        ),
+                      ),
+                    )}%`,
+                  background:
+                    "var(--md-sys-color-primary)",
+                  transition:
+                    "width .25s ease",
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                marginTop: 7,
+                fontSize: 13,
+                opacity: 0.76,
+              }}
+            >
+              {Math.round(
+                Number(
+                  activeJob
+                    ?.progress
+                    ?.percent ||
+                    0,
+                ),
+              )}
+              %
+              {" · "}
+              {activeJob
+                ?.progress
+                ?.message ||
+                activeJob.state}
+            </div>
+
+            {[
+              "queued",
+              "running",
+            ].includes(
+              activeJob.state,
+            ) && (
+              <button
+                type="button"
+                onClick={
+                  cancelActiveJob
+                }
+                style={{
+                  width: "100%",
+                  marginTop: 10,
+                  padding: 10,
+                }}
+              >
+                Cancel Generation
+              </button>
+            )}
+          </div>
+        )}
+
+        {generatedVideoUrl && (
+          <div
+            style={{
+              marginTop: 16,
+            }}
+          >
+            <h3>
+              Generated Video
+            </h3>
+
+            <video
+              src={
+                generatedVideoUrl
+              }
+              controls
+              playsInline
+              style={{
+                width: "100%",
+                borderRadius: 12,
+                background: "#000",
+              }}
+            />
+          </div>
+        )}
+
+        {jobHistory.length > 0 && (
+          <div
+            style={{
+              marginTop: 18,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                alignItems:
+                  "center",
+                gap: 8,
+              }}
+            >
+              <h3
+                style={{
+                  margin: 0,
+                }}
+              >
+                Generation History
+              </h3>
+
+              <button
+                type="button"
+                onClick={
+                  refreshJobHistory
+                }
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                marginTop: 10,
+              }}
+            >
+              {jobHistory
+                .slice(0, 6)
+                .map(
+                  (job) => (
+                    <div
+                      key={job.id}
+                      style={{
+                        padding: 10,
+                        border:
+                          "1px solid var(--border-color)",
+                        borderRadius: 10,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display:
+                            "flex",
+                          justifyContent:
+                            "space-between",
+                          gap: 8,
+                        }}
+                      >
+                        <strong>
+                          {job.state}
+                        </strong>
+
+                        <span
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.7,
+                          }}
+                        >
+                          {Math.round(
+                            Number(
+                              job
+                                ?.progress
+                                ?.percent ||
+                                0,
+                            ),
+                          )}
+                          %
+                        </span>
+                      </div>
+
+                      {job.state ===
+                        "completed" &&
+                        (
+                          job?.output
+                            ?.videoUrl ||
+                          job?.output
+                            ?.output
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setGeneratedVideoUrl(
+                                normalizeVideoUrl(
+                                  job
+                                    ?.output
+                                    ?.videoUrl ||
+                                  job
+                                    ?.output
+                                    ?.output,
+                                ),
+                              )
+                            }
+                            style={{
+                              marginTop: 8,
+                            }}
+                          >
+                            View Video
+                          </button>
+                        )}
+
+                      {[
+                        "completed",
+                        "failed",
+                        "cancelled",
+                      ].includes(
+                        job.state,
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            retryJob(
+                              job.id,
+                            )
+                          }
+                          disabled={busy}
+                          style={{
+                            marginTop: 8,
+                            marginLeft: 8,
+                          }}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  ),
+                )}
+            </div>
+          </div>
+        )}
+
       </section>
     </div>
   </div>;
