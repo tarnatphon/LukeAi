@@ -536,3 +536,10 @@ else
   echo "FAIL: Node.js is required for Production Image-to-Video Job API validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-process-runner.cjs
+else
+  echo "FAIL: Node.js is required for Production Image-to-Video Process Runner validation"
+  exit 1
+fi
