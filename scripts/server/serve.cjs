@@ -1,3 +1,8 @@
+// LUKE_AI_I2V_PROCESS_RUNNER_IMPORT_V2
+const {
+  ImageToVideoProcessRunner,
+} = require("./image-to-video-process-runner.cjs");
+
 // LUKE_AI_I2V_JOB_MANAGER_IMPORT_V1
 const {
   ImageToVideoJobManager,
@@ -5,6 +10,24 @@ const {
 
 // LUKE_AI_I2V_JOB_MANAGER_SINGLETON_V1
 let imageToVideoJobManagerInstance = null;
+
+// LUKE_AI_I2V_PROCESS_RUNNER_SINGLETON_V2
+let imageToVideoProcessRunnerInstance = null;
+
+function getImageToVideoProcessRunner() {
+  if (
+    imageToVideoProcessRunnerInstance === null
+  ) {
+    imageToVideoProcessRunnerInstance =
+      new ImageToVideoProcessRunner({
+        root: ROOT,
+        jobManager:
+          getImageToVideoJobManager(),
+      });
+  }
+
+  return imageToVideoProcessRunnerInstance;
+}
 
 function getImageToVideoJobManager() {
   if (
@@ -23458,12 +23481,62 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
             payload,
           });
 
+        try {
+          const prepared =
+            prepareImageToVideoJobExecution(
+              payload,
+              job.id
+            );
+
+          getImageToVideoProcessRunner()
+            .startPreparedJob(
+              job.id,
+              {
+                args:
+                  prepared.workerArgs,
+
+                output: {
+                  videoUrl:
+                    prepared.outputRelative,
+
+                  output:
+                    prepared.outputRelative,
+
+                  modelId:
+                    prepared.modelId,
+                },
+              }
+            );
+
+        } catch (error) {
+          manager.failJob(
+            job.id,
+            {
+              code:
+                error?.code ||
+                "JOB_PREPARATION_FAILED",
+
+              message:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            }
+          );
+        }
+
+        const startedJob =
+          manager.getJob(
+            job.id
+          );
+
+        // LUKE_AI_I2V_JOB_EXECUTION_CREATE_V2
         return json(
           res,
           202,
           {
             ok: true,
-            job,
+            job:
+              startedJob,
           }
         );
 
@@ -23666,12 +23739,62 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
               jobId
             );
 
+          try {
+            const prepared =
+              prepareImageToVideoJobExecution(
+                job.payload,
+                job.id
+              );
+
+            getImageToVideoProcessRunner()
+              .startPreparedJob(
+                job.id,
+                {
+                  args:
+                    prepared.workerArgs,
+
+                  output: {
+                    videoUrl:
+                      prepared.outputRelative,
+
+                    output:
+                      prepared.outputRelative,
+
+                    modelId:
+                      prepared.modelId,
+                  },
+                }
+              );
+
+          } catch (error) {
+            manager.failJob(
+              job.id,
+              {
+                code:
+                  error?.code ||
+                  "JOB_RETRY_PREPARATION_FAILED",
+
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : String(error),
+              }
+            );
+          }
+
+          const startedJob =
+            manager.getJob(
+              job.id
+            );
+
+          // LUKE_AI_I2V_JOB_EXECUTION_RETRY_V2
           return json(
             res,
             202,
             {
               ok: true,
-              job,
+              job:
+                startedJob,
             }
           );
 
@@ -23692,7 +23815,333 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
+  // LUKE_AI_I2V_JOB_PREPARATION_V2
+function prepareImageToVideoJobExecution(
+  body,
+  jobId
+) {
+  let modelId =
+    String(
+      body.modelId || ""
+    );
+
+  const imageDataUrl =
+    String(
+      body.imageDataUrl || ""
+    );
+
+  const references =
+    Array.isArray(
+      body.references
+    )
+      ? body.references.slice(
+          0,
+          8
+        )
+      : [];
+
+  const automaticMatch =
+    body.automaticMatch === true;
+
+  if (
+    modelId === "auto"
+  ) {
+    const hw =
+      getHardwareSpecs();
+
+    const apple =
+      process.platform === "darwin" &&
+      process.arch === "arm64";
+
+    const ram =
+      Number(
+        hw.ram_total_gb || 0
+      );
+
+    const vram =
+      Number(
+        hw.gpu_vram_gb ||
+        hw.vram_total_gb ||
+        0
+      );
+
+    modelId =
+      (
+        apple
+          ? ram >= 48
+          : vram >= 16
+      )
+        ? "svd-xt"
+        : "svd";
+  }
+
+  if (
+    !imageDataUrl.startsWith(
+      "data:image/"
+    )
+  ) {
+    const error =
+      new Error(
+        "A valid source image is required."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    ![
+      "svd",
+      "svd-xt",
+    ].includes(
+      modelId
+    )
+  ) {
+    const error =
+      new Error(
+        "This model is shown for compatibility planning, but its verified local worker adapter is not installed yet."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const match =
+    imageDataUrl.match(
+      /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/
+    );
+
+  if (!match) {
+    const error =
+      new Error(
+        "Unsupported image encoding."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const safeJobId =
+    String(
+      jobId || ""
+    ).replace(
+      /[^a-zA-Z0-9._-]/g,
+      "-"
+    );
+
+  if (!safeJobId) {
+    throw new Error(
+      "A valid Image-to-Video job ID is required."
+    );
+  }
+
+  const inputDir =
+    path.join(
+      ROOT,
+      "app",
+      "cache",
+      "image-to-video"
+    );
+
+  const outputDir =
+    path.join(
+      ROOT,
+      "app",
+      "outputs",
+      "video"
+    );
+
+  fs.mkdirSync(
+    inputDir,
+    {
+      recursive: true,
+    }
+  );
+
+  fs.mkdirSync(
+    outputDir,
+    {
+      recursive: true,
+    }
+  );
+
+  const inputPath =
+    path.join(
+      inputDir,
+      safeJobId + ".png"
+    );
+
+  const outputPath =
+    path.join(
+      outputDir,
+      safeJobId + ".mp4"
+    );
+
+  fs.writeFileSync(
+    inputPath,
+    Buffer.from(
+      match[1],
+      "base64"
+    )
+  );
+
+  const referenceDir =
+    path.join(
+      inputDir,
+      safeJobId +
+        "-references"
+    );
+
+  fs.mkdirSync(
+    referenceDir,
+    {
+      recursive: true,
+    }
+  );
+
+  const referenceManifest =
+    [];
+
+  for (
+    let i = 0;
+    i <
+    references.length;
+    i += 1
+  ) {
+    const ref =
+      references[i] || {};
+
+    const refMatch =
+      String(
+        ref.dataUrl || ""
+      ).match(
+        /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/
+      );
+
+    if (!refMatch) {
+      continue;
+    }
+
+    const refPath =
+      path.join(
+        referenceDir,
+        `ref-${i}.png`
+      );
+
+    fs.writeFileSync(
+      refPath,
+      Buffer.from(
+        refMatch[1],
+        "base64"
+      )
+    );
+
+    referenceManifest.push({
+      path:
+        refPath,
+
+      type:
+        automaticMatch
+          ? "auto"
+          : String(
+              ref.type ||
+              "product"
+            ),
+
+      weight:
+        automaticMatch
+          ? 1
+          : Math.max(
+              0.2,
+              Math.min(
+                1,
+                Number(
+                  ref.weight
+                ) ||
+                0.85
+              )
+            ),
+    });
+  }
+
+  const manifestPath =
+    path.join(
+      referenceDir,
+      "manifest.json"
+    );
+
+  fs.writeFileSync(
+    manifestPath,
+    JSON.stringify(
+      referenceManifest,
+      null,
+      2
+    )
+  );
+
+  const seconds =
+    Math.max(
+      2,
+      Math.min(
+        10,
+        Number(
+          body.seconds
+        ) ||
+        5
+      )
+    );
+
+  return {
+    modelId,
+
+    inputPath,
+
+    outputPath,
+
+    outputRelative:
+      path.relative(
+        ROOT,
+        outputPath
+      ),
+
+    workerArgs: [
+      "--model",
+      modelId,
+
+      "--image",
+      inputPath,
+
+      "--output",
+      outputPath,
+
+      "--prompt",
+      String(
+        body.prompt || ""
+      ),
+
+      "--seconds",
+      String(
+        seconds
+      ),
+
+      "--references",
+      manifestPath,
+
+      "--reference-lock",
+      body.referenceLock ===
+        false
+        ? "0"
+        : "1",
+
+      "--automatic-match",
+      automaticMatch
+        ? "1"
+        : "0",
+    ],
+  };
+}
+
+if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
     try {
       const body = await readJsonBody(req, res);
       if (!body) return;
