@@ -673,6 +673,186 @@ class ImageToVideoJobManager {
     return clone(job);
   }
 
+  // LUKE_AI_I2V_BATCH_PAUSE_STATE_V1
+  pauseJob(jobId) {
+    const job =
+      this.requireJob(jobId);
+
+    if (
+      job.state !== "queued"
+    ) {
+      return clone(job);
+    }
+
+    job.state =
+      "paused";
+
+    job.updatedAt =
+      nowIso();
+
+    job.progress = {
+      ...(job.progress || {}),
+      message:
+        "Paused",
+    };
+
+    this.saveState();
+
+    return clone(job);
+  }
+
+  resumeJob(jobId) {
+    const job =
+      this.requireJob(jobId);
+
+    if (
+      job.state !== "paused"
+    ) {
+      return clone(job);
+    }
+
+    job.state =
+      "queued";
+
+    job.updatedAt =
+      nowIso();
+
+    job.progress = {
+      ...(job.progress || {}),
+      message:
+        "Queued",
+    };
+
+    this.saveState();
+
+    return clone(job);
+  }
+
+  skipJob(jobId) {
+    const job =
+      this.requireJob(jobId);
+
+    if (
+      ![
+        "queued",
+        "paused",
+      ].includes(
+        job.state
+      )
+    ) {
+      return clone(job);
+    }
+
+    const timestamp =
+      nowIso();
+
+    job.state =
+      "cancelled";
+
+    job.pid = null;
+
+    job.finishedAt =
+      timestamp;
+
+    job.updatedAt =
+      timestamp;
+
+    job.error = {
+      code:
+        "BATCH_SKIPPED",
+
+      message:
+        "Skipped by Batch control.",
+    };
+
+    job.progress = {
+      ...(job.progress || {}),
+      message:
+        "Skipped",
+    };
+
+    this.saveState();
+
+    return clone(job);
+  }
+
+  getBatchJobs(batchId) {
+    const value =
+      String(batchId || "");
+
+    return this.state.jobs
+      .filter(
+        (job) =>
+          job?.payload
+            ?.batchId ===
+          value
+      )
+      .map(clone);
+  }
+
+  pauseBatch(batchId) {
+    const jobs =
+      this.getBatchJobs(
+        batchId
+      );
+
+    let paused = 0;
+
+    for (const job of jobs) {
+      if (
+        job.state ===
+        "queued"
+      ) {
+        this.pauseJob(
+          job.id
+        );
+
+        paused += 1;
+      }
+    }
+
+    return {
+      batchId,
+      paused,
+      jobs:
+        this.getBatchJobs(
+          batchId
+        ),
+    };
+  }
+
+  resumeBatch(batchId) {
+    const jobs =
+      this.getBatchJobs(
+        batchId
+      );
+
+    let resumed = 0;
+
+    for (const job of jobs) {
+      if (
+        job.state ===
+        "paused"
+      ) {
+        this.resumeJob(
+          job.id
+        );
+
+        resumed += 1;
+      }
+    }
+
+    return {
+      batchId,
+      resumed,
+      jobs:
+        this.getBatchJobs(
+          batchId
+        ),
+    };
+  }
+
+
   cancelJob(
     jobId
   ) {

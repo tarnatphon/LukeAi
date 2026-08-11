@@ -423,17 +423,36 @@ class ImageToVideoProcessRunner {
     };
   }
 
+  // LUKE_AI_I2V_BATCH_PAUSE_RUNNER_V1
   drainQueue() {
+    if (
+      this.runningJobIds
+        .size >=
+      this.maxConcurrent
+    ) {
+      return;
+    }
+
+    const scanLimit =
+      this.pendingQueue
+        .length;
+
+    let scanned = 0;
+
     while (
       this.runningJobIds
         .size <
         this.maxConcurrent &&
       this.pendingQueue
-        .length > 0
+        .length > 0 &&
+      scanned <
+        scanLimit
     ) {
       const task =
         this.pendingQueue
           .shift();
+
+      scanned += 1;
 
       const latest =
         this.jobManager
@@ -441,10 +460,23 @@ class ImageToVideoProcessRunner {
             task.jobId
           );
 
+      if (!latest) {
+        continue;
+      }
+
       if (
-        !latest ||
+        latest.state ===
+        "paused"
+      ) {
+        this.pendingQueue
+          .push(task);
+
+        continue;
+      }
+
+      if (
         latest.state !==
-          "queued"
+        "queued"
       ) {
         continue;
       }

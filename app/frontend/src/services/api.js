@@ -1725,3 +1725,104 @@ export async function getImageToVideoMaintenanceStatus() {
 
   return data;
 }
+
+// LUKE_AI_I2V_BATCH_CONTROLS_SERVICE_V1
+async function imageToVideoBatchAction(
+  batchId,
+  action,
+) {
+  const response =
+    await fetch(
+      `/api/image-to-video/batches/${encodeURIComponent(
+        batchId,
+      )}/${action}`,
+      {
+        method: "POST",
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        "Image-to-Video Batch action failed.",
+    );
+  }
+
+  return data;
+}
+
+export function pauseImageToVideoBatch(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "pause",
+  );
+}
+
+export function resumeImageToVideoBatch(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "resume",
+  );
+}
+
+export function cancelImageToVideoBatch(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "cancel",
+  );
+}
+
+export function getRetryableImageToVideoBatchJobs(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "retry-failed",
+  );
+}
+
+export async function skipImageToVideoBatchJob(
+  batchId,
+  jobId,
+) {
+  const response =
+    await fetch(
+      `/api/image-to-video/batches/${encodeURIComponent(
+        batchId,
+      )}/jobs/${encodeURIComponent(
+        jobId,
+      )}/skip`,
+      {
+        method: "POST",
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        "Unable to skip Batch job.",
+    );
+  }
+
+  return data;
+}

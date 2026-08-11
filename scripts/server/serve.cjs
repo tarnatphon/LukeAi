@@ -23613,6 +23613,216 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
+  // LUKE_AI_I2V_BATCH_CONTROLS_API_V1
+  {
+    const batchControlUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    const match =
+      batchControlUrl.pathname
+        .match(
+          /^\/api\/image-to-video\/batches\/([^/]+)\/(pause|resume|cancel|retry-failed)$/
+        );
+
+    if (
+      match &&
+      req.method === "POST"
+    ) {
+      const batchId =
+        decodeURIComponent(
+          match[1]
+        );
+
+      const action =
+        match[2];
+
+      const manager =
+        getImageToVideoJobManager();
+
+      if (
+        action === "pause"
+      ) {
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            ...manager.pauseBatch(
+              batchId
+            ),
+          }
+        );
+      }
+
+      if (
+        action === "resume"
+      ) {
+        const result =
+          manager.resumeBatch(
+            batchId
+          );
+
+        if (
+          typeof imageToVideoProcessRunner
+            ?.drainQueue ===
+          "function"
+        ) {
+          imageToVideoProcessRunner
+            .drainQueue();
+        }
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            ...result,
+          }
+        );
+      }
+
+      if (
+        action === "cancel"
+      ) {
+        const jobs =
+          manager.getBatchJobs(
+            batchId
+          );
+
+        let cancelled = 0;
+
+        for (const job of jobs) {
+          if (
+            [
+              "queued",
+              "paused",
+            ].includes(
+              job.state
+            )
+          ) {
+            manager.skipJob(
+              job.id
+            );
+
+            cancelled += 1;
+          }
+        }
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            batchId,
+            cancelled,
+            runningPreserved:
+              jobs.filter(
+                (job) =>
+                  job.state ===
+                  "running"
+              ).length,
+          }
+        );
+      }
+
+      if (
+        action ===
+        "retry-failed"
+      ) {
+        const jobs =
+          manager.getBatchJobs(
+            batchId
+          );
+
+        const retryable =
+          jobs.filter(
+            (job) =>
+              [
+                "failed",
+                "cancelled",
+              ].includes(
+                job.state
+              )
+          );
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            batchId,
+            retryableJobIds:
+              retryable.map(
+                (job) =>
+                  job.id
+              ),
+          }
+        );
+      }
+    }
+
+    const skipMatch =
+      batchControlUrl.pathname
+        .match(
+          /^\/api\/image-to-video\/batches\/([^/]+)\/jobs\/([^/]+)\/skip$/
+        );
+
+    if (
+      skipMatch &&
+      req.method === "POST"
+    ) {
+      const manager =
+        getImageToVideoJobManager();
+
+      const batchId =
+        decodeURIComponent(
+          skipMatch[1]
+        );
+
+      const jobId =
+        decodeURIComponent(
+          skipMatch[2]
+        );
+
+      const job =
+        manager.getJob(
+          jobId
+        );
+
+      if (
+        !job ||
+        job?.payload
+          ?.batchId !==
+        batchId
+      ) {
+        return json(
+          res,
+          404,
+          {
+            ok: false,
+            error:
+              "Batch job not found.",
+          }
+        );
+      }
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          job:
+            manager.skipJob(
+              jobId
+            ),
+        }
+      );
+    }
+  }
+
   // LUKE_AI_I2V_JOB_API_V1
   {
     const imageToVideoJobUrl =
