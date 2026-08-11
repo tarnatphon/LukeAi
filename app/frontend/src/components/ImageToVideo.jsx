@@ -559,12 +559,9 @@ export default function ImageToVideo({
     setPromptImportStatus,
   ] = useState("");
 
-  const certifiedNativeDuration =
-    5;
-
-  const durationRequiresStitch =
-    durationSeconds >
-    certifiedNativeDuration;
+  // LUKE_AI_I2V_DURATION_STRATEGY_UI_V1
+  const durationUsesStitch =
+    durationSeconds > 5;
 
   const handlePromptFile =
     async (file) => {
@@ -645,25 +642,6 @@ export default function ImageToVideo({
     setStatus(
       "Automatic Match is analysing the computer and locking the reference appearance…",
     );
-
-    if (
-      durationRequiresStitch
-    ) {
-      const message =
-        `Requested duration requires Segment/Stitch mode. The current certified local SVD path is locked to ${certifiedNativeDuration} sec until the duration strategy is implemented.`;
-
-      setStatus(
-        message,
-      );
-
-      showAlert?.({
-        title:
-          "Video Duration",
-        message,
-      });
-
-      return;
-    }
 
     try {
       // LUKE_AI_I2V_GENERATE_RUNTIME_GATE_V1
@@ -918,7 +896,7 @@ export default function ImageToVideo({
                 )}
             </div>
 
-            {durationRequiresStitch && (
+            {durationUsesStitch && (
               <div
                 style={{
                   marginTop: 8,
@@ -926,14 +904,7 @@ export default function ImageToVideo({
                 }}
               >
                 {durationSeconds} sec
-                requires Segment/Stitch
-                mode. Generation is
-                intentionally blocked
-                until that strategy is
-                certified, so LUKE AI
-                STUDIO never reports a
-                duration it did not
-                actually create.
+                uses LUKE AI STUDIO Segment/Stitch mode with last-frame continuity and final duration verification.
               </div>
             )}
           </div>

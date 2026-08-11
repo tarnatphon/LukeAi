@@ -586,3 +586,19 @@ else
   echo "FAIL: Node.js is required for Automatic Image-to-Video Prompt Studio validation"
   exit 1
 fi
+
+I2V_RUNTIME_PYTHON="app/runtimes/image-to-video/venv/bin/python"
+
+if [ -x "$I2V_RUNTIME_PYTHON" ]; then
+  "$I2V_RUNTIME_PYTHON" scripts/validation/test_image_to_video_duration_worker.py
+else
+  echo "FAIL: Image-to-Video runtime Python is required for Duration Worker validation"
+  exit 1
+fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-duration-strategy.cjs
+else
+  echo "FAIL: Node.js is required for Image-to-Video Duration Strategy validation"
+  exit 1
+fi

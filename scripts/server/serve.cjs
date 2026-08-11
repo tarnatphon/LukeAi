@@ -24274,7 +24274,7 @@ function prepareImageToVideoJobExecution(
     Math.max(
       2,
       Math.min(
-        10,
+          15,
         Number(
           body.seconds
         ) ||
@@ -24331,6 +24331,8 @@ function prepareImageToVideoJobExecution(
     ],
   };
 }
+
+  // LUKE_AI_I2V_DURATION_15_BACKEND_V1
 
 if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
     try {

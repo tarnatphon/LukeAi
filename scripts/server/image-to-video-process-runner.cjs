@@ -208,6 +208,15 @@ class ImageToVideoProcessRunner {
         "image_to_video_worker.py"
       );
 
+    // LUKE_AI_I2V_DURATION_WORKER_CONTRACT_V1
+    this.durationWorkerPath =
+      path.join(
+        this.root,
+        "scripts",
+        "workers",
+        "image_to_video_duration_worker.py"
+      );
+
     this.maxConcurrent =
       Math.max(
         1,
@@ -266,6 +275,68 @@ class ImageToVideoProcessRunner {
     };
   }
 
+  // LUKE_AI_I2V_DURATION_WORKER_SELECTOR_V1
+  getRequestedSeconds(
+    args
+  ) {
+    const index =
+      Array.isArray(args)
+        ? args.indexOf(
+            "--seconds"
+          )
+        : -1;
+
+    if (
+      index < 0 ||
+      index + 1 >=
+        args.length
+    ) {
+      return 5;
+    }
+
+    const value =
+      Number(
+        args[
+          index + 1
+        ]
+      );
+
+    return Number.isFinite(
+      value
+    )
+      ? value
+      : 5;
+  }
+
+  selectWorkerPath(
+    args
+  ) {
+    const seconds =
+      this.getRequestedSeconds(
+        args
+      );
+
+    if (
+      seconds > 5
+    ) {
+      if (
+        !fs.existsSync(
+          this.durationWorkerPath
+        )
+      ) {
+        throw new Error(
+          "Image-to-Video duration worker is missing."
+        );
+      }
+
+      return (
+        this.durationWorkerPath
+      );
+    }
+
+    return this.workerPath;
+  }
+
   startPreparedJob(
     jobId,
     {
@@ -308,11 +379,20 @@ class ImageToVideoProcessRunner {
       );
     }
 
+    const selectedWorkerPath =
+      this.selectWorkerPath(
+        args
+      );
+
     this.pendingQueue.push({
       jobId,
       args:
         args.slice(),
       cwd,
+
+      workerPath:
+        selectedWorkerPath,
+
       output:
         output
           ? {
@@ -383,6 +463,7 @@ class ImageToVideoProcessRunner {
         this.runtimePython,
         [
           "-u",
+          task.workerPath ||
           this.workerPath,
           ...task.args,
         ],

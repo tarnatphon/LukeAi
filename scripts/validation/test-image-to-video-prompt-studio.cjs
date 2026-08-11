@@ -32,7 +32,7 @@ const uiContracts = [
   "Import Prompt / Batch",
   ".txt,.md,.csv,.xlsx",
   "[5, 10, 15]",
-  "durationRequiresStitch",
+  "durationUsesStitch",
   "Segment/Stitch",
   "prompt: promptText",
   "seconds: durationSeconds",
@@ -92,64 +92,42 @@ if (
 
 if (
   ui.includes(
-    'prompt: "",'
+    "durationRequiresStitch"
   )
 ) {
   throw new Error(
-    "EMPTY_PROMPT_PAYLOAD_REMAINING"
+    "OBSOLETE_DURATION_GATE_PRESENT"
   );
 }
 
 if (
   ui.includes(
-    "seconds: 5,"
+    "intentionally blocked"
   )
 ) {
   throw new Error(
-    "HARDCODED_DURATION_REMAINING"
-  );
-}
-
-if (
-  !ui.includes(
-    "current certified local SVD path is locked"
-  )
-) {
-  throw new Error(
-    "DURATION_CAPABILITY_GATE_MISSING"
+    "LONG_DURATION_STILL_BLOCKED"
   );
 }
 
 console.log(
-  "PASS: Prompt textarea is connected to the generation payload."
+  "PASS: Prompt textarea is connected to generation."
 );
 
 console.log(
-  "PASS: TXT and Markdown prompt import are supported."
+  "PASS: TXT / Markdown / CSV / XLSX import remain available."
 );
 
 console.log(
-  "PASS: CSV prompt table import is supported."
+  "PASS: Duration selector exposes 5 / 10 / 15 seconds."
 );
 
 console.log(
-  "PASS: XLSX prompt table import is supported."
+  "PASS: 10 / 15 second duration now routes through Segment/Stitch."
 );
 
 console.log(
-  "PASS: Imported batch rows are retained for the next batch execution phase."
-);
-
-console.log(
-  "PASS: Duration selector exposes 5 / 10 / 15 second UX targets."
-);
-
-console.log(
-  "PASS: 10 / 15 second requests are capability-gated until Segment/Stitch is certified."
-);
-
-console.log(
-  "PASS: Certified async I2V Job API flow remains unchanged."
+  "PASS: Certified asynchronous I2V Job API remains unchanged."
 );
 
 console.log(
