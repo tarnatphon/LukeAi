@@ -7,7 +7,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Offline-100%25-green?style=for-the-badge&logo=offline" alt="100% Offline" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue?style=for-the-badge" alt="Platforms" />
-  <img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" alt="License" />
 </p>
 
 <p align="center">
