@@ -2,11 +2,18 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+
 const {
   spawn,
-} = require("node:child_process");
+} = require(
+  "node:child_process"
+);
 
-function clampProgress(value) {
+const MIN_INFERENCE_TOTAL = 20;
+
+function clampProgress(
+  value
+) {
   const number =
     Number(value);
 
@@ -21,7 +28,7 @@ function clampProgress(value) {
   return Math.max(
     0,
     Math.min(
-      99.9,
+      99,
       number
     )
   );
@@ -34,7 +41,10 @@ function parseProgressChunk(
     String(
       chunk || ""
     )
-      .replace(/\r/g, "\n");
+      .replace(
+        /\r/g,
+        "\n"
+      );
 
   let best = null;
 
@@ -58,49 +68,21 @@ function parseProgressChunk(
       );
 
     if (
-      total > 0 &&
-      step >= 0
+      total <
+        MIN_INFERENCE_TOTAL ||
+      step < 0 ||
+      step > total
     ) {
-      const percent =
-        clampProgress(
-          (
-            step /
-            total
-          ) *
-            100
-        );
-
-      if (
-        percent !== null &&
-        (
-          best === null ||
-          percent >
-            best.percent
-        )
-      ) {
-        best = {
-          percent,
-          step,
-          total,
-          message:
-            `Inference ${step}/${total}`,
-        };
-      }
+      continue;
     }
-  }
 
-  const percentPattern =
-    /(?:^|\s)(\d{1,3}(?:\.\d+)?)%\|/g;
-
-  for (
-    const match of
-    text.matchAll(
-      percentPattern
-    )
-  ) {
     const percent =
       clampProgress(
-        match[1]
+        (
+          step /
+          total
+        ) *
+          100
       );
 
     if (
@@ -113,14 +95,10 @@ function parseProgressChunk(
     ) {
       best = {
         percent,
-        step:
-          best?.step ??
-          null,
-        total:
-          best?.total ??
-          null,
+        step,
+        total,
         message:
-          `Inference ${Math.round(percent)}%`,
+          `Inference ${step}/${total}`,
       };
     }
   }
@@ -135,14 +113,14 @@ function parseWorkerResult(
     String(
       stdout || ""
     )
-      .split(/\r?\n/)
+      .split(
+        /\r?\n/
+      )
       .map(
         (line) =>
           line.trim()
       )
-      .filter(
-        Boolean
-      );
+      .filter(Boolean);
 
   for (
     let index =
@@ -163,9 +141,7 @@ function parseWorkerResult(
 
     try {
       const parsed =
-        JSON.parse(
-          line
-        );
+        JSON.parse(line);
 
       if (
         parsed &&
@@ -188,6 +164,7 @@ class ImageToVideoProcessRunner {
     spawnImpl = spawn,
     runtimePython = null,
     workerPath = null,
+    maxConcurrent = 1,
   }) {
     if (!root) {
       throw new Error(
@@ -230,6 +207,20 @@ class ImageToVideoProcessRunner {
         "workers",
         "image_to_video_worker.py"
       );
+
+    this.maxConcurrent =
+      Math.max(
+        1,
+        Number(
+          maxConcurrent
+        ) ||
+        1
+      );
+
+    this.pendingQueue = [];
+
+    this.runningJobIds =
+      new Set();
   }
 
   assertRuntime() {
@@ -317,16 +308,88 @@ class ImageToVideoProcessRunner {
       );
     }
 
+    this.pendingQueue.push({
+      jobId,
+      args:
+        args.slice(),
+      cwd,
+      output:
+        output
+          ? {
+              ...output,
+            }
+          : null,
+    });
+
+    this.drainQueue();
+
+    return {
+      job:
+        this.jobManager
+          .getJob(
+            jobId
+          ),
+
+      pid:
+        this.jobManager
+          .getJob(
+            jobId
+          )
+          ?.pid ||
+        null,
+
+      queue:
+        this.getQueueSummary(),
+    };
+  }
+
+  drainQueue() {
+    while (
+      this.runningJobIds
+        .size <
+        this.maxConcurrent &&
+      this.pendingQueue
+        .length > 0
+    ) {
+      const task =
+        this.pendingQueue
+          .shift();
+
+      const latest =
+        this.jobManager
+          .getJob(
+            task.jobId
+          );
+
+      if (
+        !latest ||
+        latest.state !==
+          "queued"
+      ) {
+        continue;
+      }
+
+      this.spawnTask(
+        task
+      );
+    }
+  }
+
+  spawnTask(
+    task
+  ) {
     const child =
       this.spawnImpl(
         this.runtimePython,
         [
           "-u",
           this.workerPath,
-          ...args,
+          ...task.args,
         ],
         {
-          cwd,
+          cwd:
+            task.cwd,
+
           env:
             this.buildEnvironment(),
 
@@ -340,22 +403,33 @@ class ImageToVideoProcessRunner {
 
     this.jobManager
       .startJob(
-        jobId,
+        task.jobId,
         child
       );
+
+    this.runningJobIds.add(
+      task.jobId
+    );
 
     let stdout = "";
     let stderr = "";
     let settled = false;
 
-    const finishOnce =
+    const settleOnce =
       (callback) => {
         if (settled) {
           return;
         }
 
         settled = true;
+
+        this.runningJobIds.delete(
+          task.jobId
+        );
+
         callback();
+
+        this.drainQueue();
       };
 
     if (
@@ -379,7 +453,7 @@ class ImageToVideoProcessRunner {
           if (progress) {
             this.jobManager
               .updateProgress(
-                jobId,
+                task.jobId,
                 progress
               );
           }
@@ -408,7 +482,7 @@ class ImageToVideoProcessRunner {
           if (progress) {
             this.jobManager
               .updateProgress(
-                jobId,
+                task.jobId,
                 progress
               );
           }
@@ -419,11 +493,11 @@ class ImageToVideoProcessRunner {
     child.on(
       "error",
       (error) => {
-        finishOnce(
+        settleOnce(
           () => {
             this.jobManager
               .failJob(
-                jobId,
+                task.jobId,
                 {
                   code:
                     "PROCESS_START_FAILED",
@@ -445,12 +519,12 @@ class ImageToVideoProcessRunner {
         code,
         signal
       ) => {
-        finishOnce(
+        settleOnce(
           () => {
             const latest =
               this.jobManager
                 .getJob(
-                  jobId
+                  task.jobId
                 );
 
             if (
@@ -459,7 +533,7 @@ class ImageToVideoProcessRunner {
             ) {
               this.jobManager
                 .confirmCancelled(
-                  jobId
+                  task.jobId
                 );
 
               return;
@@ -477,9 +551,9 @@ class ImageToVideoProcessRunner {
             ) {
               this.jobManager
                 .completeJob(
-                  jobId,
+                  task.jobId,
                   {
-                    ...(output ||
+                    ...(task.output ||
                       {}),
 
                     worker:
@@ -506,7 +580,7 @@ class ImageToVideoProcessRunner {
 
             this.jobManager
               .failJob(
-                jobId,
+                task.jobId,
                 {
                   code:
                     signal
@@ -523,20 +597,34 @@ class ImageToVideoProcessRunner {
         );
       }
     );
+  }
 
+  getQueueSummary() {
     return {
-      job:
-        this.jobManager
-          .getJob(
-            jobId
-          ),
+      maxConcurrent:
+        this.maxConcurrent,
 
-      pid:
-        Number.isInteger(
-          child.pid
-        )
-          ? child.pid
-          : null,
+      running:
+        this.runningJobIds
+          .size,
+
+      queued:
+        this.pendingQueue
+          .filter(
+            (task) => {
+              const job =
+                this.jobManager
+                  .getJob(
+                    task.jobId
+                  );
+
+              return (
+                job?.state ===
+                "queued"
+              );
+            }
+          )
+          .length,
     };
   }
 }

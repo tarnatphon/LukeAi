@@ -550,3 +550,18 @@ else
   echo "FAIL: Node.js is required for Image-to-Video Job Execution Integration validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-production-hardening.cjs
+else
+  echo "FAIL: Node.js is required for Image-to-Video Production Hardening validation"
+  exit 1
+fi
+
+# LUKE_AI_I2V_ASYNC_CONTRACT_GATE_V2
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-async-ui.cjs
+else
+  echo "FAIL: Node.js is required for Image-to-Video Async UI validation"
+  exit 1
+fi

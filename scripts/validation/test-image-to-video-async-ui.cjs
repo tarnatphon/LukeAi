@@ -6,100 +6,113 @@ const fs = require("node:fs");
 const api =
   fs.readFileSync(
     "app/frontend/src/services/api.js",
-    "utf8",
+    "utf8"
   );
 
 const ui =
   fs.readFileSync(
     "app/frontend/src/components/ImageToVideo.jsx",
-    "utf8",
+    "utf8"
   );
 
-const serviceNames = [
+function requireText(
+  source,
+  value,
+  label
+) {
+  if (!source.includes(value)) {
+    throw new Error(
+      `${label}:${value}`
+    );
+  }
+}
+
+const serviceContracts = [
   "createImageToVideoJob",
   "getImageToVideoJob",
   "listImageToVideoJobs",
   "cancelImageToVideoJob",
   "retryImageToVideoJob",
+  "/api/image-to-video/jobs",
 ];
 
-for (const name of serviceNames) {
-  if (!api.includes(name)) {
-    throw new Error(
-      `ASYNC_SERVICE_MISSING:${name}`
-    );
-  }
-}
-
-for (
-  const route of [
-    "/api/image-to-video/jobs",
-    "/cancel",
-    "/retry",
-  ]
-) {
-  if (!api.includes(route)) {
-    throw new Error(
-      `ASYNC_ROUTE_MISSING:${route}`
-    );
-  }
+for (const value of serviceContracts) {
+  requireText(
+    api,
+    value,
+    "ASYNC_SERVICE_CONTRACT_MISSING"
+  );
 }
 
 const uiContracts = [
-  "LUKE_AI_I2V_ASYNC_JOB_IMPORT_V1",
-  "LUKE_AI_I2V_ASYNC_JOB_STATE_V1",
-  "LUKE_AI_I2V_ASYNC_JOB_RUN_V1",
-  "LUKE_AI_I2V_ASYNC_JOB_UI_V1",
+  "createImageToVideoJob",
+  "getImageToVideoJob",
+  "listImageToVideoJobs",
+  "cancelImageToVideoJob",
+  "retryImageToVideoJob",
   "pollImageToVideoJob",
   "cancelActiveJob",
   "retryJob",
+  "activeJob",
   "jobHistory",
   "generatedVideoUrl",
-  "activeJob",
-  "createImageToVideoJob",
+  "runtimeCapability?.ready !== true",
+  "refreshRuntimeCapability",
 ];
 
 for (const value of uiContracts) {
-  if (!ui.includes(value)) {
-    throw new Error(
-      `ASYNC_UI_CONTRACT_MISSING:${value}`
-    );
-  }
-}
-
-if (
-  ui.includes(
-    "await generateImageToVideo({",
-  )
-) {
-  throw new Error(
-    "UI_STILL_USES_SYNCHRONOUS_GENERATION"
+  requireText(
+    ui,
+    value,
+    "ASYNC_UI_CONTRACT_MISSING"
   );
 }
 
-if (
-  !api.includes(
-    "generateImageToVideo",
-  )
-) {
+const asyncCreateCount =
+  (
+    ui.match(
+      /await\s+createImageToVideoJob\s*\(/g
+    ) || []
+  ).length;
+
+if (asyncCreateCount !== 1) {
   throw new Error(
-    "LEGACY_FRONTEND_FALLBACK_REMOVED"
+    `EXPECTED_ONE_ASYNC_CREATE_CALL:${asyncCreateCount}`
   );
 }
 
-if (
-  !ui.includes(
-    "LUKE_AI_I2V_GENERATE_RUNTIME_GATE_V1",
-  )
-) {
+const pollCount =
+  (
+    ui.match(
+      /await\s+pollImageToVideoJob\s*\(/g
+    ) || []
+  ).length;
+
+if (pollCount < 1) {
   throw new Error(
-    "RUNTIME_GATE_REMOVED"
+    `EXPECTED_ASYNC_POLL_CALL:${pollCount}`
   );
 }
 
 if (
   ui.includes(
-    "downloads automatically on first generation",
+    "await generateImageToVideo({"
+  )
+) {
+  throw new Error(
+    "SYNCHRONOUS_GENERATE_CALL_STILL_USED_BY_UI"
+  );
+}
+
+requireText(
+  api,
+  "generateImageToVideo",
+  "LEGACY_FRONTEND_FALLBACK_REMOVED"
+);
+
+if (
+  ui.includes(
+    "downloads automatically on first generation"
   )
 ) {
   throw new Error(
@@ -108,19 +121,23 @@ if (
 }
 
 console.log(
-  "PASS: Frontend Job API services are present."
+  "PASS: Async Image-to-Video Job services are present."
 );
 
 console.log(
-  "PASS: ImageToVideo uses asynchronous job creation and polling."
+  "PASS: UI creates asynchronous Image-to-Video jobs."
 );
 
 console.log(
-  "PASS: Live progress, cancel, retry and history UI are present."
+  "PASS: UI polls job state and progress."
 );
 
 console.log(
-  "PASS: Completed job output is handed to the video player."
+  "PASS: Cancel, retry and history controls are connected."
+);
+
+console.log(
+  "PASS: Completed job output is handed to the video UI."
 );
 
 console.log(
@@ -128,7 +145,11 @@ console.log(
 );
 
 console.log(
-  "PASS: Legacy generate service remains available as fallback."
+  "PASS: Legacy synchronous generate service remains fallback-only."
+);
+
+console.log(
+  "PASS: Async UI validation is contract-based and independent of marker comments."
 );
 
 console.log(

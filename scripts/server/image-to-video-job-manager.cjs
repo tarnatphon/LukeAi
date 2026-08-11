@@ -327,6 +327,7 @@ class ImageToVideoJobManager {
     return clone(job);
   }
 
+  // LUKE_AI_I2V_MONOTONIC_PROGRESS_V1
   updateProgress(
     jobId,
     {
@@ -351,30 +352,48 @@ class ImageToVideoJobManager {
     const numeric =
       Number(percent);
 
-    const bounded =
+    const previousPercent =
+      Number(
+        job.progress
+          ?.percent ||
+        0
+      );
+
+    const incomingPercent =
       Number.isFinite(
         numeric
       )
         ? Math.max(
             0,
             Math.min(
-              99.9,
+              99,
               numeric
             )
           )
-        : job.progress
-            ?.percent ||
-          0;
+        : previousPercent;
+
+    const monotonicPercent =
+      Math.max(
+        previousPercent,
+        incomingPercent
+      );
 
     job.progress = {
       percent:
-        bounded,
+        monotonicPercent,
 
       step:
         Number.isFinite(
           Number(step)
         )
-          ? Number(step)
+          ? Math.max(
+              Number(
+                job.progress
+                  ?.step ||
+                0
+              ),
+              Number(step)
+            )
           : job.progress
               ?.step ??
             null,
