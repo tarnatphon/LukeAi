@@ -5,6 +5,8 @@ import {
   listImageToVideoJobs,
   cancelImageToVideoJob,
   retryImageToVideoJob,
+  // LUKE_AI_I2V_RECOVERY_IMPORT_V1
+  getImageToVideoRecoveryStatus,
 } from "../services/api";
 
 import { getImageToVideoRuntimeCapability } from "../services/api";
@@ -208,9 +210,131 @@ export default function ImageToVideo({
       [],
     );
 
+  // LUKE_AI_I2V_UI_RESTART_RECOVERY_V1
   useEffect(() => {
-    refreshJobHistory();
-  }, [refreshJobHistory]);
+    let cancelled = false;
+
+    const restoreImageToVideoState =
+      async () => {
+        try {
+          const [
+            historyResult,
+            recoveryResult,
+          ] =
+            await Promise.all([
+              listImageToVideoJobs(
+                12,
+              ),
+              getImageToVideoRecoveryStatus(),
+            ]);
+
+          if (cancelled) {
+            return;
+          }
+
+          const jobs =
+            Array.isArray(
+              historyResult?.jobs,
+            )
+              ? historyResult.jobs
+              : [];
+
+          setJobHistory(
+            jobs,
+          );
+
+          const active =
+            Array.isArray(
+              recoveryResult
+                ?.activeJobs,
+            )
+              ? recoveryResult
+                  .activeJobs[0]
+              : null;
+
+          if (active?.id) {
+            setActiveJob(
+              active,
+            );
+
+            setStatus(
+              "Restoring active Image-to-Video job…",
+            );
+
+            pollImageToVideoJob(
+              active.id,
+            ).catch(
+              (error) => {
+                if (!cancelled) {
+                  setStatus(
+                    error.message,
+                  );
+                }
+              },
+            );
+
+            return;
+          }
+
+          const recovered =
+            Array.isArray(
+              recoveryResult
+                ?.recoveredJobs,
+            )
+              ? recoveryResult
+                  .recoveredJobs[0]
+              : null;
+
+          if (recovered) {
+            setActiveJob(
+              recovered,
+            );
+
+            setStatus(
+              "A previous Image-to-Video job was interrupted when the application closed. Retry the job to generate it again.",
+            );
+
+            return;
+          }
+
+          const latest =
+            jobs[0] || null;
+
+          if (
+            latest?.state ===
+              "completed"
+          ) {
+            const output =
+              normalizeVideoUrl(
+                latest?.output
+                  ?.videoUrl ||
+                latest?.output
+                  ?.output ||
+                latest?.output
+                  ?.worker
+                  ?.output,
+              );
+
+            if (output) {
+              setGeneratedVideoUrl(
+                output,
+              );
+            }
+          }
+
+        } catch {
+          await refreshJobHistory();
+        }
+      };
+
+    restoreImageToVideoState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+
 
   const normalizeVideoUrl =
     (value) => {

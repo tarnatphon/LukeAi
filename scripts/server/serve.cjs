@@ -1,3 +1,9 @@
+// LUKE_AI_I2V_MAINTENANCE_IMPORT_V1
+const {
+  planImageToVideoCleanup,
+  applyImageToVideoCleanup,
+} = require("./image-to-video-maintenance.cjs");
+
 // LUKE_AI_I2V_PROCESS_RUNNER_IMPORT_V2
 const {
   ImageToVideoProcessRunner,
@@ -27,6 +33,144 @@ function getImageToVideoProcessRunner() {
   }
 
   return imageToVideoProcessRunnerInstance;
+}
+
+// LUKE_AI_I2V_STARTUP_MAINTENANCE_STATE_V1
+let imageToVideoMaintenanceStatus = {
+  state: "not-run",
+  ranAt: null,
+  plan: null,
+  result: null,
+  error: null,
+};
+
+function runImageToVideoStartupMaintenance() {
+  if (
+    imageToVideoMaintenanceStatus.state === "completed" ||
+    imageToVideoMaintenanceStatus.state === "running"
+  ) {
+    return imageToVideoMaintenanceStatus;
+  }
+
+  imageToVideoMaintenanceStatus = {
+    state: "running",
+    ranAt:
+      new Date().toISOString(),
+    plan: null,
+    result: null,
+    error: null,
+  };
+
+  try {
+    const manager =
+      getImageToVideoJobManager();
+
+    const jobs =
+      manager.listJobs({
+        limit: 200,
+      });
+
+    const plan =
+      planImageToVideoCleanup({
+        root: ROOT,
+        jobs,
+      });
+
+    const result =
+      applyImageToVideoCleanup(
+        plan
+      );
+
+    imageToVideoMaintenanceStatus = {
+      state: "completed",
+      ranAt:
+        new Date().toISOString(),
+
+      plan: {
+        removeCount:
+          Array.isArray(plan.remove)
+            ? plan.remove.length
+            : 0,
+
+        preserveCount:
+          Array.isArray(plan.preserve)
+            ? plan.preserve.length
+            : 0,
+
+        policy:
+          plan.policy || null,
+      },
+
+      result: {
+        removedCount:
+          Number(
+            result?.removedCount ||
+            0
+          ),
+      },
+
+      error: null,
+    };
+
+  } catch (error) {
+    imageToVideoMaintenanceStatus = {
+      state: "failed",
+      ranAt:
+        new Date().toISOString(),
+      plan: null,
+      result: null,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : String(error),
+    };
+  }
+
+  return imageToVideoMaintenanceStatus;
+}
+
+function getImageToVideoRecoveryStatus() {
+  const manager =
+    getImageToVideoJobManager();
+
+  const jobs =
+    manager.listJobs({
+      limit: 200,
+    });
+
+  const recoveredJobs =
+    jobs.filter(
+      (job) =>
+        job?.recovery?.reason ===
+        "APPLICATION_RESTART" ||
+        job?.error?.code ===
+        "PROCESS_INTERRUPTED"
+    );
+
+  const activeJobs =
+    jobs.filter(
+      (job) =>
+        [
+          "queued",
+          "running",
+          "cancelling",
+        ].includes(
+          job.state
+        )
+    );
+
+  return {
+    maintenance:
+      imageToVideoMaintenanceStatus,
+
+    activeJobs,
+
+    recoveredJobs,
+
+    summary:
+      manager.getSummary(),
+  };
 }
 
 function getImageToVideoJobManager() {
@@ -23422,6 +23566,53 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
   }
 
   // POST /api/image-to-video/generate
+  // LUKE_AI_I2V_MAINTENANCE_STATUS_API_V1
+  {
+    const imageToVideoMaintenanceUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    if (
+      imageToVideoMaintenanceUrl.pathname ===
+        "/api/image-to-video/maintenance/status" &&
+      req.method === "GET"
+    ) {
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          ...getImageToVideoRecoveryStatus(),
+        }
+      );
+    }
+
+    if (
+      imageToVideoMaintenanceUrl.pathname ===
+        "/api/image-to-video/recovery" &&
+      req.method === "GET"
+    ) {
+      const status =
+        getImageToVideoRecoveryStatus();
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          activeJobs:
+            status.activeJobs,
+          recoveredJobs:
+            status.recoveredJobs,
+          summary:
+            status.summary,
+        }
+      );
+    }
+  }
+
   // LUKE_AI_I2V_JOB_API_V1
   {
     const imageToVideoJobUrl =
@@ -24600,6 +24791,9 @@ if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
 });
 
 server.timeout = 0; // Disable socket timeout for large model uploads/downloads
+
+// LUKE_AI_I2V_STARTUP_MAINTENANCE_RUN_V1
+runImageToVideoStartupMaintenance();
 
 server.listen(PORT_FRONTEND, "0.0.0.0", () => {
   console.log("");

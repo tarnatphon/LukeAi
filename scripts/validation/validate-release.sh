@@ -572,3 +572,10 @@ else
   echo "FAIL: Node.js is required for Image-to-Video Production Hardening Phase 2 validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-production-hardening-phase2b.cjs
+else
+  echo "FAIL: Node.js is required for Image-to-Video Production Hardening Phase 2B validation"
+  exit 1
+fi

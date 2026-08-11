@@ -1674,3 +1674,54 @@ export async function retryImageToVideoJob(
 
   return data.job;
 }
+
+// LUKE_AI_I2V_RECOVERY_SERVICE_V1
+export async function getImageToVideoRecoveryStatus() {
+  const response =
+    await fetch(
+      "/api/image-to-video/recovery",
+      {
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      "Unable to read Image-to-Video recovery status.",
+    );
+  }
+
+  return data;
+}
+
+export async function getImageToVideoMaintenanceStatus() {
+  const response =
+    await fetch(
+      "/api/image-to-video/maintenance/status",
+      {
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      "Unable to read Image-to-Video maintenance status.",
+    );
+  }
+
+  return data;
+}
