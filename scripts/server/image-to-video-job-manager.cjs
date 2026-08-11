@@ -64,6 +64,8 @@ class ImageToVideoJobManager {
     statePath,
     maxHistory = 200,
     cancelGraceMs = 8000,
+    terminalRetentionMs =
+      90 * 24 * 60 * 60 * 1000,
   }) {
     if (!statePath) {
       throw new Error(
@@ -77,10 +79,24 @@ class ImageToVideoJobManager {
       );
 
     this.maxHistory =
-      maxHistory;
+      Math.max(
+        1,
+        Number(maxHistory) ||
+        200
+      );
 
     this.cancelGraceMs =
       cancelGraceMs;
+
+    // LUKE_AI_I2V_HISTORY_RETENTION_V1
+    this.terminalRetentionMs =
+      Math.max(
+        0,
+        Number(
+          terminalRetentionMs
+        ) ||
+        0
+      );
 
     this.activeProcesses =
       new Map();
@@ -136,15 +152,99 @@ class ImageToVideoJobManager {
     }
   }
 
+  pruneHistory() {
+    const now =
+      Date.now();
+
+    const activeJobs = [];
+    const retainedTerminalJobs = [];
+
+    for (
+      const job of
+      this.state.jobs
+    ) {
+      if (
+        !TERMINAL_STATES.has(
+          job.state
+        )
+      ) {
+        activeJobs.push(job);
+        continue;
+      }
+
+      const finishedTime =
+        Date.parse(
+          job.finishedAt ||
+          job.updatedAt ||
+          job.createdAt ||
+          ""
+        );
+
+      const hasValidTime =
+        Number.isFinite(
+          finishedTime
+        );
+
+      const expired =
+        this.terminalRetentionMs >
+          0 &&
+        hasValidTime &&
+        (
+          now -
+          finishedTime
+        ) >
+          this.terminalRetentionMs;
+
+      if (!expired) {
+        retainedTerminalJobs
+          .push(job);
+      }
+    }
+
+    const allowedTerminal =
+      retainedTerminalJobs
+        .slice(
+          -this.maxHistory
+        );
+
+    const allowedIds =
+      new Set(
+        allowedTerminal
+          .map(
+            (job) =>
+              job.id
+          )
+      );
+
+    this.state.jobs =
+      this.state.jobs
+        .filter(
+          (job) =>
+            !TERMINAL_STATES.has(
+              job.state
+            ) ||
+            allowedIds.has(
+              job.id
+            )
+        );
+
+    return {
+      active:
+        activeJobs.length,
+
+      terminal:
+        allowedTerminal.length,
+
+      total:
+        this.state.jobs.length,
+    };
+  }
+
   saveState() {
     this.state.updatedAt =
       nowIso();
 
-    this.state.jobs =
-      this.state.jobs
-        .slice(
-          -this.maxHistory
-        );
+    this.pruneHistory();
 
     atomicWriteJson(
       this.statePath,
@@ -167,6 +267,12 @@ class ImageToVideoJobManager {
         job.state ===
           "cancelling"
       ) {
+        const previousState =
+          job.state;
+
+        const recoveredAt =
+          nowIso();
+
         job.state =
           "failed";
 
@@ -178,13 +284,26 @@ class ImageToVideoJobManager {
             "The application restarted before this job reached a terminal state.",
         };
 
+        // LUKE_AI_I2V_RESTART_RECOVERY_METADATA_V1
+        job.recovery = {
+          recoveredAt,
+
+          previousState,
+
+          reason:
+            "APPLICATION_RESTART",
+
+          resumable:
+            false,
+        };
+
         job.pid = null;
 
         job.finishedAt =
-          nowIso();
+          recoveredAt;
 
         job.updatedAt =
-          job.finishedAt;
+          recoveredAt;
 
         changed = true;
       }
@@ -193,6 +312,20 @@ class ImageToVideoJobManager {
     if (changed) {
       this.saveState();
     }
+
+    return {
+      changed,
+
+      recovered:
+        this.state.jobs
+          .filter(
+            (job) =>
+              job.recovery
+                ?.reason ===
+              "APPLICATION_RESTART"
+          )
+          .length,
+    };
   }
 
   createJob({
