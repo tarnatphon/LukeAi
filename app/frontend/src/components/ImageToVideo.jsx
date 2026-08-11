@@ -1,3 +1,8 @@
+// LUKE_AI_I2V_PROMPT_IMPORT_V1
+import {
+  importPromptFile,
+} from "../utils/imageToVideoPromptImport";
+
 // LUKE_AI_I2V_ASYNC_JOB_IMPORT_V1
 import {
   createImageToVideoJob,
@@ -533,6 +538,96 @@ export default function ImageToVideo({
     };
 
   // LUKE_AI_I2V_ASYNC_JOB_RUN_V1
+  // LUKE_AI_I2V_PROMPT_STUDIO_STATE_V1
+  const [
+    promptText,
+    setPromptText,
+  ] = useState("");
+
+  const [
+    durationSeconds,
+    setDurationSeconds,
+  ] = useState(5);
+
+  const [
+    importedPromptRows,
+    setImportedPromptRows,
+  ] = useState([]);
+
+  const [
+    promptImportStatus,
+    setPromptImportStatus,
+  ] = useState("");
+
+  const certifiedNativeDuration =
+    5;
+
+  const durationRequiresStitch =
+    durationSeconds >
+    certifiedNativeDuration;
+
+  const handlePromptFile =
+    async (file) => {
+      if (!file) {
+        return;
+      }
+
+      try {
+        const imported =
+          await importPromptFile(
+            file,
+          );
+
+        setImportedPromptRows(
+          imported.rows || [],
+        );
+
+        if (
+          imported.prompt
+        ) {
+          setPromptText(
+            imported.prompt,
+          );
+        }
+
+        const importedDuration =
+          imported.rows
+            ?.find(
+              (item) =>
+                item.duration,
+            )
+            ?.duration;
+
+        if (
+          [5, 10, 15]
+            .includes(
+              importedDuration,
+            )
+        ) {
+          setDurationSeconds(
+            importedDuration,
+          );
+        }
+
+        setPromptImportStatus(
+          `${file.name}: ${imported.rows?.length || 0} prompt row(s) imported`,
+        );
+
+      } catch (error) {
+        setPromptImportStatus(
+          error.message,
+        );
+
+        showAlert?.({
+          title:
+            "Prompt Import",
+          message:
+            error.message,
+          danger: true,
+        });
+      }
+    };
+
   const run = async () => {
     if (
       !source ||
@@ -550,6 +645,25 @@ export default function ImageToVideo({
     setStatus(
       "Automatic Match is analysing the computer and locking the reference appearance…",
     );
+
+    if (
+      durationRequiresStitch
+    ) {
+      const message =
+        `Requested duration requires Segment/Stitch mode. The current certified local SVD path is locked to ${certifiedNativeDuration} sec until the duration strategy is implemented.`;
+
+      setStatus(
+        message,
+      );
+
+      showAlert?.({
+        title:
+          "Video Duration",
+        message,
+      });
+
+      return;
+    }
 
     try {
       // LUKE_AI_I2V_GENERATE_RUNTIME_GATE_V1
@@ -583,8 +697,8 @@ export default function ImageToVideo({
             ),
           referenceLock: true,
           automaticMatch: true,
-          prompt: "",
-          seconds: 5,
+          prompt: promptText,
+          seconds: durationSeconds,
         });
 
       setActiveJob(
@@ -650,6 +764,181 @@ export default function ImageToVideo({
         <h3 style={{ marginTop: 20 }}>2. Add Reference images <span style={{ opacity:.6, fontWeight:400 }}>({references.length}/8)</span></h3>
         <p style={{ opacity:.72, marginTop:-6 }}>Upload the clearest photos available. Front, side and detail views are accepted; the system decides how each image should be used.</p>
         <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:12, border:"1px dashed var(--border-color)", borderRadius:12, cursor:"pointer" }}><Plus size={18}/> Add Reference images<input type="file" accept="image/*" multiple hidden onChange={(e)=>addReferences(e.target.files)}/></label>
+
+        {/* LUKE_AI_I2V_PROMPT_STUDIO_UI_V1 */}
+        <div
+          style={{
+            marginTop: 16,
+            padding: 14,
+            border:
+              "1px solid var(--border-color)",
+            borderRadius: 12,
+          }}
+        >
+          <h3
+            style={{
+              marginTop: 0,
+            }}
+          >
+            Prompt Studio
+          </h3>
+
+          <textarea
+            value={
+              promptText
+            }
+            onChange={(event) =>
+              setPromptText(
+                event.target.value,
+              )
+            }
+            placeholder="Describe the motion, camera movement, lighting and scene..."
+            rows={6}
+            style={{
+              width: "100%",
+              resize:
+                "vertical",
+            }}
+          />
+
+          <label
+            style={{
+              display:
+                "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "center",
+              padding: 10,
+              marginTop: 10,
+              border:
+                "1px dashed var(--border-color)",
+              borderRadius: 10,
+              cursor:
+                "pointer",
+            }}
+          >
+            Import Prompt / Batch
+
+            <input
+              type="file"
+              accept=".txt,.md,.csv,.xlsx,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              hidden
+              onChange={(event) => {
+                const file =
+                  event.target
+                    .files?.[0];
+
+                handlePromptFile(
+                  file,
+                );
+
+                event.target.value =
+                  "";
+              }}
+            />
+          </label>
+
+          {promptImportStatus && (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 13,
+                opacity: 0.75,
+              }}
+            >
+              {promptImportStatus}
+            </div>
+          )}
+
+          {importedPromptRows
+            .length > 1 && (
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+              }}
+            >
+              Batch preview:
+              {" "}
+              {importedPromptRows.length}
+              {" "}
+              rows loaded.
+              Phase 3A batch execution
+              will consume these rows
+              after the duration strategy
+              is certified.
+            </div>
+          )}
+
+          <div
+            style={{
+              marginTop: 16,
+            }}
+          >
+            <strong>
+              Video Duration
+            </strong>
+
+            <div
+              style={{
+                display:
+                  "grid",
+                gridTemplateColumns:
+                  "repeat(3, 1fr)",
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              {[5, 10, 15]
+                .map(
+                  (seconds) => (
+                    <button
+                      key={
+                        seconds
+                      }
+                      type="button"
+                      onClick={() =>
+                        setDurationSeconds(
+                          seconds,
+                        )
+                      }
+                      style={{
+                        padding: 10,
+                        fontWeight:
+                          durationSeconds ===
+                          seconds
+                            ? 700
+                            : 400,
+                      }}
+                    >
+                      {seconds} sec
+                    </button>
+                  ),
+                )}
+            </div>
+
+            {durationRequiresStitch && (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                }}
+              >
+                {durationSeconds} sec
+                requires Segment/Stitch
+                mode. Generation is
+                intentionally blocked
+                until that strategy is
+                certified, so LUKE AI
+                STUDIO never reports a
+                duration it did not
+                actually create.
+              </div>
+            )}
+          </div>
+        </div>
+
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10, marginTop:12 }}>
           {references.map((item,index)=><div key={`${item.name}-${index}`} style={{ border:"1px solid var(--border-color)", borderRadius:12, padding:8 }}>
             <img src={item.dataUrl} alt={`reference ${index + 1}`} style={{ width:"100%", height:120, objectFit:"contain", borderRadius:8 }}/>
