@@ -248,6 +248,28 @@ export default function ImageToVideo({
             jobs,
           );
 
+          // LUKE_AI_I2V_BATCH_RESTART_RECOVERY_V1
+          const latestBatchJob =
+            jobs.find(
+              (job) =>
+                Boolean(
+                  job?.payload
+                    ?.batchId,
+                ),
+            );
+
+          if (
+            latestBatchJob
+              ?.payload
+              ?.batchId
+          ) {
+            setCurrentBatchId(
+              latestBatchJob
+                .payload
+                .batchId,
+            );
+          }
+
           const active =
             Array.isArray(
               recoveryResult
@@ -625,6 +647,266 @@ export default function ImageToVideo({
       }
     };
 
+  // LUKE_AI_I2V_BATCH_STATE_V1
+  const [
+    currentBatchId,
+    setCurrentBatchId,
+  ] = useState("");
+
+  const [
+    batchSubmitting,
+    setBatchSubmitting,
+  ] = useState(false);
+
+  const batchJobs =
+    currentBatchId
+      ? jobHistory.filter(
+          (job) =>
+            job?.payload
+              ?.batchId ===
+            currentBatchId,
+        )
+      : [];
+
+  const batchSummary =
+    batchJobs.reduce(
+      (summary, job) => {
+        summary.total += 1;
+
+        if (
+          job.state ===
+          "completed"
+        ) {
+          summary.completed += 1;
+        } else if (
+          job.state ===
+          "failed"
+        ) {
+          summary.failed += 1;
+        } else if (
+          job.state ===
+          "cancelled"
+        ) {
+          summary.cancelled += 1;
+        } else if (
+          job.state ===
+          "running"
+        ) {
+          summary.running += 1;
+        } else if (
+          job.state ===
+          "queued"
+        ) {
+          summary.queued += 1;
+        } else if (
+          job.state ===
+          "cancelling"
+        ) {
+          summary.cancelling += 1;
+        }
+
+        return summary;
+      },
+      {
+        total: 0,
+        completed: 0,
+        failed: 0,
+        cancelled: 0,
+        running: 0,
+        queued: 0,
+        cancelling: 0,
+      },
+    );
+
+  const batchFinished =
+    batchSummary.total > 0 &&
+    (
+      batchSummary.completed +
+      batchSummary.failed +
+      batchSummary.cancelled
+    ) ===
+      batchSummary.total;
+
+  const batchPercent =
+    batchSummary.total > 0
+      ? Math.round(
+          (
+            (
+              batchSummary.completed +
+              batchSummary.failed +
+              batchSummary.cancelled
+            ) /
+            batchSummary.total
+          ) *
+            100,
+        )
+      : 0;
+
+  // LUKE_AI_I2V_BATCH_ENGINE_V1
+  const startImportedBatch =
+    async () => {
+      if (!source) {
+        showAlert?.({
+          title:
+            "Batch Image-to-Video",
+          message:
+            "Add a source image before starting the batch.",
+          danger: true,
+        });
+
+        return;
+      }
+
+      if (
+        importedPromptRows.length <
+        1
+      ) {
+        showAlert?.({
+          title:
+            "Batch Image-to-Video",
+          message:
+            "Import a CSV or XLSX file containing prompt rows first.",
+        });
+
+        return;
+      }
+
+      if (
+        runtimeCapability?.ready !==
+        true
+      ) {
+        const currentRuntime =
+          await refreshRuntimeCapability();
+
+        if (
+          currentRuntime?.ready !==
+          true
+        ) {
+          showAlert?.({
+            title:
+              "Batch Image-to-Video",
+            message:
+              "Image-to-Video runtime is not ready.",
+            danger: true,
+          });
+
+          return;
+        }
+      }
+
+      const batchId =
+        `i2v-batch-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+
+      setCurrentBatchId(
+        batchId,
+      );
+
+      setBatchSubmitting(
+        true,
+      );
+
+      setStatus(
+        `Creating batch queue: ${importedPromptRows.length} jobs…`,
+      );
+
+      try {
+        let created = 0;
+
+        for (
+          let index = 0;
+          index <
+          importedPromptRows.length;
+          index += 1
+        ) {
+          const row =
+            importedPromptRows[index];
+
+          const rowDuration =
+            [5, 10, 15]
+              .includes(
+                Number(
+                  row.duration,
+                ),
+              )
+              ? Number(
+                  row.duration,
+                )
+              : durationSeconds;
+
+          await createImageToVideoJob({
+            modelId: "auto",
+
+            imageDataUrl:
+              source.dataUrl,
+
+            references:
+              references.map(
+                (item) => ({
+                  ...item,
+                  type: "auto",
+                  weight: 1,
+                }),
+              ),
+
+            referenceLock: true,
+            automaticMatch: true,
+
+            prompt:
+              row.prompt ||
+              promptText,
+
+            seconds:
+              rowDuration,
+
+            batchId,
+
+            batchIndex:
+              index + 1,
+
+            batchSize:
+              importedPromptRows.length,
+
+            batchSource:
+              "prompt-file-import",
+          });
+
+          created += 1;
+
+          setStatus(
+            `Creating batch queue: ${created}/${importedPromptRows.length} jobs…`,
+          );
+        }
+
+        await refreshJobHistory();
+
+        setStatus(
+          `Batch queued: ${created} jobs. Jobs will run sequentially using the certified concurrency=1 pipeline.`,
+        );
+
+      } catch (error) {
+        await refreshJobHistory();
+
+        setStatus(
+          error.message,
+        );
+
+        showAlert?.({
+          title:
+            "Batch Image-to-Video",
+          message:
+            error.message,
+          danger: true,
+        });
+
+      } finally {
+        setBatchSubmitting(
+          false,
+        );
+      }
+    };
+
   const run = async () => {
     if (
       !source ||
@@ -847,7 +1129,192 @@ export default function ImageToVideo({
               after the duration strategy
               is certified.
             </div>
+            )}
+
+          {/* LUKE_AI_I2V_BATCH_STUDIO_UI_V1 */}
+          {importedPromptRows
+            .length > 0 && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                border:
+                  "1px solid var(--border-color)",
+                borderRadius: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "space-between",
+                  gap: 10,
+                  alignItems:
+                    "center",
+                }}
+              >
+                <strong>
+                  Batch Studio
+                </strong>
+
+                <span>
+                  {importedPromptRows.length}
+                  {" "}
+                  jobs
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  startImportedBatch
+                }
+                disabled={
+                  batchSubmitting ||
+                  busy
+                }
+                style={{
+                  width: "100%",
+                  marginTop: 10,
+                  padding: 11,
+                }}
+              >
+                {batchSubmitting
+                  ? "Creating Batch Queue…"
+                  : `Queue ${importedPromptRows.length} Videos`}
+              </button>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                  opacity: 0.72,
+                }}
+              >
+                Jobs use the existing
+                persistent FIFO queue
+                and run one at a time
+                to protect RAM/MPS.
+              </div>
+            </div>
           )}
+
+          {currentBatchId && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                border:
+                  "1px solid var(--border-color)",
+                borderRadius: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "space-between",
+                  gap: 10,
+                }}
+              >
+                <strong>
+                  Batch Progress
+                </strong>
+
+                <span>
+                  {batchPercent}%
+                </span>
+              </div>
+
+              <div
+                style={{
+                  height: 8,
+                  marginTop: 10,
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  background:
+                    "var(--md-sys-color-surface-container)",
+                }}
+              >
+                <div
+                  style={{
+                    width:
+                      `${batchPercent}%`,
+                    height: "100%",
+                    background:
+                      "var(--md-sys-color-primary)",
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(3, 1fr)",
+                  gap: 6,
+                  fontSize: 13,
+                }}
+              >
+                <span>
+                  Total:
+                  {" "}
+                  {batchSummary.total}
+                </span>
+
+                <span>
+                  Done:
+                  {" "}
+                  {batchSummary.completed}
+                </span>
+
+                <span>
+                  Queue:
+                  {" "}
+                  {batchSummary.queued}
+                </span>
+
+                <span>
+                  Running:
+                  {" "}
+                  {batchSummary.running}
+                </span>
+
+                <span>
+                  Failed:
+                  {" "}
+                  {batchSummary.failed}
+                </span>
+
+                <span>
+                  Cancelled:
+                  {" "}
+                  {batchSummary.cancelled}
+                </span>
+              </div>
+
+              {batchFinished && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontWeight: 700,
+                  }}
+                >
+                  Batch completed
+                  {" · "}
+                  {batchSummary.completed}
+                  {" "}
+                  successful
+                  {" · "}
+                  {batchSummary.failed}
+                  {" "}
+                  failed
+                </div>
+              )}
+            </div>
+          )}
+
 
           <div
             style={{

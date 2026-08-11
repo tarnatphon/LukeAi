@@ -172,9 +172,29 @@ const asyncCreateCount =
     ) || []
   ).length;
 
-if (asyncCreateCount !== 1) {
+if (asyncCreateCount !== 2) {
   throw new Error(
-    `EXPECTED_ONE_ASYNC_CREATE_CALL:${asyncCreateCount}`
+    `EXPECTED_SINGLE_AND_BATCH_ASYNC_CREATE_CALLS:${asyncCreateCount}`
+  );
+}
+
+if (
+  !ui.includes(
+    "const run = async () =>"
+  )
+) {
+  throw new Error(
+    "SINGLE_ASYNC_HANDLER_MISSING"
+  );
+}
+
+if (
+  !ui.includes(
+    "const startImportedBatch ="
+  )
+) {
+  throw new Error(
+    "BATCH_ASYNC_HANDLER_MISSING"
   );
 }
 
