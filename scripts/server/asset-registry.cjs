@@ -34,6 +34,42 @@ function normalizeString(
   ).trim();
 }
 
+// LUKE_AI_ASSET_PATH_NORMALIZATION_V1
+function normalizeExistingPath(
+  value
+) {
+  const raw =
+    normalizeString(
+      value
+    );
+
+  if (!raw) {
+    return "";
+  }
+
+  let normalized =
+    path.normalize(
+      raw
+    );
+
+  try {
+    if (
+      fs.existsSync(
+        normalized
+      )
+    ) {
+      normalized =
+        fs.realpathSync(
+          normalized
+        );
+    }
+  } catch {
+    // Keep normalized path when realpath is unavailable.
+  }
+
+  return normalized;
+}
+
 function normalizeArray(
   value
 ) {
@@ -252,6 +288,71 @@ class AssetRegistry {
     );
   }
 
+  // LUKE_AI_ASSET_PATH_UPSERT_V1
+  findByPath(
+    existingPath
+  ) {
+    const normalized =
+      normalizeExistingPath(
+        existingPath
+      );
+
+    if (!normalized) {
+      return null;
+    }
+
+    const asset =
+      this.state.assets
+        .find(
+          (item) =>
+            normalizeExistingPath(
+              item.existingPath
+            ) ===
+            normalized
+        );
+
+    return asset
+      ? clone(asset)
+      : null;
+  }
+
+  upsertByPath(
+    input = {}
+  ) {
+    const normalizedPath =
+      normalizeExistingPath(
+        input.existingPath
+      );
+
+    if (!normalizedPath) {
+      throw new Error(
+        "existingPath is required for path upsert."
+      );
+    }
+
+    const existing =
+      this.findByPath(
+        normalizedPath
+      );
+
+    if (existing) {
+      return this.update(
+        existing.assetId,
+        {
+          ...input,
+          existingPath:
+            normalizedPath,
+        }
+      );
+    }
+
+    return this.create({
+      ...input,
+      existingPath:
+        normalizedPath,
+    });
+  }
+
   get(assetId) {
     const asset =
       this.state.assets
@@ -308,7 +409,7 @@ class AssetRegistry {
       type,
 
       existingPath:
-        normalizeString(
+        normalizeExistingPath(
           input.existingPath
         ) || null,
 
@@ -437,9 +538,17 @@ class AssetRegistry {
         undefined
       ) {
         asset[key] =
-          normalizeString(
-            patch[key]
-          ) || null;
+          key === "existingPath"
+            ? (
+                normalizeExistingPath(
+                  patch[key]
+                ) || null
+              )
+            : (
+                normalizeString(
+                  patch[key]
+                ) || null
+              );
       }
     }
 

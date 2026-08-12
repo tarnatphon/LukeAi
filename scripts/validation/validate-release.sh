@@ -637,3 +637,10 @@ else
   echo "FAIL: Node.js is required for Asset Registry Core validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-asset-registry-path-upsert.cjs
+else
+  echo "FAIL: Node.js is required for Asset Registry Path Upsert validation"
+  exit 1
+fi
