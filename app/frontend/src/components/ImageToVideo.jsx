@@ -36,6 +36,193 @@ function readImage(file) {
   });
 }
 
+// LUKE_AI_I2V_BATCH_ANALYTICS_HELPERS_V1
+function batchElapsedMs(
+  job
+) {
+  if (
+    !job?.startedAt ||
+    !job?.finishedAt
+  ) {
+    return null;
+  }
+
+  const started =
+    Date.parse(
+      job.startedAt
+    );
+
+  const finished =
+    Date.parse(
+      job.finishedAt
+    );
+
+  const elapsed =
+    finished - started;
+
+  return Number.isFinite(
+    elapsed
+  ) &&
+    elapsed >= 0
+    ? elapsed
+    : null;
+}
+
+function formatBatchDuration(
+  milliseconds
+) {
+  if (
+    !Number.isFinite(
+      milliseconds
+    ) ||
+    milliseconds < 0
+  ) {
+    return "Calculating…";
+  }
+
+  let seconds =
+    Math.round(
+      milliseconds /
+      1000
+    );
+
+  const hours =
+    Math.floor(
+      seconds / 3600
+    );
+
+  seconds -=
+    hours * 3600;
+
+  const minutes =
+    Math.floor(
+      seconds / 60
+    );
+
+  seconds -=
+    minutes * 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
+}
+
+function formatBatchBytes(
+  bytes
+) {
+  if (
+    !Number.isFinite(
+      bytes
+    ) ||
+    bytes < 0
+  ) {
+    return "Calculating…";
+  }
+
+  if (bytes < 1024) {
+    return `${Math.round(bytes)} B`;
+  }
+
+  const units = [
+    "KB",
+    "MB",
+    "GB",
+    "TB",
+  ];
+
+  let value =
+    bytes / 1024;
+
+  let unitIndex = 0;
+
+  while (
+    value >= 1024 &&
+    unitIndex <
+      units.length - 1
+  ) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${
+    value >= 100
+      ? value.toFixed(0)
+      : value >= 10
+        ? value.toFixed(1)
+        : value.toFixed(2)
+  } ${units[unitIndex]}`;
+}
+
+function escapeBatchCsv(
+  value
+) {
+  const text =
+    String(
+      value ?? ""
+    );
+
+  if (
+    /[",\n\r]/.test(
+      text
+    )
+  ) {
+    return `"${text.replace(
+      /"/g,
+      '""',
+    )}"`;
+  }
+
+  return text;
+}
+
+function downloadBatchFile(
+  filename,
+  contents,
+  mimeType
+) {
+  const blob =
+    new Blob(
+      [contents],
+      {
+        type: mimeType,
+      },
+    );
+
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+  const anchor =
+    document.createElement(
+      "a"
+    );
+
+  anchor.href =
+    url;
+
+  anchor.download =
+    filename;
+
+  document.body.appendChild(
+    anchor
+  );
+
+  anchor.click();
+
+  anchor.remove();
+
+  URL.revokeObjectURL(
+    url
+  );
+}
+
 export default function ImageToVideo({
 
  specs, showAlert }) {
@@ -733,6 +920,153 @@ export default function ImageToVideo({
       },
     );
 
+  // LUKE_AI_I2V_BATCH_ANALYTICS_MODEL_V1
+  const completedBatchJobs =
+    batchJobs.filter(
+      (job) =>
+        job.state ===
+        "completed"
+    );
+
+  const elapsedSamples =
+    completedBatchJobs
+      .map(
+        batchElapsedMs
+      )
+      .filter(
+        (value) =>
+          Number.isFinite(
+            value
+          )
+      );
+
+  const averageGenerationMs =
+    elapsedSamples.length > 0
+      ? elapsedSamples.reduce(
+          (sum, value) =>
+            sum + value,
+          0,
+        ) /
+        elapsedSamples.length
+      : null;
+
+  const remainingActionableJobs =
+    batchJobs.filter(
+      (job) =>
+        [
+          "queued",
+          "paused",
+          "running",
+        ].includes(
+          job.state
+        )
+    ).length;
+
+  const estimatedRemainingMs =
+    Number.isFinite(
+      averageGenerationMs
+    )
+      ? averageGenerationMs *
+        remainingActionableJobs
+      : null;
+
+  const outputSizeSamples =
+    completedBatchJobs
+      .map(
+        (job) =>
+          Number(
+            job?.output
+              ?.sizeBytes
+          )
+      )
+      .filter(
+        (value) =>
+          Number.isFinite(
+            value
+          ) &&
+          value >= 0
+      );
+
+  const averageOutputBytes =
+    outputSizeSamples.length > 0
+      ? outputSizeSamples.reduce(
+          (sum, value) =>
+            sum + value,
+          0,
+        ) /
+        outputSizeSamples.length
+      : null;
+
+  const estimatedRemainingBytes =
+    Number.isFinite(
+      averageOutputBytes
+    )
+      ? averageOutputBytes *
+        remainingActionableJobs
+      : null;
+
+  const skippedBatchJobs =
+    batchJobs.filter(
+      (job) =>
+        job.state ===
+          "cancelled" &&
+        job?.error?.code ===
+          "BATCH_SKIPPED"
+    );
+
+  const cancelledBatchJobs =
+    batchJobs.filter(
+      (job) =>
+        job.state ===
+          "cancelled" &&
+        job?.error?.code !==
+          "BATCH_SKIPPED"
+    );
+
+  const batchAnalytics =
+    {
+      batchId:
+        currentBatchId,
+
+      total:
+        batchSummary.total,
+
+      completed:
+        batchSummary.completed,
+
+      failed:
+        batchSummary.failed,
+
+      cancelled:
+        cancelledBatchJobs.length,
+
+      skipped:
+        skippedBatchJobs.length,
+
+      running:
+        batchSummary.running,
+
+      queued:
+        batchSummary.queued,
+
+      paused:
+        batchSummary.paused,
+
+      sampleCount:
+        elapsedSamples.length,
+
+      averageGenerationMs,
+
+      estimatedRemainingMs,
+
+      outputSizeSampleCount:
+        outputSizeSamples.length,
+
+      averageOutputBytes,
+
+      estimatedRemainingBytes,
+    };
+
   const batchFinished =
     batchSummary.total > 0 &&
     (
@@ -936,6 +1270,175 @@ export default function ImageToVideo({
       } finally {
         setBatchControlBusy(false);
       }
+    };
+
+  // LUKE_AI_I2V_BATCH_ANALYTICS_EXPORT_V1
+  const buildBatchReport =
+    () => ({
+      generatedAt:
+        new Date()
+          .toISOString(),
+
+      analytics:
+        batchAnalytics,
+
+      jobs:
+        batchJobs
+          .slice()
+          .sort(
+            (a, b) =>
+              Number(
+                a?.payload
+                  ?.batchIndex ||
+                0
+              ) -
+              Number(
+                b?.payload
+                  ?.batchIndex ||
+                0
+              ),
+          )
+          .map(
+            (job) => ({
+              id:
+                job.id,
+
+              index:
+                job?.payload
+                  ?.batchIndex ??
+                null,
+
+              state:
+                job.state,
+
+              prompt:
+                job?.payload
+                  ?.prompt ||
+                "",
+
+              seconds:
+                job?.payload
+                  ?.seconds ??
+                null,
+
+              createdAt:
+                job.createdAt ||
+                null,
+
+              startedAt:
+                job.startedAt ||
+                null,
+
+              finishedAt:
+                job.finishedAt ||
+                null,
+
+              elapsedMs:
+                batchElapsedMs(
+                  job
+                ),
+
+              sizeBytes:
+                Number.isFinite(
+                  Number(
+                    job?.output
+                      ?.sizeBytes
+                  )
+                )
+                  ? Number(
+                      job.output
+                        .sizeBytes
+                    )
+                  : null,
+
+              output:
+                job.output ||
+                null,
+
+              errorCode:
+                job?.error
+                  ?.code ||
+                null,
+
+              errorMessage:
+                job?.error
+                  ?.message ||
+                null,
+            }),
+          ),
+    });
+
+  const exportBatchJson =
+    () => {
+      if (!currentBatchId) {
+        return;
+      }
+
+      downloadBatchFile(
+        `${currentBatchId}.json`,
+        JSON.stringify(
+          buildBatchReport(),
+          null,
+          2,
+        ),
+        "application/json;charset=utf-8",
+      );
+    };
+
+  const exportBatchCsv =
+    () => {
+      if (!currentBatchId) {
+        return;
+      }
+
+      const report =
+        buildBatchReport();
+
+      const headers = [
+        "index",
+        "job_id",
+        "state",
+        "prompt",
+        "seconds",
+        "created_at",
+        "started_at",
+        "finished_at",
+        "elapsed_ms",
+        "size_bytes",
+        "error_code",
+        "error_message",
+      ];
+
+      const rows = [
+        headers.join(","),
+        ...report.jobs.map(
+          (job) =>
+            [
+              job.index,
+              job.id,
+              job.state,
+              job.prompt,
+              job.seconds,
+              job.createdAt,
+              job.startedAt,
+              job.finishedAt,
+              job.elapsedMs,
+              job.sizeBytes,
+              job.errorCode,
+              job.errorMessage,
+            ]
+              .map(
+                escapeBatchCsv
+              )
+              .join(","),
+        ),
+      ];
+
+      downloadBatchFile(
+        `${currentBatchId}.csv`,
+        rows.join("\n"),
+        "text/csv;charset=utf-8",
+      );
     };
 
   const startImportedBatch =
@@ -1661,6 +2164,159 @@ export default function ImageToVideo({
                     )}
                 </div>
               )}
+
+              {/* LUKE_AI_I2V_BATCH_ANALYTICS_UI_V1 */}
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 12,
+                  border:
+                    "1px solid var(--border-color)",
+                  borderRadius: 10,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent:
+                      "space-between",
+                    alignItems:
+                      "center",
+                    gap: 8,
+                    flexWrap:
+                      "wrap",
+                  }}
+                >
+                  <strong>
+                    Batch Analytics
+                  </strong>
+
+                  <span
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.7,
+                    }}
+                  >
+                    Observed data only
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(2, minmax(0, 1fr))",
+                    gap: 8,
+                    fontSize: 13,
+                  }}
+                >
+                  <span>
+                    Avg. generation:
+                    {" "}
+                    {Number.isFinite(
+                      averageGenerationMs
+                    )
+                      ? formatBatchDuration(
+                          averageGenerationMs
+                        )
+                      : "Calculating…"}
+                  </span>
+
+                  <span>
+                    ETA:
+                    {" "}
+                    {Number.isFinite(
+                      estimatedRemainingMs
+                    )
+                      ? formatBatchDuration(
+                          estimatedRemainingMs
+                        )
+                      : "Calculating…"}
+                  </span>
+
+                  <span>
+                    Avg. output:
+                    {" "}
+                    {Number.isFinite(
+                      averageOutputBytes
+                    )
+                      ? formatBatchBytes(
+                          averageOutputBytes
+                        )
+                      : "No size sample yet"}
+                  </span>
+
+                  <span>
+                    Remaining storage:
+                    {" "}
+                    {Number.isFinite(
+                      estimatedRemainingBytes
+                    )
+                      ? formatBatchBytes(
+                          estimatedRemainingBytes
+                        )
+                      : "Calculating…"}
+                  </span>
+
+                  <span>
+                    Time samples:
+                    {" "}
+                    {elapsedSamples.length}
+                  </span>
+
+                  <span>
+                    Size samples:
+                    {" "}
+                    {outputSizeSamples.length}
+                  </span>
+
+                  <span>
+                    Skipped:
+                    {" "}
+                    {skippedBatchJobs.length}
+                  </span>
+
+                  <span>
+                    Cancelled:
+                    {" "}
+                    {cancelledBatchJobs.length}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    type="button"
+                    disabled={
+                      !currentBatchId
+                    }
+                    onClick={
+                      exportBatchCsv
+                    }
+                  >
+                    Export CSV
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      !currentBatchId
+                    }
+                    onClick={
+                      exportBatchJson
+                    }
+                  >
+                    Export JSON
+                  </button>
+                </div>
+              </div>
 
               {batchFinished && (
                 <div

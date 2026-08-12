@@ -623,3 +623,10 @@ else
   echo "FAIL: Node.js is required for Image-to-Video Batch Control UI validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-image-to-video-batch-analytics.cjs
+else
+  echo "FAIL: Node.js is required for Image-to-Video Batch Analytics validation"
+  exit 1
+fi
