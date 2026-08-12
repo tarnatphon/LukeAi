@@ -20,6 +20,27 @@ let imageToVideoJobManagerInstance = null;
 // LUKE_AI_I2V_PROCESS_RUNNER_SINGLETON_V2
 let imageToVideoProcessRunnerInstance = null;
 
+// LUKE_AI_ASSET_REGISTRY_SINGLETON_V1
+let lukeAssetRegistry = null;
+
+function getLukeAssetRegistry() {
+  if (!lukeAssetRegistry) {
+    lukeAssetRegistry =
+      new AssetRegistry({
+        statePath:
+          path.join(
+            process.cwd(),
+            "app",
+            "runtime-state",
+            "assets",
+            "asset-registry.json",
+          ),
+      });
+  }
+
+  return lukeAssetRegistry;
+}
+
 function getImageToVideoProcessRunner() {
   if (
     imageToVideoProcessRunnerInstance === null
@@ -357,6 +378,13 @@ const {
 // Serves app/dist/, manages sd-vulkan.exe lifecycle with correct CLI flags
 // serve.cjs — portable static file server + backend process manager
 // Serves app/dist/, manages sd-vulkan.exe lifecycle with correct CLI flags
+
+// LUKE_AI_ASSET_REGISTRY_IMPORT_V1
+const {
+  AssetRegistry,
+} = require(
+  "./asset-registry.cjs"
+);
 
 const http     = require("http");
 const https    = require("https");
@@ -23818,6 +23846,198 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
             manager.skipJob(
               jobId
             ),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_ASSET_REGISTRY_API_V1
+  {
+    const assetUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    if (
+      assetUrl.pathname ===
+        "/api/assets" &&
+      req.method === "GET"
+    ) {
+      const registry =
+        getLukeAssetRegistry();
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+
+          assets:
+            registry.list({
+              type:
+                assetUrl.searchParams
+                  .get("type") ||
+                undefined,
+
+              project:
+                assetUrl.searchParams
+                  .get("project") ||
+                undefined,
+
+              campaign:
+                assetUrl.searchParams
+                  .get("campaign") ||
+                undefined,
+
+              tag:
+                assetUrl.searchParams
+                  .get("tag") ||
+                undefined,
+
+              favorite:
+                assetUrl.searchParams
+                  .get("favorite") ===
+                "true"
+                  ? true
+                  : undefined,
+            }),
+        }
+      );
+    }
+
+    if (
+      assetUrl.pathname ===
+        "/api/assets" &&
+      req.method === "POST"
+    ) {
+      const body =
+        await readJsonBody(
+          req
+        );
+
+      const registry =
+        getLukeAssetRegistry();
+
+      return json(
+        res,
+        201,
+        {
+          ok: true,
+
+          asset:
+            registry.create(
+              body || {}
+            ),
+        }
+      );
+    }
+
+    const assetMatch =
+      assetUrl.pathname
+        .match(
+          /^\/api\/assets\/([^/]+)$/
+        );
+
+    if (
+      assetMatch &&
+      req.method === "GET"
+    ) {
+      const registry =
+        getLukeAssetRegistry();
+
+      const asset =
+        registry.get(
+          decodeURIComponent(
+            assetMatch[1]
+          )
+        );
+
+      if (!asset) {
+        return json(
+          res,
+          404,
+          {
+            ok: false,
+            error:
+              "Asset not found.",
+          }
+        );
+      }
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          asset,
+        }
+      );
+    }
+
+    if (
+      assetMatch &&
+      req.method === "PATCH"
+    ) {
+      const body =
+        await readJsonBody(
+          req
+        );
+
+      const registry =
+        getLukeAssetRegistry();
+
+      try {
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+
+            asset:
+              registry.update(
+                decodeURIComponent(
+                  assetMatch[1]
+                ),
+                body || {}
+              ),
+          }
+        );
+      } catch (error) {
+        return json(
+          res,
+          404,
+          {
+            ok: false,
+            error:
+              error.message,
+          }
+        );
+      }
+    }
+
+    if (
+      assetMatch &&
+      req.method === "DELETE"
+    ) {
+      const registry =
+        getLukeAssetRegistry();
+
+      const removed =
+        registry.remove(
+          decodeURIComponent(
+            assetMatch[1]
+          )
+        );
+
+      return json(
+        res,
+        removed
+          ? 200
+          : 404,
+        {
+          ok:
+            removed,
         }
       );
     }

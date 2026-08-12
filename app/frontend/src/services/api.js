@@ -1826,3 +1826,140 @@ export async function skipImageToVideoBatchJob(
 
   return data;
 }
+
+// LUKE_AI_ASSET_REGISTRY_SERVICE_V1
+async function assetApiRequest(
+  requestPath,
+  options = {},
+) {
+  const response =
+    await fetch(
+      requestPath,
+      {
+        ...options,
+
+        headers: {
+          Accept:
+            "application/json",
+
+          ...(
+            options.body
+              ? {
+                  "Content-Type":
+                    "application/json",
+                }
+              : {}
+          ),
+
+          ...options.headers,
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        "Asset Registry request failed.",
+    );
+  }
+
+  return data;
+}
+
+export function listAssets(
+  filters = {},
+) {
+  const params =
+    new URLSearchParams();
+
+  for (
+    const [
+      key,
+      value,
+    ] of
+    Object.entries(filters)
+  ) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      params.set(
+        key,
+        String(value),
+      );
+    }
+  }
+
+  const query =
+    params.toString();
+
+  return assetApiRequest(
+    `/api/assets${
+      query
+        ? `?${query}`
+        : ""
+    }`,
+  );
+}
+
+export function createAsset(
+  payload
+) {
+  return assetApiRequest(
+    "/api/assets",
+    {
+      method: "POST",
+
+      body:
+        JSON.stringify(
+          payload || {},
+        ),
+    },
+  );
+}
+
+export function getAsset(
+  assetId
+) {
+  return assetApiRequest(
+    `/api/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+  );
+}
+
+export function updateAsset(
+  assetId,
+  patch
+) {
+  return assetApiRequest(
+    `/api/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+    {
+      method: "PATCH",
+
+      body:
+        JSON.stringify(
+          patch || {},
+        ),
+    },
+  );
+}
+
+export function deleteAsset(
+  assetId
+) {
+  return assetApiRequest(
+    `/api/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+    {
+      method: "DELETE",
+    },
+  );
+}

@@ -630,3 +630,10 @@ else
   echo "FAIL: Node.js is required for Image-to-Video Batch Analytics validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-asset-registry-core.cjs
+else
+  echo "FAIL: Node.js is required for Asset Registry Core validation"
+  exit 1
+fi
