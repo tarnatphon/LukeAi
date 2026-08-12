@@ -12,6 +12,12 @@ import {
   retryImageToVideoJob,
   // LUKE_AI_I2V_RECOVERY_IMPORT_V1
   getImageToVideoRecoveryStatus,
+  // LUKE_AI_I2V_BATCH_CONTROL_IMPORTS_V1
+  pauseImageToVideoBatch,
+  resumeImageToVideoBatch,
+  cancelImageToVideoBatch,
+  getRetryableImageToVideoBatchJobs,
+  skipImageToVideoBatchJob,
 } from "../services/api";
 
 import { getImageToVideoRuntimeCapability } from "../services/api";
@@ -698,6 +704,14 @@ export default function ImageToVideo({
           "queued"
         ) {
           summary.queued += 1;
+
+        // LUKE_AI_I2V_BATCH_PAUSED_SUMMARY_V1
+        } else if (
+          job.state ===
+          "paused"
+        ) {
+          summary.paused += 1;
+
         } else if (
           job.state ===
           "cancelling"
@@ -714,6 +728,7 @@ export default function ImageToVideo({
         cancelled: 0,
         running: 0,
         queued: 0,
+        paused: 0,
         cancelling: 0,
       },
     );
@@ -743,6 +758,186 @@ export default function ImageToVideo({
       : 0;
 
   // LUKE_AI_I2V_BATCH_ENGINE_V1
+  // LUKE_AI_I2V_BATCH_CONTROL_HANDLERS_V1
+  const [
+    batchControlBusy,
+    setBatchControlBusy,
+  ] = useState(false);
+
+  const batchPaused =
+    batchSummary.paused > 0 &&
+    batchSummary.queued === 0 &&
+    batchSummary.running <= 1;
+
+  const refreshBatchState =
+    async () => {
+      await refreshJobHistory();
+    };
+
+  const runBatchControl =
+    async (
+      action,
+      successMessage,
+    ) => {
+      if (
+        !currentBatchId ||
+        batchControlBusy
+      ) {
+        return;
+      }
+
+      setBatchControlBusy(true);
+
+      try {
+        await action(
+          currentBatchId
+        );
+
+        await refreshBatchState();
+
+        setStatus(
+          successMessage
+        );
+
+      } catch (error) {
+        setStatus(
+          error.message
+        );
+
+        showAlert?.({
+          title:
+            "Batch Control",
+          message:
+            error.message,
+          danger: true,
+        });
+
+      } finally {
+        setBatchControlBusy(false);
+      }
+    };
+
+  const pauseCurrentBatch =
+    () =>
+      runBatchControl(
+        pauseImageToVideoBatch,
+        "Batch paused. The currently running video will finish normally.",
+      );
+
+  const resumeCurrentBatch =
+    () =>
+      runBatchControl(
+        resumeImageToVideoBatch,
+        "Batch resumed.",
+      );
+
+  const cancelRemainingBatch =
+    () =>
+      runBatchControl(
+        cancelImageToVideoBatch,
+        "Remaining queued Batch jobs cancelled. Current rendering job was preserved.",
+      );
+
+  const skipBatchJob =
+    async (jobId) => {
+      if (
+        !currentBatchId ||
+        batchControlBusy
+      ) {
+        return;
+      }
+
+      setBatchControlBusy(true);
+
+      try {
+        await skipImageToVideoBatchJob(
+          currentBatchId,
+          jobId,
+        );
+
+        await refreshBatchState();
+
+        setStatus(
+          "Batch item skipped.",
+        );
+
+      } catch (error) {
+        setStatus(
+          error.message,
+        );
+
+        showAlert?.({
+          title:
+            "Skip Batch Item",
+          message:
+            error.message,
+          danger: true,
+        });
+
+      } finally {
+        setBatchControlBusy(false);
+      }
+    };
+
+  const retryFailedBatchItems =
+    async () => {
+      if (
+        !currentBatchId ||
+        batchControlBusy
+      ) {
+        return;
+      }
+
+      setBatchControlBusy(true);
+
+      try {
+        const result =
+          await getRetryableImageToVideoBatchJobs(
+            currentBatchId,
+          );
+
+        const ids =
+          result?.retryableJobIds ||
+          [];
+
+        let retried = 0;
+
+        for (
+          const jobId of ids
+        ) {
+          await retryImageToVideoJob(
+            jobId,
+          );
+
+          retried += 1;
+        }
+
+        await refreshBatchState();
+
+        setStatus(
+          retried > 0
+            ? `Retry queued for ${retried} Batch item(s).`
+            : "No failed or cancelled Batch items require retry.",
+        );
+
+      } catch (error) {
+        setStatus(
+          error.message,
+        );
+
+        showAlert?.({
+          title:
+            "Retry Batch",
+          message:
+            error.message,
+          danger: true,
+        });
+
+      } finally {
+        setBatchControlBusy(false);
+      }
+    };
+
   const startImportedBatch =
     async () => {
       if (!source) {
@@ -1293,6 +1488,179 @@ export default function ImageToVideo({
                   {batchSummary.cancelled}
                 </span>
               </div>
+
+              {/* LUKE_AI_I2V_BATCH_CONTROL_UI_V1 */}
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                {batchSummary.paused > 0 ? (
+                  <button
+                    type="button"
+                    disabled={
+                      batchControlBusy
+                    }
+                    onClick={
+                      resumeCurrentBatch
+                    }
+                  >
+                    Resume Batch
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={
+                      batchControlBusy ||
+                      batchFinished ||
+                      batchSummary.queued < 1
+                    }
+                    onClick={
+                      pauseCurrentBatch
+                    }
+                  >
+                    Pause Batch
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={
+                    batchControlBusy ||
+                    (
+                      batchSummary.queued +
+                      batchSummary.paused
+                    ) < 1
+                  }
+                  onClick={
+                    cancelRemainingBatch
+                  }
+                >
+                  Cancel Remaining
+                </button>
+
+                <button
+                  type="button"
+                  disabled={
+                    batchControlBusy ||
+                    (
+                      batchSummary.failed +
+                      batchSummary.cancelled
+                    ) < 1
+                  }
+                  onClick={
+                    retryFailedBatchItems
+                  }
+                >
+                  Retry Failed
+                </button>
+              </div>
+
+              {batchSummary.paused > 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 8,
+                    fontWeight: 700,
+                  }}
+                >
+                  PAUSED
+                  {" · "}
+                  {batchSummary.paused}
+                  {" "}
+                  job(s) waiting
+                  {" · "}
+                  current render, if any,
+                  continues normally
+                </div>
+              )}
+
+              {batchJobs.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  {batchJobs
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        Number(
+                          a?.payload
+                            ?.batchIndex ||
+                          0
+                        ) -
+                        Number(
+                          b?.payload
+                            ?.batchIndex ||
+                          0
+                        ),
+                    )
+                    .map(
+                      (job) => (
+                        <div
+                          key={
+                            job.id
+                          }
+                          style={{
+                            display:
+                              "flex",
+                            alignItems:
+                              "center",
+                            justifyContent:
+                              "space-between",
+                            gap: 8,
+                            padding:
+                              "8px 10px",
+                            border:
+                              "1px solid var(--border-color)",
+                            borderRadius: 8,
+                            fontSize: 13,
+                          }}
+                        >
+                          <span>
+                            #
+                            {job?.payload
+                              ?.batchIndex ||
+                              "?"}
+                            {" · "}
+                            {String(
+                              job.state ||
+                              "unknown",
+                            ).toUpperCase()}
+                          </span>
+
+                          {[
+                            "queued",
+                            "paused",
+                          ].includes(
+                            job.state,
+                          ) && (
+                            <button
+                              type="button"
+                              disabled={
+                                batchControlBusy
+                              }
+                              onClick={() =>
+                                skipBatchJob(
+                                  job.id,
+                                )
+                              }
+                            >
+                              Skip
+                            </button>
+                          )}
+                        </div>
+                      ),
+                    )}
+                </div>
+              )}
 
               {batchFinished && (
                 <div
