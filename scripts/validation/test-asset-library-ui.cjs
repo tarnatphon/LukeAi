@@ -119,8 +119,8 @@ assertIncludes(
 
 assertIncludes(
   component,
-  "!assets.some((asset) => asset.assetId === selectedAssetId)",
-  "Asset Library must close stale detail cards after refreshed data changes."
+  "!filteredAssets.some((asset) => asset.assetId === selectedAssetId)",
+  "Asset Library must close detail cards hidden by the active view."
 );
 
 assertIncludes(
@@ -608,7 +608,7 @@ console.log(
   "PASS: Asset Library resets local view controls read-only."
 );
 console.log(
-  "PASS: Asset Library clears stale selected details after refresh."
+  "PASS: Asset Library clears selected details hidden by the active view."
 );
 console.log(
   "PASS: Asset Library summarizes active view controls."

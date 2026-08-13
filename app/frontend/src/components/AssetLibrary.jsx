@@ -521,15 +521,6 @@ export default function AssetLibrary() {
     loadAssets();
   }, [loadAssets]);
 
-  useEffect(() => {
-    if (
-      selectedAssetId &&
-      !assets.some((asset) => asset.assetId === selectedAssetId)
-    ) {
-      setSelectedAssetId("");
-    }
-  }, [assets, selectedAssetId]);
-
   const filteredAssets = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return assets;
@@ -538,6 +529,15 @@ export default function AssetLibrary() {
       return getAssetSearchText(asset).includes(needle);
     });
   }, [assets, query]);
+
+  useEffect(() => {
+    if (
+      selectedAssetId &&
+      !filteredAssets.some((asset) => asset.assetId === selectedAssetId)
+    ) {
+      setSelectedAssetId("");
+    }
+  }, [filteredAssets, selectedAssetId]);
 
   const sortedAssets = useMemo(
     () => sortAssets(filteredAssets, sortMode),
