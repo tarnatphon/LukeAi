@@ -644,3 +644,10 @@ else
   echo "FAIL: Node.js is required for Asset Registry Path Upsert validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-generated-image-asset-registration.cjs
+else
+  echo "FAIL: Node.js is required for Generated Image Asset Registration validation"
+  exit 1
+fi

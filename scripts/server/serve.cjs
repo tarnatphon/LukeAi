@@ -6086,7 +6086,70 @@ function saveGeneratedOutput(imageDataUrl, metadata = {}) {
   };
   fs.writeFileSync(metadataPath, JSON.stringify(savedMetadata, null, 2), "utf8");
   console.log(`  [api] Saved generated output: ${imageFilename}`);
-  return savedMetadata;
+    // LUKE_AI_GENERATED_IMAGE_ASSET_REGISTRATION_V1
+  try {
+    const savedOutput =
+      savedMetadata;
+
+    const existingPath =
+      savedOutput?.path ||
+      savedOutput?.outputPath ||
+      savedOutput?.filePath ||
+      savedOutput?.absolutePath ||
+      null;
+
+    if (existingPath) {
+      const registry =
+        getLukeAssetRegistry();
+
+      registry.upsertByPath({
+        type:
+          "image",
+
+        existingPath,
+
+        storageProviderId:
+          savedOutput?.storageProviderId ||
+          "local",
+
+        sourcePrompt:
+          metadata?.prompt ||
+          metadata?.sourcePrompt ||
+          null,
+
+        sourceModel:
+          metadata?.model ||
+          metadata?.modelId ||
+          metadata?.sourceModel ||
+          null,
+
+        project:
+          metadata?.project ||
+          null,
+
+        campaign:
+          metadata?.campaign ||
+          null,
+
+        metadata: {
+          ...metadata,
+
+          generatedOutput:
+            savedOutput,
+
+          registrationSource:
+            "saveGeneratedOutput",
+        },
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "[assets] Generated Image registration skipped:",
+      error?.message || error
+    );
+  }
+
+return savedMetadata;
 }
 
 function listGeneratedOutputs() {
