@@ -232,9 +232,14 @@ function AssetRelationships({ asset }) {
 function AssetDetailPanel({ asset, onClose }) {
   if (!asset) return null;
 
-  const metadata =
+  const metadataEntries =
     asset.metadata &&
-    Object.keys(asset.metadata).length > 0
+    typeof asset.metadata === "object"
+      ? Object.entries(asset.metadata)
+      : [];
+
+  const metadata =
+    metadataEntries.length > 0
       ? JSON.stringify(asset.metadata, null, 2)
       : "None recorded";
 
@@ -308,6 +313,16 @@ function AssetDetailPanel({ asset, onClose }) {
 
       <section className="asset-library-detail-section">
         <h4>Metadata</h4>
+        {metadataEntries.length > 0 && (
+          <dl className="asset-library-metadata-summary">
+            {metadataEntries.slice(0, 8).map(([key, value]) => (
+              <div key={key}>
+                <dt>{key}</dt>
+                <dd>{formatAssetValue(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         <pre>{metadata}</pre>
       </section>
     </aside>

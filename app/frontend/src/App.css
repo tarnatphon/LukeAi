@@ -9580,6 +9580,38 @@ html[data-theme^="dark"] .settings-subsection:hover {
   overflow-wrap: anywhere;
 }
 
+.asset-library-metadata-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.asset-library-metadata-summary div {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 7px;
+  background: var(--md-sys-color-surface);
+}
+
+.asset-library-metadata-summary dt {
+  margin-bottom: 4px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.asset-library-metadata-summary dd {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .asset-library-detail pre {
   max-height: 260px;
   margin: 0;

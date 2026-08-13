@@ -287,6 +287,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "metadataEntries",
+  "Asset detail must prepare metadata entries for summary display."
+);
+
+assertIncludes(
+  component,
+  "asset-library-metadata-summary",
+  "Asset detail must show metadata key/value summaries."
+);
+
+assertIncludes(
+  component,
   "AssetRelationships",
   "Asset detail must show asset relationships."
 );
@@ -376,6 +388,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-metadata-summary",
+  "Asset detail metadata summary styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -441,6 +459,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail shows full read-only asset metadata."
+);
+console.log(
+  "PASS: Asset Library detail summarizes metadata fields."
 );
 console.log(
   "PASS: Asset Library detail summarizes relationships."
