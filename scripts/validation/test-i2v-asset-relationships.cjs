@@ -39,6 +39,10 @@ function assert(
   "referenceAssetIds",
   "setReferenceAssetIds",
   "LUKE_AI_I2V_ASSET_RELATIONSHIP_PAYLOAD_V1",
+  "LUKE_AI_I2V_ASSET_RELATIONSHIP_PICKER_V1",
+  "listAssets",
+  'type: "image"',
+  'type: "reference"',
 ].forEach(
   (contract) => {
     assert(
@@ -103,6 +107,29 @@ assert(
 );
 
 assert(
+  ui.includes(
+    "refreshAssetRelationshipOptions"
+  ) &&
+  ui.includes(
+    "selectedOptions"
+  ),
+  "Image-to-Video must expose a read-only existing Asset relationship picker."
+);
+
+assert(
+  !ui.includes(
+    "deleteAsset("
+  ) &&
+  !ui.includes(
+    "updateAsset("
+  ) &&
+  !ui.includes(
+    "createAsset("
+  ),
+  "Image-to-Video Asset relationship picker must remain read-only."
+);
+
+assert(
   server.includes(
     "body.sourceAssetId\n                  ?"
   ),
@@ -137,6 +164,10 @@ console.log(
 
 console.log(
   "PASS: Existing Asset IDs are reused without copying files."
+);
+
+console.log(
+  "PASS: Image-to-Video can link existing Asset Library records read-only."
 );
 
 console.log(

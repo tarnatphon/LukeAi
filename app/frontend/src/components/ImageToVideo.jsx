@@ -18,11 +18,12 @@ import {
   cancelImageToVideoBatch,
   getRetryableImageToVideoBatchJobs,
   skipImageToVideoBatchJob,
+  listAssets,
 } from "../services/api";
 
 import { getImageToVideoRuntimeCapability } from "../services/api";
 import ImageToVideoRuntimeHealthCard from "./ImageToVideoRuntimeHealthCard.jsx";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Film, Upload, Play, CheckCircle2, AlertTriangle, Cpu, HardDrive, Plus, Trash2, Sparkles, ShieldCheck, Download, Wrench } from "lucide-react";
 import { getImageToVideoCompatibility, generateImageToVideo, getImageToVideoCapabilityStatus, installImageToVideoCapability } from "../services/api";
 
@@ -306,12 +307,63 @@ export default function ImageToVideo({
   const [busy, setBusy] = useState(false);
   const [capability, setCapability] = useState({ state: "checking", installed: false });
   const [installing, setInstalling] = useState(false);
+  const [assetRelationshipOptions, setAssetRelationshipOptions] = useState([]);
+  const [assetRelationshipLoading, setAssetRelationshipLoading] = useState(false);
+  const [assetRelationshipError, setAssetRelationshipError] = useState("");
 
   useEffect(() => {
     getImageToVideoCompatibility()
       .then((data) => setCatalog(data.models || []))
       .catch((e) => showAlert?.({ title: "Compatibility Check Failed", message: e.message, danger: true }));
   }, [showAlert]);
+
+  // LUKE_AI_I2V_ASSET_RELATIONSHIP_PICKER_V1
+  const refreshAssetRelationshipOptions = useCallback(async () => {
+    setAssetRelationshipLoading(true);
+    setAssetRelationshipError("");
+
+    try {
+      const [images, referencesResult] = await Promise.all([
+        listAssets({ type: "image" }),
+        listAssets({ type: "reference" }),
+      ]);
+
+      const nextAssets = [
+        ...(Array.isArray(images.assets) ? images.assets : []),
+        ...(Array.isArray(referencesResult.assets) ? referencesResult.assets : []),
+      ];
+
+      setAssetRelationshipOptions(nextAssets);
+    } catch (error) {
+      setAssetRelationshipError(
+        error?.message ||
+          "Could not load Asset Library links.",
+      );
+    } finally {
+      setAssetRelationshipLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAssetRelationshipOptions();
+  }, [refreshAssetRelationshipOptions]);
+
+  const imageAssetOptions = useMemo(
+    () => assetRelationshipOptions.filter((asset) => asset.type === "image"),
+    [assetRelationshipOptions],
+  );
+
+  const referenceAssetOptions = useMemo(
+    () => assetRelationshipOptions.filter((asset) => asset.type === "reference"),
+    [assetRelationshipOptions],
+  );
+
+  const getRelationshipAssetLabel = (asset) =>
+    asset.metadata?.originalName ||
+    asset.metadata?.filename ||
+    asset.sourcePrompt ||
+    asset.existingPath?.split(/[\\/]/).pop() ||
+    asset.assetId;
 
   const refreshCapability = async () => {
     try {
@@ -1757,6 +1809,110 @@ export default function ImageToVideo({
         <h3 style={{ marginTop: 20 }}>2. Add Reference images <span style={{ opacity:.6, fontWeight:400 }}>({references.length}/8)</span></h3>
         <p style={{ opacity:.72, marginTop:-6 }}>Upload the clearest photos available. Front, side and detail views are accepted; the system decides how each image should be used.</p>
         <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:12, border:"1px dashed var(--border-color)", borderRadius:12, cursor:"pointer" }}><Plus size={18}/> Add Reference images<input type="file" accept="image/*" multiple hidden onChange={(e)=>addReferences(e.target.files)}/></label>
+
+        <div
+          style={{
+            marginTop: 16,
+            padding: 14,
+            border:
+              "1px solid var(--border-color)",
+            borderRadius: 12,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "center",
+              marginBottom: 10,
+            }}
+          >
+            <strong>Link existing Asset Library records</strong>
+            <button
+              type="button"
+              onClick={refreshAssetRelationshipOptions}
+              disabled={assetRelationshipLoading}
+            >
+              Refresh
+            </button>
+          </div>
+
+          <label
+            style={{
+              display: "grid",
+              gap: 6,
+              marginBottom: 10,
+            }}
+          >
+            <span>Source Asset</span>
+            <select
+              value={sourceAssetId || ""}
+              onChange={(event) =>
+                setSourceAssetId(event.target.value || null)
+              }
+            >
+              <option value="">No linked source Asset</option>
+              {imageAssetOptions.map((asset) => (
+                <option
+                  key={asset.assetId}
+                  value={asset.assetId}
+                >
+                  {getRelationshipAssetLabel(asset)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label
+            style={{
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <span>Reference Assets</span>
+            <select
+              multiple
+              value={referenceAssetIds}
+              onChange={(event) =>
+                setReferenceAssetIds(
+                  Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value,
+                  ),
+                )
+              }
+              style={{
+                minHeight: 96,
+              }}
+            >
+              {referenceAssetOptions.map((asset) => (
+                <option
+                  key={asset.assetId}
+                  value={asset.assetId}
+                >
+                  {getRelationshipAssetLabel(asset)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {assetRelationshipLoading && (
+            <p style={{ opacity: .7 }}>
+              Loading Asset Library links...
+            </p>
+          )}
+
+          {assetRelationshipError && (
+            <p style={{ color: "var(--md-sys-color-error)" }}>
+              {assetRelationshipError}
+            </p>
+          )}
+
+          <p style={{ marginBottom: 0, opacity: .72 }}>
+            These links only attach Asset IDs to the generated video record. They do not move, copy, edit or delete files.
+          </p>
+        </div>
 
         {/* LUKE_AI_I2V_PROMPT_STUDIO_UI_V1 */}
         <div
