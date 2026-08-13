@@ -139,6 +139,26 @@ function sortAssets(assets, sortMode) {
   return sortedAssets;
 }
 
+function getAssetDerivedCount(asset) {
+  return (asset.derivedFrom || []).filter(Boolean).length;
+}
+
+function getAssetReferenceCount(asset) {
+  return (asset.references || []).filter(Boolean).length;
+}
+
+function getAssetRelationCount(asset) {
+  return (asset.relations || []).filter((item) => item?.assetId).length;
+}
+
+function getAssetRelationshipCount(asset) {
+  return (
+    getAssetDerivedCount(asset) +
+    getAssetReferenceCount(asset) +
+    getAssetRelationCount(asset)
+  );
+}
+
 function formatAssetValue(value) {
   if (value === undefined || value === null || value === "") {
     return "Not recorded";
@@ -207,12 +227,9 @@ function AssetRelationships({
   copiedAssetField,
   onCopy,
 }) {
-  const derivedCount =
-    (asset.derivedFrom || []).filter(Boolean).length;
-  const referenceCount =
-    (asset.references || []).filter(Boolean).length;
-  const relationCount =
-    (asset.relations || []).filter((item) => item?.assetId).length;
+  const derivedCount = getAssetDerivedCount(asset);
+  const referenceCount = getAssetReferenceCount(asset);
+  const relationCount = getAssetRelationCount(asset);
 
   const relationEntries = [
     ...((asset.derivedFrom || []).map((assetId) => ({
@@ -520,10 +537,7 @@ export default function AssetLibrary() {
     for (const asset of assets) {
       if (asset.favorite) favoriteCount += 1;
 
-      relationshipCount +=
-        (asset.derivedFrom?.length || 0) +
-        (asset.references?.length || 0) +
-        (asset.relations?.length || 0);
+      relationshipCount += getAssetRelationshipCount(asset);
     }
 
     return {
@@ -751,9 +765,9 @@ export default function AssetLibrary() {
         <div className="asset-library-grid">
           {sortedAssets.map((asset) => {
             const Icon = getAssetIcon(asset.type);
-            const derivedCount = asset.derivedFrom?.length || 0;
-            const referenceCount = asset.references?.length || 0;
-            const relationCount = asset.relations?.length || 0;
+            const derivedCount = getAssetDerivedCount(asset);
+            const referenceCount = getAssetReferenceCount(asset);
+            const relationCount = getAssetRelationCount(asset);
             const isSelected = selectedAssetId === asset.assetId;
 
             return (

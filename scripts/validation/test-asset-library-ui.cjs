@@ -167,6 +167,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "getAssetRelationshipCount(asset)",
+  "Asset Library summary must count only visible relationship IDs."
+);
+
+assertIncludes(
+  component,
   "ASSET_SORT_MODES",
   "Asset Library must expose sort modes."
 );
@@ -209,8 +215,26 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "getAssetDerivedCount(asset)",
+  "Asset Library cards must count only visible derived relationship IDs."
+);
+
+assertIncludes(
+  component,
   "referenceCount",
   "Asset Library cards must show reference relationship counts."
+);
+
+assertIncludes(
+  component,
+  "getAssetReferenceCount(asset)",
+  "Asset Library cards must count only visible reference relationship IDs."
+);
+
+assertIncludes(
+  component,
+  "getAssetRelationCount(asset)",
+  "Asset Library cards must count only visible custom relationship IDs."
 );
 
 assertIncludes(
@@ -371,19 +395,19 @@ assertIncludes(
 
 assertIncludes(
   component,
-  "(asset.derivedFrom || []).filter(Boolean).length",
+  "function getAssetDerivedCount(asset)",
   "Asset detail derived counts must ignore blank relationship IDs."
 );
 
 assertIncludes(
   component,
-  "(asset.references || []).filter(Boolean).length",
+  "function getAssetReferenceCount(asset)",
   "Asset detail reference counts must ignore blank relationship IDs."
 );
 
 assertIncludes(
   component,
-  "(asset.relations || []).filter((item) => item?.assetId).length",
+  "function getAssetRelationCount(asset)",
   "Asset detail other relationship counts must ignore blank relationship IDs."
 );
 
@@ -545,6 +569,9 @@ console.log(
   "PASS: Asset Library shows read-only summary stats."
 );
 console.log(
+  "PASS: Asset Library summary counts visible relationship IDs."
+);
+console.log(
   "PASS: Asset Library sorts loaded assets read-only."
 );
 console.log(
@@ -552,6 +579,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library cards show split relationship counts."
+);
+console.log(
+  "PASS: Asset Library cards count visible relationship IDs."
 );
 console.log(
   "PASS: Asset Library cards show hidden tag counts."
