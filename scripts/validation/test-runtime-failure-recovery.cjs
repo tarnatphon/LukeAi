@@ -320,6 +320,8 @@ async function main() {
     await getFreePort();
 
   const calledModels = [];
+  const receivedGenerationBodies =
+    [];
 
   const runtimeServer =
     http.createServer(
@@ -341,6 +343,10 @@ async function main() {
         ) {
           const body =
             JSON.parse(rawBody);
+
+          receivedGenerationBodies.push(
+            body
+          );
 
           calledModels.push(
             body.model
@@ -536,6 +542,27 @@ async function main() {
             conversationId,
             modelId:
               "primary-model",
+            response_format: {
+              type:
+                "json_schema",
+              name:
+                "runtime_recovery_json_output",
+              schema: {
+                type:
+                  "object",
+                additionalProperties:
+                  false,
+                properties: {
+                  answer: {
+                    type:
+                      "string",
+                  },
+                },
+                required: [
+                  "answer",
+                ],
+              },
+            },
           }),
         }
       );
@@ -580,6 +607,34 @@ async function main() {
     ) {
       throw new Error(
         `Unexpected model order: ${calledModels.join(", ")}`
+      );
+    }
+
+    if (
+      receivedGenerationBodies.length !==
+        2 ||
+      !receivedGenerationBodies.every(
+        (body) =>
+          body.response_format
+            ?.type ===
+            "json_schema" &&
+          body.response_format
+            ?.json_schema
+            ?.name ===
+            "runtime_recovery_json_output" &&
+          body.response_format
+            ?.json_schema
+            ?.strict === true &&
+          body.response_format
+            ?.json_schema
+            ?.schema
+            ?.properties
+            ?.answer
+            ?.type === "string"
+      )
+    ) {
+      throw new Error(
+        "Runtime Recovery attempts did not receive normalized JSON schema response_format."
       );
     }
 
@@ -673,6 +728,9 @@ async function main() {
     );
     console.log(
       "PASS: Automatic fallback model was selected."
+    );
+    console.log(
+      "PASS: Runtime Recovery attempts received normalized JSON schema response_format."
     );
     console.log(
       "PASS: Fallback response streamed successfully."

@@ -166,6 +166,24 @@ assertIncludes(
   "Server AI Judge synthesis must forward normalized response formats."
 );
 
+assertIncludes(
+  server,
+  "async function generateWithRuntimeRecovery(",
+  "Server must expose Runtime Recovery for JSON output forwarding."
+);
+
+assertIncludes(
+  server,
+  "response_format = null",
+  "Server Runtime Recovery must accept response format payloads."
+);
+
+assertIncludes(
+  server,
+  "response_format,\n                      responseFormat",
+  "Server Runtime Recovery attempts must forward response formats."
+);
+
 console.log(
   "PASS: Frontend forwards JSON output response format options."
 );
@@ -188,6 +206,10 @@ console.log(
 
 console.log(
   "PASS: Server forwards JSON output response_format through AI Judge synthesis."
+);
+
+console.log(
+  "PASS: Server forwards JSON output response_format through Runtime Recovery."
 );
 
 console.log(

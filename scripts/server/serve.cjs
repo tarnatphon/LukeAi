@@ -16259,6 +16259,8 @@ async function generateWithRuntimeRecovery(
     temperature = undefined,
     topP = undefined,
     maxTokens = undefined,
+    response_format = null,
+    responseFormat = null,
   } = {}
 ) {
   if (
@@ -16465,6 +16467,8 @@ async function generateWithRuntimeRecovery(
                       temperature,
                       topP,
                       maxTokens,
+                      response_format,
+                      responseFormat,
                     }
                   )
                 ),
