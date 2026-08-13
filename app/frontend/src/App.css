@@ -9160,6 +9160,30 @@ html[data-theme^="dark"] .settings-subsection:hover {
   font: inherit;
 }
 
+.asset-library-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+}
+
+.asset-library-sort span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.asset-library-sort select {
+  min-height: 36px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+}
+
 .asset-library-summary-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(90px, 1fr));

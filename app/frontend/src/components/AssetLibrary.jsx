@@ -24,6 +24,25 @@ const ASSET_TYPES = [
   "music",
 ];
 
+const ASSET_SORT_MODES = [
+  {
+    value: "updated-desc",
+    label: "Newest",
+  },
+  {
+    value: "updated-asc",
+    label: "Oldest",
+  },
+  {
+    value: "title-asc",
+    label: "Title",
+  },
+  {
+    value: "type-asc",
+    label: "Type",
+  },
+];
+
 function formatAssetDate(value) {
   if (!value) return "Not recorded";
   const date = new Date(value);
@@ -85,6 +104,38 @@ function getAssetSearchText(asset) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function getAssetTime(asset) {
+  const time =
+    Date.parse(asset.updatedAt || asset.createdAt || "");
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+function sortAssets(assets, sortMode) {
+  const sortedAssets = [...assets];
+
+  sortedAssets.sort((left, right) => {
+    if (sortMode === "updated-asc") {
+      return getAssetTime(left) - getAssetTime(right);
+    }
+
+    if (sortMode === "title-asc") {
+      return getAssetTitle(left).localeCompare(getAssetTitle(right));
+    }
+
+    if (sortMode === "type-asc") {
+      return (
+        String(left.type || "").localeCompare(String(right.type || "")) ||
+        getAssetTitle(left).localeCompare(getAssetTitle(right))
+      );
+    }
+
+    return getAssetTime(right) - getAssetTime(left);
+  });
+
+  return sortedAssets;
 }
 
 function formatAssetValue(value) {
@@ -252,6 +303,7 @@ export default function AssetLibrary() {
   const [projectFilter, setProjectFilter] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [sortMode, setSortMode] = useState("updated-desc");
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -290,6 +342,11 @@ export default function AssetLibrary() {
       return getAssetSearchText(asset).includes(needle);
     });
   }, [assets, query]);
+
+  const sortedAssets = useMemo(
+    () => sortAssets(filteredAssets, sortMode),
+    [filteredAssets, sortMode]
+  );
 
   const summary = useMemo(() => {
     const counts = new Map();
@@ -383,6 +440,21 @@ export default function AssetLibrary() {
         </button>
       </div>
 
+      <label className="asset-library-sort">
+        <span>Sort</span>
+        <select
+          value={sortMode}
+          onChange={(event) => setSortMode(event.target.value)}
+          aria-label="Sort assets"
+        >
+          {ASSET_SORT_MODES.map((mode) => (
+            <option key={mode.value} value={mode.value}>
+              {mode.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <div className="asset-library-filter-grid" aria-label="Asset metadata filters">
         <label>
           <span>Project</span>
@@ -474,9 +546,9 @@ export default function AssetLibrary() {
         </div>
       )}
 
-      {!isLoading && !error && filteredAssets.length > 0 && (
+      {!isLoading && !error && sortedAssets.length > 0 && (
         <div className="asset-library-grid">
-          {filteredAssets.map((asset) => {
+          {sortedAssets.map((asset) => {
             const Icon = getAssetIcon(asset.type);
             const relationCount =
               (asset.derivedFrom?.length || 0) +

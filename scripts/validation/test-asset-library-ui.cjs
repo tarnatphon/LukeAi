@@ -143,6 +143,30 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "ASSET_SORT_MODES",
+  "Asset Library must expose sort modes."
+);
+
+assertIncludes(
+  component,
+  "sortAssets",
+  "Asset Library must sort loaded assets client-side."
+);
+
+assertIncludes(
+  component,
+  "sortedAssets",
+  "Asset Library must render sorted assets."
+);
+
+assertIncludes(
+  component,
+  "updated-desc",
+  "Asset Library must support newest-first sorting."
+);
+
+assertIncludes(
+  component,
   "ASSET_TYPES",
   "Asset Library must expose asset type filters."
 );
@@ -250,6 +274,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-sort",
+  "Asset Library sort styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -291,6 +321,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library shows read-only summary stats."
+);
+console.log(
+  "PASS: Asset Library sorts loaded assets read-only."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
