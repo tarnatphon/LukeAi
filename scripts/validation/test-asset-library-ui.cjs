@@ -227,6 +227,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "asset-library-tag-overflow",
+  "Asset Library cards must show hidden tag counts."
+);
+
+assertIncludes(
+  component,
+  "length - 3",
+  "Asset Library hidden tag count must reflect tags beyond the visible chip limit."
+);
+
+assertIncludes(
+  component,
   "storageProviderId",
   "Asset detail must show storage provider metadata."
 );
@@ -316,6 +328,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-tag-overflow",
+  "Asset Library hidden tag count styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -366,6 +384,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library cards show split relationship counts."
+);
+console.log(
+  "PASS: Asset Library cards show hidden tag counts."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."

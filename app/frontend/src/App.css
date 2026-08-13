@@ -9381,6 +9381,12 @@ html[data-theme^="dark"] .settings-subsection:hover {
   overflow-wrap: anywhere;
 }
 
+.asset-library-tags .asset-library-tag-overflow {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  font-weight: 800;
+}
+
 .asset-library-card footer span {
   display: inline-flex;
   align-items: center;

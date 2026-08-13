@@ -603,6 +603,14 @@ export default function AssetLibrary() {
                     {(asset.tags || []).slice(0, 3).map((tag) => (
                       <span key={tag}>{tag}</span>
                     ))}
+                    {(asset.tags || []).length > 3 && (
+                      <span
+                        className="asset-library-tag-overflow"
+                        title={(asset.tags || []).join(", ")}
+                      >
+                        +{(asset.tags || []).length - 3}
+                      </span>
+                    )}
                   </div>
                 )}
 
