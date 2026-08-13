@@ -347,6 +347,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "setCopiedAssetField(\"\");\n  }, [asset?.assetId]);",
+  "Asset detail copy feedback must reset when the selected asset changes."
+);
+
+assertIncludes(
+  component,
   "Relationship ${index + 1}",
   "Asset detail relationship IDs must be copyable read-only."
 );
@@ -540,6 +546,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail exposes read-only copy controls."
+);
+console.log(
+  "PASS: Asset Library detail clears stale copy feedback after asset changes."
 );
 console.log(
   "PASS: Asset Library detail exposes copyable relationship IDs."

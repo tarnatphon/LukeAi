@@ -280,6 +280,10 @@ function AssetRelationships({
 function AssetDetailPanel({ asset, onClose }) {
   const [copiedAssetField, setCopiedAssetField] = useState("");
 
+  useEffect(() => {
+    setCopiedAssetField("");
+  }, [asset?.assetId]);
+
   if (!asset) return null;
 
   const metadataEntries =
