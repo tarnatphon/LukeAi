@@ -9184,6 +9184,23 @@ html[data-theme^="dark"] .settings-subsection:hover {
   font: inherit;
 }
 
+.asset-library-active-view {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.asset-library-active-view span {
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  font-size: 0.7rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .asset-library-summary-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(90px, 1fr));

@@ -420,6 +420,23 @@ export default function AssetLibrary() {
     [assets, selectedAssetId]
   );
 
+  const activeViewChips = useMemo(() => {
+    const chips = [];
+    const sortLabel =
+      ASSET_SORT_MODES.find((mode) => mode.value === sortMode)?.label ||
+      "Newest";
+
+    if (query.trim()) chips.push(`Search: ${query.trim()}`);
+    if (activeType !== "all") chips.push(`Type: ${activeType}`);
+    if (favoriteOnly) chips.push("Favorites only");
+    if (projectFilter.trim()) chips.push(`Project: ${projectFilter.trim()}`);
+    if (campaignFilter.trim()) chips.push(`Campaign: ${campaignFilter.trim()}`);
+    if (tagFilter.trim()) chips.push(`Tag: ${tagFilter.trim()}`);
+    if (sortMode !== "updated-desc") chips.push(`Sort: ${sortLabel}`);
+
+    return chips;
+  }, [activeType, campaignFilter, favoriteOnly, projectFilter, query, sortMode, tagFilter]);
+
   const hasMetadataFilters =
     projectFilter.trim() ||
     campaignFilter.trim() ||
@@ -496,6 +513,14 @@ export default function AssetLibrary() {
           Reset view
         </button>
       </div>
+
+      {activeViewChips.length > 0 && (
+        <div className="asset-library-active-view" aria-label="Active Asset Library view">
+          {activeViewChips.map((chip) => (
+            <span key={chip}>{chip}</span>
+          ))}
+        </div>
+      )}
 
       <label className="asset-library-sort">
         <span>Sort</span>

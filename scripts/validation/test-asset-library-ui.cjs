@@ -101,6 +101,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "activeViewChips",
+  "Asset Library must summarize active view controls."
+);
+
+assertIncludes(
+  component,
+  "asset-library-active-view",
+  "Asset Library must render active view chips."
+);
+
+assertIncludes(
+  component,
   "setSelectedAssetId(\"\")",
   "Asset Library reset must close the selected detail card."
 );
@@ -371,6 +383,12 @@ assertIncludes(
 
 assertIncludes(
   styles,
+  "asset-library-active-view",
+  "Asset Library active view styles are missing."
+);
+
+assertIncludes(
+  styles,
   "asset-library-source-context",
   "Asset Library source context styles are missing."
 );
@@ -450,6 +468,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library resets local view controls read-only."
+);
+console.log(
+  "PASS: Asset Library summarizes active view controls."
 );
 console.log(
   "PASS: Asset Library search covers metadata and relationships."
