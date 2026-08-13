@@ -299,6 +299,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "asset-library-metadata-overflow",
+  "Asset detail must show when metadata summaries are capped."
+);
+
+assertIncludes(
+  component,
+  "metadataEntries.length - 8",
+  "Asset detail metadata overflow count must reflect hidden summary fields."
+);
+
+assertIncludes(
+  component,
   "AssetRelationships",
   "Asset detail must show asset relationships."
 );
@@ -394,6 +406,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-metadata-overflow",
+  "Asset detail metadata overflow styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -462,6 +480,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail summarizes metadata fields."
+);
+console.log(
+  "PASS: Asset Library detail shows capped metadata overflow."
 );
 console.log(
   "PASS: Asset Library detail summarizes relationships."

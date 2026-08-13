@@ -323,6 +323,11 @@ function AssetDetailPanel({ asset, onClose }) {
             ))}
           </dl>
         )}
+        {metadataEntries.length > 8 && (
+          <div className="asset-library-metadata-overflow">
+            +{metadataEntries.length - 8} more metadata fields in raw JSON
+          </div>
+        )}
         <pre>{metadata}</pre>
       </section>
     </aside>
