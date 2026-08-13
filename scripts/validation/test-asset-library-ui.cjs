@@ -359,6 +359,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "item.relation || \"Related asset\"",
+  "Asset detail must label unnamed relationship types read-only."
+);
+
+assertIncludes(
+  component,
+  "].filter((item) => item.value);",
+  "Asset detail must avoid blank relationship rows."
+);
+
+assertIncludes(
+  component,
   "asset-library-detail-relationship-summary",
   "Asset detail must show relationship summary counts."
 );
@@ -552,6 +564,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail exposes copyable relationship IDs."
+);
+console.log(
+  "PASS: Asset Library detail normalizes relationship display rows."
 );
 console.log(
   "PASS: Asset Library is connected to navigation."

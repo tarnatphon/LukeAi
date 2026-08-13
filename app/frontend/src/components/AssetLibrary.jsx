@@ -221,10 +221,10 @@ function AssetRelationships({
       value: assetId,
     }))),
     ...((asset.relations || []).map((item) => ({
-      label: item.relation,
+      label: item.relation || "Related asset",
       value: item.assetId,
     }))),
-  ];
+  ].filter((item) => item.value);
 
   return (
     <section className="asset-library-detail-section">
