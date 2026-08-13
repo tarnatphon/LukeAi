@@ -393,6 +393,17 @@ export default function AssetLibrary() {
     setTagFilter("");
   };
 
+  const resetAssetLibraryView = () => {
+    setActiveType("all");
+    setFavoriteOnly(false);
+    setProjectFilter("");
+    setCampaignFilter("");
+    setTagFilter("");
+    setSortMode("updated-desc");
+    setQuery("");
+    setSelectedAssetId("");
+  };
+
   return (
     <section className="asset-library">
       <div className="asset-library-header">
@@ -437,6 +448,14 @@ export default function AssetLibrary() {
         >
           <Star size={16} />
           Favorites
+        </button>
+
+        <button
+          type="button"
+          className="m3-btn m3-btn-outlined"
+          onClick={resetAssetLibraryView}
+        >
+          Reset view
         </button>
       </div>
 

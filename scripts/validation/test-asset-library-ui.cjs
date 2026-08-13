@@ -95,6 +95,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "resetAssetLibraryView",
+  "Asset Library must allow the local view state to be reset."
+);
+
+assertIncludes(
+  component,
+  "setSelectedAssetId(\"\")",
+  "Asset Library reset must close the selected detail card."
+);
+
+assertIncludes(
+  component,
   "getAssetSearchText",
   "Asset Library must centralize searchable asset fields."
 );
@@ -387,6 +399,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library filters by project, campaign and tag."
+);
+console.log(
+  "PASS: Asset Library resets local view controls read-only."
 );
 console.log(
   "PASS: Asset Library search covers metadata and relationships."
