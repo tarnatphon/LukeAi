@@ -651,3 +651,10 @@ else
   echo "FAIL: Node.js is required for Generated Image Asset Registration validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-i2v-video-asset-registration.cjs
+else
+  echo "FAIL: Node.js is required for Completed I2V Asset Registration validation"
+  exit 1
+fi

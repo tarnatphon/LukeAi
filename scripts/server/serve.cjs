@@ -24872,6 +24872,121 @@ if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
       const result = spawnSync(runtimePython, [worker, "--model", modelId, "--image", inputPath, "--output", outputPath, "--prompt", String(body.prompt || ""), "--seconds", String(Math.max(2, Math.min(10, Number(body.seconds) || 5))), "--references", manifestPath, "--reference-lock", body.referenceLock === false ? "0" : "1", "--automatic-match", automaticMatch ? "1" : "0"], { encoding: "utf8", timeout: 60 * 60 * 1000, maxBuffer: 10 * 1024 * 1024 });
       let parsed = null; try { parsed = JSON.parse(String(result.stdout || "").trim().split(/\r?\n/).pop()); } catch (_) {}
       if (result.error || result.status !== 0 || !parsed?.ok) return json(res, 500, { ok: false, error: parsed?.error || String(result.stderr || result.error?.message || "Image-to-video worker failed.") });
+      // LUKE_AI_I2V_VIDEO_ASSET_REGISTRATION_V1
+      try {
+        if (
+          fs.existsSync(
+            outputPath
+          )
+        ) {
+          const outputStat =
+            fs.statSync(
+              outputPath
+            );
+
+          if (
+            outputStat.isFile()
+          ) {
+            const normalizedSeconds =
+              Math.max(
+                2,
+                Math.min(
+                  10,
+                  Number(
+                    body.seconds
+                  ) || 5
+                )
+              );
+
+            const registry =
+              getLukeAssetRegistry();
+
+            registry.upsertByPath({
+              type:
+                "video",
+
+              existingPath:
+                outputPath,
+
+              storageProviderId:
+                body.storageProviderId ||
+                "local",
+
+              sourcePrompt:
+                String(
+                  body.prompt || ""
+                ) || null,
+
+              sourceModel:
+                modelId ||
+                null,
+
+              project:
+                body.project ||
+                null,
+
+              campaign:
+                body.campaign ||
+                null,
+
+              metadata: {
+                registrationSource:
+                  "image-to-video-success",
+
+                jobId,
+
+                outputRelative:
+                  path.relative(
+                    ROOT,
+                    outputPath
+                  ),
+
+                videoUrl:
+                  path.relative(
+                    ROOT,
+                    outputPath
+                  ),
+
+                sizeBytes:
+                  outputStat.size,
+
+                seconds:
+                  normalizedSeconds,
+
+                batchId:
+                  body.batchId ||
+                  null,
+
+                batchIndex:
+                  body.batchIndex ??
+                  null,
+
+                batchSize:
+                  body.batchSize ??
+                  null,
+
+                referenceLock:
+                  body.referenceLock !==
+                  false,
+
+                automaticMatch:
+                  automaticMatch ===
+                  true,
+
+                referenceCount:
+                  referenceManifest.length,
+              },
+            });
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "[assets] Completed I2V registration skipped:",
+          error?.message ||
+            error
+        );
+      }
+
       return json(res, 200, { ok: true, output: path.relative(ROOT, outputPath), message: `Video saved to ${path.relative(ROOT, outputPath)}` });
     } catch (err) { return json(res, 500, { ok: false, error: err.message || String(err) }); }
   }
