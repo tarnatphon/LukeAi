@@ -9,6 +9,12 @@ const ui =
     "utf8"
   );
 
+const styles =
+  fs.readFileSync(
+    "app/frontend/src/App.css",
+    "utf8"
+  );
+
 const server =
   fs.readFileSync(
     "scripts/server/serve.cjs",
@@ -45,6 +51,9 @@ function assert(
   'type: "reference"',
   "selectedRelationshipSourceAsset",
   "selectedRelationshipReferenceAssets",
+  "i2v-asset-picker-counts",
+  "source Assets available",
+  "reference Assets available",
   "Linked source",
   "Linked references",
 ].forEach(
@@ -128,6 +137,13 @@ assert(
 );
 
 assert(
+  styles.includes(
+    "i2v-asset-picker-counts"
+  ),
+  "Image-to-Video relationship picker count styles are missing."
+);
+
+assert(
   !ui.includes(
     "deleteAsset("
   ) &&
@@ -183,6 +199,10 @@ console.log(
 
 console.log(
   "PASS: Image-to-Video shows selected Asset relationships before generation."
+);
+
+console.log(
+  "PASS: Image-to-Video shows available Asset relationship counts."
 );
 
 console.log(

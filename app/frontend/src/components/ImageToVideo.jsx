@@ -1934,6 +1934,23 @@ export default function ImageToVideo({
           )}
 
           <div
+            className="i2v-asset-picker-counts"
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              marginTop: 12,
+            }}
+          >
+            <span>
+              {imageAssetOptions.length} source Assets available
+            </span>
+            <span>
+              {referenceAssetOptions.length} reference Assets available
+            </span>
+          </div>
+
+          <div
             style={{
               display: "grid",
               gap: 8,
