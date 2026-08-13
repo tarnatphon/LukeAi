@@ -52,8 +52,10 @@ function assert(
   "selectedRelationshipSourceAsset",
   "selectedRelationshipReferenceAssets",
   "i2v-asset-picker-counts",
+  "i2v-asset-picker-empty",
   "source Assets available",
   "reference Assets available",
+  "No eligible Asset Library records are available to link yet.",
   "Linked source",
   "Linked references",
 ].forEach(
@@ -139,8 +141,11 @@ assert(
 assert(
   styles.includes(
     "i2v-asset-picker-counts"
+  ) &&
+  styles.includes(
+    "i2v-asset-picker-empty"
   ),
-  "Image-to-Video relationship picker count styles are missing."
+  "Image-to-Video relationship picker count/empty styles are missing."
 );
 
 assert(
@@ -203,6 +208,10 @@ console.log(
 
 console.log(
   "PASS: Image-to-Video shows available Asset relationship counts."
+);
+
+console.log(
+  "PASS: Image-to-Video shows an empty state when no linkable Assets exist."
 );
 
 console.log(

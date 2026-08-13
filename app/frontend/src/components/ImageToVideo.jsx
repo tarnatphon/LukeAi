@@ -1950,6 +1950,15 @@ export default function ImageToVideo({
             </span>
           </div>
 
+          {!assetRelationshipLoading &&
+            !assetRelationshipError &&
+            imageAssetOptions.length === 0 &&
+            referenceAssetOptions.length === 0 && (
+              <p className="i2v-asset-picker-empty">
+                No eligible Asset Library records are available to link yet.
+              </p>
+            )}
+
           <div
             style={{
               display: "grid",
