@@ -56,6 +56,7 @@ function assert(
   "source Assets available",
   "reference Assets available",
   "No eligible Asset Library records are available to link yet.",
+  "availableAssetIds",
   "Linked source",
   "Linked references",
 ].forEach(
@@ -139,6 +140,16 @@ assert(
 );
 
 assert(
+  ui.includes(
+    "availableAssetIds.has(currentAssetId)"
+  ) &&
+  ui.includes(
+    "setReferenceAssetIds((currentAssetIds)"
+  ),
+  "Image-to-Video relationship picker must clear stale selected Asset IDs after refresh."
+);
+
+assert(
   styles.includes(
     "i2v-asset-picker-counts"
   ) &&
@@ -212,6 +223,10 @@ console.log(
 
 console.log(
   "PASS: Image-to-Video shows an empty state when no linkable Assets exist."
+);
+
+console.log(
+  "PASS: Image-to-Video clears stale selected Asset IDs after refresh."
 );
 
 console.log(

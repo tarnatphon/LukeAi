@@ -333,7 +333,21 @@ export default function ImageToVideo({
         ...(Array.isArray(referencesResult.assets) ? referencesResult.assets : []),
       ];
 
+      const availableAssetIds = new Set(
+        nextAssets.map((asset) => asset.assetId),
+      );
+
       setAssetRelationshipOptions(nextAssets);
+      setSourceAssetId((currentAssetId) =>
+        currentAssetId && availableAssetIds.has(currentAssetId)
+          ? currentAssetId
+          : null,
+      );
+      setReferenceAssetIds((currentAssetIds) =>
+        currentAssetIds.filter((assetId) =>
+          availableAssetIds.has(assetId),
+        ),
+      );
     } catch (error) {
       setAssetRelationshipError(
         error?.message ||
