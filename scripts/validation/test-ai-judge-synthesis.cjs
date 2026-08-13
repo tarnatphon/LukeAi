@@ -462,6 +462,29 @@ async function main() {
           },
           body: JSON.stringify({
             conversationId,
+            response_format: {
+              type:
+                "json_schema",
+              name:
+                "ai_judge_json_output",
+              schema: {
+                type:
+                  "object",
+                additionalProperties:
+                  false,
+                properties: {
+                  finalAnswer: {
+                    type:
+                      "string",
+                  },
+                },
+                required: [
+                  "finalAnswer",
+                ],
+              },
+              strict:
+                false,
+            },
           }),
         }
       );
@@ -510,6 +533,32 @@ async function main() {
     ) {
       throw new Error(
         "AI Judge prompt did not include all source responses."
+      );
+    }
+
+    if (
+      judgeRequestBody
+        .response_format
+        ?.type !== "json_schema" ||
+      judgeRequestBody
+        .response_format
+        ?.json_schema
+        ?.name !==
+        "ai_judge_json_output" ||
+      judgeRequestBody
+        .response_format
+        ?.json_schema
+        ?.strict !== false ||
+      judgeRequestBody
+        .response_format
+        ?.json_schema
+        ?.schema
+        ?.properties
+        ?.finalAnswer
+        ?.type !== "string"
+    ) {
+      throw new Error(
+        "AI Judge runtime request did not receive normalized JSON schema response_format."
       );
     }
 
@@ -574,6 +623,9 @@ async function main() {
     );
     console.log(
       "PASS: Highest ranked model was selected as Judge."
+    );
+    console.log(
+      "PASS: AI Judge runtime request received normalized JSON schema response_format."
     );
     console.log(
       "PASS: Final Answer streamed incrementally."

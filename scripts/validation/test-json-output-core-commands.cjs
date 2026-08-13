@@ -148,6 +148,24 @@ assertIncludes(
   "Server must route JSON output options to each multi-model runtime request."
 );
 
+assertIncludes(
+  server,
+  "async function streamAiJudgeSynthesis(",
+  "Server must expose AI Judge synthesis for JSON output forwarding."
+);
+
+assertIncludes(
+  server,
+  "const normalizedResponseFormat =",
+  "Server AI Judge synthesis must normalize response format payloads."
+);
+
+assertIncludes(
+  server,
+  "response_format:\n                    normalizedResponseFormat",
+  "Server AI Judge synthesis must forward normalized response formats."
+);
+
 console.log(
   "PASS: Frontend forwards JSON output response format options."
 );
@@ -166,6 +184,10 @@ console.log(
 
 console.log(
   "PASS: Server forwards JSON output response_format through multi-model streams."
+);
+
+console.log(
+  "PASS: Server forwards JSON output response_format through AI Judge synthesis."
 );
 
 console.log(

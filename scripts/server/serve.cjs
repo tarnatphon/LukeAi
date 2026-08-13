@@ -14178,6 +14178,8 @@ async function streamAiJudgeSynthesis(
   response,
   {
     judgeModelId = null,
+    response_format = null,
+    responseFormat = null,
   } = {}
 ) {
   if (
@@ -14237,6 +14239,11 @@ async function streamAiJudgeSynthesis(
 
   const generationPolicy =
     readTextGenerationPolicy();
+  const normalizedResponseFormat =
+    normalizeLlmResponseFormat(
+      response_format ||
+      responseFormat
+    );
 
   const synthesisId =
     createTextChatId(
@@ -14354,6 +14361,12 @@ async function streamAiJudgeSynthesis(
                 policy.judge
                   ?.maxTokens
               ) || 3072,
+            ...(normalizedResponseFormat
+              ? {
+                  response_format:
+                    normalizedResponseFormat,
+                }
+              : {}),
           }),
           signal:
             controller.signal,
@@ -21621,6 +21634,10 @@ const server = http.createServer(async (req, res) => {
           judgeModelId:
             body.judgeModelId ||
             null,
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
         }
       );
 
