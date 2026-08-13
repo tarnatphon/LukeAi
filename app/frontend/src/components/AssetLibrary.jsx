@@ -766,19 +766,30 @@ export default function AssetLibrary() {
       </div>
 
       {error && (
-        <div className="asset-library-error">
+        <div
+          className="asset-library-error"
+          role="alert"
+        >
           {error}
         </div>
       )}
 
       {isLoading && (
-        <div className="asset-library-empty">
+        <div
+          className="asset-library-empty"
+          role="status"
+          aria-live="polite"
+        >
           Loading Asset Library...
         </div>
       )}
 
       {!isLoading && !error && filteredAssets.length === 0 && (
-        <div className="asset-library-empty">
+        <div
+          className="asset-library-empty"
+          role="status"
+          aria-live="polite"
+        >
           No registered assets match this view.
         </div>
       )}

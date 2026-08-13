@@ -191,6 +191,24 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "role=\"status\"",
+  "Asset Library loading and empty states must be announced accessibly."
+);
+
+assertIncludes(
+  component,
+  "aria-live=\"polite\"",
+  "Asset Library status updates must use polite live regions."
+);
+
+assertIncludes(
+  component,
+  "role=\"alert\"",
+  "Asset Library errors must be announced accessibly."
+);
+
+assertIncludes(
+  component,
   "relationshipCount",
   "Asset Library summary must include relationship counts."
 );
@@ -621,6 +639,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library shows read-only summary stats."
+);
+console.log(
+  "PASS: Asset Library announces status and error states accessibly."
 );
 console.log(
   "PASS: Asset Library summary counts visible relationship IDs."
