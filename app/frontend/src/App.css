@@ -9562,14 +9562,16 @@ html[data-theme^="dark"] .settings-subsection:hover {
   overflow-wrap: anywhere;
 }
 
-.asset-library-detail-row dd {
+.asset-library-detail-row dd,
+.asset-library-relationships dd {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
-.asset-library-detail-row dd > span {
+.asset-library-detail-row dd > span,
+.asset-library-relationships dd > span {
   min-width: 0;
   overflow-wrap: anywhere;
 }

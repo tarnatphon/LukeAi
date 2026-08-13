@@ -202,7 +202,11 @@ function AssetDetailList({ title, items = [] }) {
   );
 }
 
-function AssetRelationships({ asset }) {
+function AssetRelationships({
+  asset,
+  copiedAssetField,
+  onCopy,
+}) {
   const derivedCount = asset.derivedFrom?.length || 0;
   const referenceCount = asset.references?.length || 0;
   const relationCount = asset.relations?.length || 0;
@@ -244,7 +248,25 @@ function AssetRelationships({ asset }) {
           {relationEntries.map((item, index) => (
             <div key={`${item.label}-${item.value}-${index}`}>
               <dt>{item.label}</dt>
-              <dd>{item.value}</dd>
+              <dd>
+                <span>{item.value}</span>
+                <button
+                  type="button"
+                  className="asset-library-copy-button"
+                  onClick={() =>
+                    onCopy(`Relationship ${index + 1}`, item.value)
+                  }
+                  title={`Copy ${item.label}`}
+                  aria-label={`Copy ${item.label}`}
+                >
+                  <Copy size={13} />
+                  <span>
+                    {copiedAssetField === `Relationship ${index + 1}`
+                      ? "Copied"
+                      : "Copy"}
+                  </span>
+                </button>
+              </dd>
             </div>
           ))}
         </dl>
@@ -383,7 +405,11 @@ function AssetDetailPanel({ asset, onClose }) {
         title="Tags"
         items={asset.tags || []}
       />
-      <AssetRelationships asset={asset} />
+      <AssetRelationships
+        asset={asset}
+        copiedAssetField={copiedAssetField}
+        onCopy={copyAssetDetailValue}
+      />
 
       <section className="asset-library-detail-section">
         <h4>Metadata</h4>

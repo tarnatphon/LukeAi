@@ -347,6 +347,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "Relationship ${index + 1}",
+  "Asset detail relationship IDs must be copyable read-only."
+);
+
+assertIncludes(
+  component,
   "asset-library-detail-relationship-summary",
   "Asset detail must show relationship summary counts."
 );
@@ -534,6 +540,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail exposes read-only copy controls."
+);
+console.log(
+  "PASS: Asset Library detail exposes copyable relationship IDs."
 );
 console.log(
   "PASS: Asset Library is connected to navigation."
