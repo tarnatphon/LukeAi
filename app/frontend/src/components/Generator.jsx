@@ -74,7 +74,110 @@ function Generator({
   const [baseImage, setBaseImage] = useState(null);
   const [referenceImages, setReferenceImages] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("image-generator-references") || "[]");
+      // LUKE_AI_REFERENCE_PERSISTENCE_SCHEMA_V1
+      const parsed =
+        JSON.parse(
+          localStorage.getItem(
+            "image-generator-references"
+          ) || "[]"
+        );
+
+      return Array.isArray(
+        parsed
+      )
+        ? parsed.map(
+            (item) => ({
+              ...item,
+
+              referenceType:
+                String(
+                  item.referenceType ||
+                  item.type ||
+                  item?.metadata
+                    ?.referenceType ||
+                  "generic"
+                )
+                  .trim()
+                  .toLowerCase(),
+
+              weight:
+                Math.max(
+                  0.2,
+                  Math.min(
+                    1,
+                    Number(
+                      item.weight ??
+                      item?.metadata
+                        ?.referenceWeight ??
+                      0.85
+                    )
+                  )
+                ),
+
+              referenceLock:
+                item.referenceLock !==
+                undefined
+                  ? Boolean(
+                      item.referenceLock
+                    )
+                  : item?.metadata
+                      ?.referenceLock !==
+                    undefined
+                    ? Boolean(
+                        item.metadata
+                          .referenceLock
+                      )
+                    : true,
+
+              metadata: {
+                ...(
+                  item.metadata ||
+                  {}
+                ),
+
+                referenceType:
+                  String(
+                    item.referenceType ||
+                    item.type ||
+                    item?.metadata
+                      ?.referenceType ||
+                    "generic"
+                  )
+                    .trim()
+                    .toLowerCase(),
+
+                referenceWeight:
+                  Math.max(
+                    0.2,
+                    Math.min(
+                      1,
+                      Number(
+                        item.weight ??
+                        item?.metadata
+                          ?.referenceWeight ??
+                        0.85
+                      )
+                    )
+                  ),
+
+                referenceLock:
+                  item.referenceLock !==
+                  undefined
+                    ? Boolean(
+                        item.referenceLock
+                      )
+                    : item?.metadata
+                        ?.referenceLock !==
+                      undefined
+                      ? Boolean(
+                          item.metadata
+                            .referenceLock
+                        )
+                      : true,
+              },
+            })
+          )
+        : [];
     } catch (_) {
       return [];
     }

@@ -144,6 +144,156 @@ const ReferenceCard = memo(function ReferenceCard({
   );
 });
 
+// LUKE_AI_REFERENCE_ASSET_SCHEMA_V1
+const REFERENCE_TYPES = [
+  "character",
+  "face",
+  "clothing",
+  "product",
+  "object",
+  "style",
+  "composition",
+  "background",
+  "brand",
+  "generic",
+];
+
+function normalizeReferenceType(
+  value
+) {
+  const normalized =
+    String(
+      value || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  return REFERENCE_TYPES.includes(
+    normalized
+  )
+    ? normalized
+    : "generic";
+}
+
+function normalizeReferenceWeight(
+  value
+) {
+  const numeric =
+    Number(value);
+
+  if (
+    !Number.isFinite(
+      numeric
+    )
+  ) {
+    return 0.85;
+  }
+
+  return Math.max(
+    0.2,
+    Math.min(
+      1,
+      numeric
+    )
+  );
+}
+
+function normalizeReferenceAssetMetadata(
+  item = {}
+) {
+  const metadata =
+    item.metadata &&
+    typeof item.metadata ===
+      "object"
+      ? {
+          ...item.metadata,
+        }
+      : {};
+
+  return {
+    ...item,
+
+    assetId:
+      item.assetId ||
+      null,
+
+    referenceType:
+      normalizeReferenceType(
+        item.referenceType ||
+        item.type ||
+        metadata.referenceType
+      ),
+
+    weight:
+      normalizeReferenceWeight(
+        item.weight ??
+        metadata.referenceWeight
+      ),
+
+    referenceLock:
+      item.referenceLock !==
+      undefined
+        ? Boolean(
+            item.referenceLock
+          )
+        : metadata.referenceLock !==
+            undefined
+          ? Boolean(
+              metadata.referenceLock
+            )
+          : true,
+
+    metadata: {
+      ...metadata,
+
+      referenceType:
+        normalizeReferenceType(
+          item.referenceType ||
+          item.type ||
+          metadata.referenceType
+        ),
+
+      referenceWeight:
+        normalizeReferenceWeight(
+          item.weight ??
+          metadata.referenceWeight
+        ),
+
+      referenceLock:
+        item.referenceLock !==
+        undefined
+          ? Boolean(
+              item.referenceLock
+            )
+          : metadata.referenceLock !==
+              undefined
+            ? Boolean(
+                metadata.referenceLock
+              )
+            : true,
+
+      originalName:
+        metadata.originalName ||
+        item.name ||
+        null,
+
+      mimeType:
+        metadata.mimeType ||
+        item.mimeType ||
+        item.fileType ||
+        null,
+
+      source:
+        metadata.source ||
+        (
+          item.assetId
+            ? "asset-library"
+            : "upload"
+        ),
+    },
+  };
+}
+
 function ReferenceManager({
   referenceImages,
   setReferenceImages,
@@ -152,16 +302,38 @@ function ReferenceManager({
   onUseAsBase,
   disabled = false,
 }) {
+  // LUKE_AI_REFERENCE_INPUT_NORMALIZATION_V1
+  const unifiedReferences =
+    useMemo(
+      () =>
+        (
+          Array.isArray(
+            referenceImages
+          )
+            ? referenceImages
+            : []
+        )
+          .map(
+            normalizeReferenceAssetMetadata
+          )
+          .map(
+            (item, index) =>
+              normalizeReference(
+                item,
+                index
+              )
+          ),
+      [
+        referenceImages,
+      ],
+    );
+
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
   const importInputRef = useRef(null);
 
-  const unifiedReferences = useMemo(
-    () => referenceImages.map((item, index) => normalizeReference(item, index)),
-    [referenceImages]
-  );
   const enabledCount = unifiedReferences.filter((item) => item.enabled).length;
   const filteredReferences = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -175,17 +347,17 @@ function ReferenceManager({
     if (disabled) return;
     const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
     if (imageFiles.length === 0) return;
-    const remaining = MAX_REFERENCES - referenceImages.length;
+    const remaining = MAX_REFERENCES - unifiedReferences.length;
     const accepted = imageFiles.slice(0, Math.max(0, remaining));
     const items = await Promise.all(accepted.map(async (file, offset) => normalizeReference({
       name: file.name,
       src: await readImageFile(file),
       size: file.size,
       type: file.type,
-      pinned: referenceImages.length + offset === 0,
-      weight: referenceImages.length + offset === 0 ? 1.35 : 1,
-      influence: referenceImages.length + offset === 0 ? "Locked" : "Strong",
-    }, referenceImages.length + offset)));
+      pinned: unifiedReferences.length + offset === 0,
+      weight: unifiedReferences.length + offset === 0 ? 1.35 : 1,
+      influence: unifiedReferences.length + offset === 0 ? "Locked" : "Strong",
+    }, unifiedReferences.length + offset)));
     setReferenceImages((prev) => [...prev.map((item, idx) => normalizeReference(item, idx)), ...items].slice(0, MAX_REFERENCES));
   }, [disabled, referenceImages, setReferenceImages]);
 
@@ -310,22 +482,22 @@ function ReferenceManager({
           <p>One unified reference mode. Add photos and the generator will focus on matching the same face, hairstyle, clothing, body shape, color tone and key details.</p>
         </div>
         <div className="reference-actions-main">
-          <button type="button" className="m3-btn m3-btn-tonal" onClick={() => fileInputRef.current?.click()} disabled={disabled || referenceImages.length >= MAX_REFERENCES}>
+          <button type="button" className="m3-btn m3-btn-tonal" onClick={() => fileInputRef.current?.click()} disabled={disabled || unifiedReferences.length >= MAX_REFERENCES}>
             <ImagePlus size={15} /> Add Images
           </button>
-          <button type="button" className="m3-btn m3-btn-filled" onClick={optimizeForFace} disabled={disabled || referenceImages.length === 0}>
+          <button type="button" className="m3-btn m3-btn-filled" onClick={optimizeForFace} disabled={disabled || unifiedReferences.length === 0}>
             <Wand2 size={15} /> Optimize Face Match
           </button>
-          <button type="button" className="m3-btn m3-btn-outlined" onClick={savePreset} disabled={referenceImages.length === 0}>
+          <button type="button" className="m3-btn m3-btn-outlined" onClick={savePreset} disabled={unifiedReferences.length === 0}>
             <Save size={15} /> Save Preset
           </button>
-          <button type="button" className="m3-btn m3-btn-outlined" onClick={exportJson} disabled={referenceImages.length === 0}>
+          <button type="button" className="m3-btn m3-btn-outlined" onClick={exportJson} disabled={unifiedReferences.length === 0}>
             <Download size={15} /> Export
           </button>
           <button type="button" className="m3-btn m3-btn-outlined" onClick={() => importInputRef.current?.click()}>
             <Upload size={15} /> Import
           </button>
-          <button type="button" className="m3-btn m3-btn-error" onClick={() => { setReferenceImages([]); setSelectedIds([]); }} disabled={referenceImages.length === 0}>
+          <button type="button" className="m3-btn m3-btn-error" onClick={() => { setReferenceImages([]); setSelectedIds([]); }} disabled={unifiedReferences.length === 0}>
             <X size={15} /> Clear All
           </button>
         </div>
@@ -383,7 +555,7 @@ function ReferenceManager({
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
         onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
-        onClick={() => referenceImages.length === 0 && fileInputRef.current?.click()}
+        onClick={() => unifiedReferences.length === 0 && fileInputRef.current?.click()}
       >
         {filteredReferences.length > 0 ? (
           <div className="reference-grid appearance-reference-grid">
