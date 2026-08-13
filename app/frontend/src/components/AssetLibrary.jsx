@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   Star,
+  X,
 } from "lucide-react";
 import { listAssets } from "../services/api";
 
@@ -58,6 +59,164 @@ function getAssetTitle(asset) {
   );
 }
 
+function formatAssetValue(value) {
+  if (value === undefined || value === null || value === "") {
+    return "Not recorded";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+
+  return String(value);
+}
+
+function AssetDetailRow({ label, children }) {
+  return (
+    <div className="asset-library-detail-row">
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+function AssetDetailList({ title, items = [] }) {
+  return (
+    <section className="asset-library-detail-section">
+      <h4>{title}</h4>
+      {items.length > 0 ? (
+        <div className="asset-library-detail-tags">
+          {items.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+      ) : (
+        <p>None recorded</p>
+      )}
+    </section>
+  );
+}
+
+function AssetRelationships({ asset }) {
+  const relationEntries = [
+    ...((asset.derivedFrom || []).map((assetId) => ({
+      label: "Derived from",
+      value: assetId,
+    }))),
+    ...((asset.references || []).map((assetId) => ({
+      label: "References",
+      value: assetId,
+    }))),
+    ...((asset.relations || []).map((item) => ({
+      label: item.relation,
+      value: item.assetId,
+    }))),
+  ];
+
+  return (
+    <section className="asset-library-detail-section">
+      <h4>Relationships</h4>
+      {relationEntries.length > 0 ? (
+        <dl className="asset-library-relationships">
+          {relationEntries.map((item, index) => (
+            <div key={`${item.label}-${item.value}-${index}`}>
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p>None recorded</p>
+      )}
+    </section>
+  );
+}
+
+function AssetDetailPanel({ asset, onClose }) {
+  if (!asset) return null;
+
+  const metadata =
+    asset.metadata &&
+    Object.keys(asset.metadata).length > 0
+      ? JSON.stringify(asset.metadata, null, 2)
+      : "None recorded";
+
+  return (
+    <aside
+      className="asset-library-detail"
+      aria-label="Asset detail"
+    >
+      <header>
+        <div>
+          <span className={`asset-library-type asset-library-type-${asset.type}`}>
+            {asset.type}
+          </span>
+          <h3>{getAssetTitle(asset)}</h3>
+        </div>
+        <button
+          type="button"
+          className="asset-library-icon-button"
+          onClick={onClose}
+          title="Close asset detail"
+          aria-label="Close asset detail"
+        >
+          <X size={16} />
+        </button>
+      </header>
+
+      <dl className="asset-library-detail-grid">
+        <AssetDetailRow label="Asset ID">
+          {asset.assetId}
+        </AssetDetailRow>
+        <AssetDetailRow label="Type">
+          {formatAssetValue(asset.type)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Existing path">
+          {formatAssetValue(asset.existingPath)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Storage provider">
+          {formatAssetValue(asset.storageProviderId || "local")}
+        </AssetDetailRow>
+        <AssetDetailRow label="Created">
+          {formatAssetDate(asset.createdAt)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Updated">
+          {formatAssetDate(asset.updatedAt)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Project">
+          {formatAssetValue(asset.project)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Campaign">
+          {formatAssetValue(asset.campaign)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Favorite">
+          {formatAssetValue(asset.favorite)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Pinned">
+          {formatAssetValue(asset.pinned)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Source model">
+          {formatAssetValue(asset.sourceModel)}
+        </AssetDetailRow>
+        <AssetDetailRow label="Source prompt">
+          {formatAssetValue(asset.sourcePrompt)}
+        </AssetDetailRow>
+      </dl>
+
+      <AssetDetailList
+        title="Tags"
+        items={asset.tags || []}
+      />
+      <AssetRelationships asset={asset} />
+
+      <section className="asset-library-detail-section">
+        <h4>Metadata</h4>
+        <pre>{metadata}</pre>
+      </section>
+    </aside>
+  );
+}
+
 export default function AssetLibrary() {
   const [assets, setAssets] = useState([]);
   const [activeType, setActiveType] = useState("all");
@@ -65,6 +224,7 @@ export default function AssetLibrary() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedAssetId, setSelectedAssetId] = useState("");
 
   const loadAssets = useCallback(async () => {
     setIsLoading(true);
@@ -118,6 +278,11 @@ export default function AssetLibrary() {
     }
     return counts;
   }, [assets]);
+
+  const selectedAsset = useMemo(
+    () => assets.find((asset) => asset.assetId === selectedAssetId) || null,
+    [assets, selectedAssetId]
+  );
 
   return (
     <section className="asset-library">
@@ -248,16 +413,26 @@ export default function AssetLibrary() {
 
                 <footer>
                   <span title={asset.assetId}>{asset.assetId}</span>
-                  <span>
+                  <button
+                    type="button"
+                    className="asset-library-detail-trigger"
+                    onClick={() => setSelectedAssetId(asset.assetId)}
+                    aria-label={`View details for ${getAssetTitle(asset)}`}
+                  >
                     <Link2 size={13} />
-                    {relationCount}
-                  </span>
+                    Details {relationCount}
+                  </button>
                 </footer>
               </article>
             );
           })}
         </div>
       )}
+
+      <AssetDetailPanel
+        asset={selectedAsset}
+        onClose={() => setSelectedAssetId("")}
+      />
     </section>
   );
 }

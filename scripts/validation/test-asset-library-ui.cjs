@@ -83,8 +83,56 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "AssetDetailPanel",
+  "Asset Library must expose a read-only asset detail surface."
+);
+
+assertIncludes(
+  component,
   "existingPath",
   "Asset Library must show the registered asset path."
+);
+
+assertIncludes(
+  component,
+  "sourcePrompt",
+  "Asset detail must show the source prompt."
+);
+
+assertIncludes(
+  component,
+  "sourceModel",
+  "Asset detail must show the source model."
+);
+
+assertIncludes(
+  component,
+  "storageProviderId",
+  "Asset detail must show storage provider metadata."
+);
+
+assertIncludes(
+  component,
+  "createdAt",
+  "Asset detail must show creation timestamps."
+);
+
+assertIncludes(
+  component,
+  "updatedAt",
+  "Asset detail must show update timestamps."
+);
+
+assertIncludes(
+  component,
+  "JSON.stringify(asset.metadata",
+  "Asset detail must show full metadata."
+);
+
+assertIncludes(
+  component,
+  "AssetRelationships",
+  "Asset detail must show asset relationships."
 );
 
 assertIncludes(
@@ -153,6 +201,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
+);
+console.log(
+  "PASS: Asset Library detail shows full read-only asset metadata."
 );
 console.log(
   "PASS: Asset Library is connected to navigation."
