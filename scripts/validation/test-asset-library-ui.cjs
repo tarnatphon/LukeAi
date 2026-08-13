@@ -239,6 +239,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "role=\"list\"",
+  "Asset Library card grid must expose list semantics."
+);
+
+assertIncludes(
+  component,
+  "role=\"listitem\"",
+  "Asset Library cards must expose list item semantics."
+);
+
+assertIncludes(
+  component,
   "updated-desc",
   "Asset Library must support newest-first sorting."
 );
@@ -684,6 +696,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library sorts loaded assets read-only."
+);
+console.log(
+  "PASS: Asset Library exposes card collection semantics accessibly."
 );
 console.log(
   "PASS: Asset Library cards show source prompt/model context."

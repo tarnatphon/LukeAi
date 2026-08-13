@@ -800,7 +800,10 @@ export default function AssetLibrary() {
       )}
 
       {!isLoading && !error && sortedAssets.length > 0 && (
-        <div className="asset-library-grid">
+        <div
+          className="asset-library-grid"
+          role="list"
+        >
           {sortedAssets.map((asset) => {
             const Icon = getAssetIcon(asset.type);
             const derivedCount = getAssetDerivedCount(asset);
@@ -812,6 +815,7 @@ export default function AssetLibrary() {
               <article
                 className={`asset-library-card ${isSelected ? "asset-library-card-selected" : ""}`}
                 key={asset.assetId}
+                role="listitem"
                 aria-current={isSelected ? "true" : undefined}
                 aria-selected={isSelected ? "true" : undefined}
               >
