@@ -888,6 +888,7 @@ export default function AssetLibrary() {
                       className="asset-library-detail-trigger"
                       onClick={() => setSelectedAssetId(asset.assetId)}
                       aria-label={`View details for ${getAssetTitle(asset)}`}
+                      aria-expanded={isSelected}
                     >
                       <Link2 size={13} />
                       Details

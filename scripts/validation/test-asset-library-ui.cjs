@@ -329,6 +329,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "aria-expanded={isSelected}",
+  "Asset Library detail trigger must expose expanded state accessibly."
+);
+
+assertIncludes(
+  component,
   "existingPath",
   "Asset Library must show the registered asset path."
 );
@@ -684,6 +690,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library exposes selected card state accessibly."
+);
+console.log(
+  "PASS: Asset Library exposes detail trigger expanded state accessibly."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
