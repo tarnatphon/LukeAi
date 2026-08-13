@@ -243,6 +243,8 @@ async function main() {
 
   let receivedGenerationBody =
     null;
+  const receivedGenerationBodies =
+    [];
 
   const runtimeServer =
     http.createServer(
@@ -284,18 +286,46 @@ async function main() {
         ) {
           receivedGenerationBody =
             JSON.parse(rawBody);
+          receivedGenerationBodies.push(
+            receivedGenerationBody
+          );
 
           res.writeHead(
             200,
             {
               "content-type":
-                "text/event-stream",
-              "cache-control":
-                "no-cache",
-              connection:
-                "keep-alive",
+                receivedGenerationBody.stream === true
+                  ? "text/event-stream"
+                  : "application/json",
+              ...(receivedGenerationBody.stream === true
+                ? {
+                    "cache-control":
+                      "no-cache",
+                    connection:
+                      "keep-alive",
+                  }
+                : {}),
             }
           );
+
+          if (
+            receivedGenerationBody.stream !==
+            true
+          ) {
+            res.end(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: {
+                      content:
+                        "{\"ok\":true}",
+                    },
+                  },
+                ],
+              })
+            );
+            return;
+          }
 
           const parts = [
             "สวัสดีครับ ",
@@ -369,6 +399,8 @@ async function main() {
           "127.0.0.1",
         LUKE_AI_PORT:
           String(appPort),
+        LLM_PORT:
+          String(runtimePort),
         LUKE_AI_TEXT_RUNTIME_BASE_URL:
           `http://127.0.0.1:${runtimePort}`,
       },
@@ -501,6 +533,132 @@ async function main() {
       );
     }
 
+    const schemaConversation =
+      await requestJson(
+        baseUrl,
+        "/api/text-chat/conversations",
+        {
+          method: "POST",
+          body: {
+            title:
+              "JSON Schema Streaming Test",
+          },
+        }
+      );
+
+    const schemaConversationId =
+      schemaConversation.data
+        ?.conversation
+        ?.id;
+
+    if (!schemaConversationId) {
+      throw new Error(
+        "Unable to create JSON schema validation conversation."
+      );
+    }
+
+    const schemaUserMessage =
+      await requestJson(
+        baseUrl,
+        `/api/text-chat/conversations/${schemaConversationId}/messages`,
+        {
+          method: "POST",
+          body: {
+            role: "user",
+            content:
+              "Return structured output.",
+          },
+        }
+      );
+
+    if (schemaUserMessage.status !== 201) {
+      throw new Error(
+        "Unable to save JSON schema validation message."
+      );
+    }
+
+    const schemaResponse =
+      await fetch(
+        `${baseUrl}/api/text-runtime/generate-stream`,
+        {
+          method: "POST",
+          headers: {
+            "content-type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            conversationId:
+              schemaConversationId,
+            response_format: {
+              type: "json_schema",
+              name:
+                "test_schema_output",
+              schema: {
+                type: "object",
+                additionalProperties:
+                  false,
+                properties: {
+                  ok: {
+                    type: "boolean",
+                  },
+                },
+                required: [
+                  "ok",
+                ],
+              },
+              strict: false,
+            },
+          }),
+        }
+      );
+
+    const schemaStreamText =
+      await readGenerationStream(
+        schemaResponse
+      );
+
+    if (
+      schemaResponse.status !== 200 ||
+      !schemaStreamText.includes(
+        "event: complete"
+      )
+    ) {
+      throw new Error(
+        `JSON schema response format request failed: status=${schemaResponse.status}`
+      );
+    }
+
+    const schemaRuntimeBody =
+      receivedGenerationBodies.find(
+        (body) =>
+          body.response_format
+            ?.type === "json_schema"
+      );
+
+    if (
+      !schemaRuntimeBody ||
+      schemaRuntimeBody
+        .response_format
+        .json_schema
+        ?.name !==
+        "test_schema_output" ||
+      schemaRuntimeBody
+        .response_format
+        .json_schema
+        ?.strict !== false ||
+      schemaRuntimeBody
+        .response_format
+        .json_schema
+        ?.schema
+        ?.properties
+        ?.ok
+        ?.type !== "boolean"
+    ) {
+      throw new Error(
+        "Runtime did not receive normalized JSON schema response_format."
+      );
+    }
+
     const restored =
       await requestJson(
         baseUrl,
@@ -560,6 +718,9 @@ async function main() {
     );
     console.log(
       "PASS: Runtime received an OpenAI-compatible streaming request."
+    );
+    console.log(
+      "PASS: Runtime received normalized JSON schema response_format."
     );
     console.log(
       "PASS: Text tokens streamed incrementally."

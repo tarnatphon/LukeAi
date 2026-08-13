@@ -112,6 +112,24 @@ assertIncludes(
   "Server must forward normalized response_format to the local text runtime."
 );
 
+assertIncludes(
+  server,
+  "const responseFormat =",
+  "Server text-runtime payloads must build a normalized response format."
+);
+
+assertIncludes(
+  server,
+  "payload.response_format =",
+  "Server text-runtime payloads must forward normalized response formats."
+);
+
+assertIncludes(
+  server,
+  "response_format:\n            body.response_format",
+  "Server text-runtime stream endpoint must accept response_format from requests."
+);
+
 console.log(
   "PASS: Frontend forwards JSON output response format options."
 );
@@ -122,6 +140,10 @@ console.log(
 
 console.log(
   "PASS: Server forwards JSON output response_format to local text runtime."
+);
+
+console.log(
+  "PASS: Server forwards JSON output response_format through text-runtime streams."
 );
 
 console.log(

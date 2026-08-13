@@ -11914,6 +11914,55 @@ async function unloadTextRuntimeModel(
   );
 }
 
+// LUKE_AI_JSON_OUTPUT_CORE_COMMANDS_V1
+function normalizeLlmResponseFormat(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    const mode = value.trim();
+    return mode ? { type: mode } : undefined;
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const type = String(value.type || "").trim();
+  if (!type) {
+    return undefined;
+  }
+
+  if (type === "json_schema") {
+    const jsonSchema = value.json_schema && typeof value.json_schema === "object"
+      ? value.json_schema
+      : {};
+    const schema = jsonSchema.schema && typeof jsonSchema.schema === "object"
+      ? jsonSchema.schema
+      : value.schema && typeof value.schema === "object"
+        ? value.schema
+        : null;
+    if (!schema) {
+      return undefined;
+    }
+
+    return {
+      type,
+      json_schema: {
+        name: String(jsonSchema.name || value.name || "luke_json_output").trim() || "luke_json_output",
+        schema,
+        strict: jsonSchema.strict !== false && value.strict !== false,
+      },
+    };
+  }
+
+  return {
+    ...value,
+    type,
+  };
+}
+
 async function loadTextRuntimeModel(
   conversation,
   restorePrompt
@@ -12302,8 +12351,13 @@ function createTextGenerationPayload(
 ) {
   const policy =
     readTextGenerationPolicy();
+  const responseFormat =
+    normalizeLlmResponseFormat(
+      overrides.response_format ||
+      overrides.responseFormat
+    );
 
-  return {
+  const payload = {
     model:
       overrides.modelId ||
       (
@@ -12368,6 +12422,13 @@ function createTextGenerationPayload(
               ?.stopSequences || []
           ),
   };
+
+  if (responseFormat) {
+    payload.response_format =
+      responseFormat;
+  }
+
+  return payload;
 }
 
 function extractTextGenerationDelta(
@@ -21841,6 +21902,10 @@ const server = http.createServer(async (req, res) => {
             body.topP,
           maxTokens:
             body.maxTokens,
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
         }
       );
 
@@ -21961,6 +22026,10 @@ const server = http.createServer(async (req, res) => {
             body.maxTokens,
           stop:
             body.stop,
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
         }
       );
 
@@ -23186,55 +23255,6 @@ function getLastUserQuery(messages) {
     }
   }
   return "";
-}
-
-// LUKE_AI_JSON_OUTPUT_CORE_COMMANDS_V1
-function normalizeLlmResponseFormat(value) {
-  if (!value) {
-    return undefined;
-  }
-
-  if (typeof value === "string") {
-    const mode = value.trim();
-    return mode ? { type: mode } : undefined;
-  }
-
-  if (typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const type = String(value.type || "").trim();
-  if (!type) {
-    return undefined;
-  }
-
-  if (type === "json_schema") {
-    const jsonSchema = value.json_schema && typeof value.json_schema === "object"
-      ? value.json_schema
-      : {};
-    const schema = jsonSchema.schema && typeof jsonSchema.schema === "object"
-      ? jsonSchema.schema
-      : value.schema && typeof value.schema === "object"
-        ? value.schema
-        : null;
-    if (!schema) {
-      return undefined;
-    }
-
-    return {
-      type,
-      json_schema: {
-        name: String(jsonSchema.name || value.name || "luke_json_output").trim() || "luke_json_output",
-        schema,
-        strict: jsonSchema.strict !== false && value.strict !== false,
-      },
-    };
-  }
-
-  return {
-    ...value,
-    type,
-  };
 }
 
 async function augmentMessagesWithWebSearch(messages, body) {
