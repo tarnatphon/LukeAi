@@ -221,6 +221,9 @@ export default function AssetLibrary() {
   const [assets, setAssets] = useState([]);
   const [activeType, setActiveType] = useState("all");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [projectFilter, setProjectFilter] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -234,6 +237,9 @@ export default function AssetLibrary() {
       const result = await listAssets({
         type: activeType === "all" ? "" : activeType,
         favorite: favoriteOnly ? true : "",
+        project: projectFilter.trim(),
+        campaign: campaignFilter.trim(),
+        tag: tagFilter.trim(),
       });
 
       setAssets(Array.isArray(result.assets) ? result.assets : []);
@@ -242,7 +248,7 @@ export default function AssetLibrary() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeType, favoriteOnly]);
+  }, [activeType, campaignFilter, favoriteOnly, projectFilter, tagFilter]);
 
   useEffect(() => {
     loadAssets();
@@ -283,6 +289,17 @@ export default function AssetLibrary() {
     () => assets.find((asset) => asset.assetId === selectedAssetId) || null,
     [assets, selectedAssetId]
   );
+
+  const hasMetadataFilters =
+    projectFilter.trim() ||
+    campaignFilter.trim() ||
+    tagFilter.trim();
+
+  const clearMetadataFilters = () => {
+    setProjectFilter("");
+    setCampaignFilter("");
+    setTagFilter("");
+  };
 
   return (
     <section className="asset-library">
@@ -328,6 +345,44 @@ export default function AssetLibrary() {
         >
           <Star size={16} />
           Favorites
+        </button>
+      </div>
+
+      <div className="asset-library-filter-grid" aria-label="Asset metadata filters">
+        <label>
+          <span>Project</span>
+          <input
+            value={projectFilter}
+            onChange={(event) => setProjectFilter(event.target.value)}
+            placeholder="Any project"
+          />
+        </label>
+
+        <label>
+          <span>Campaign</span>
+          <input
+            value={campaignFilter}
+            onChange={(event) => setCampaignFilter(event.target.value)}
+            placeholder="Any campaign"
+          />
+        </label>
+
+        <label>
+          <span>Tag</span>
+          <input
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+            placeholder="Any tag"
+          />
+        </label>
+
+        <button
+          type="button"
+          className="m3-btn m3-btn-outlined"
+          onClick={clearMetadataFilters}
+          disabled={!hasMetadataFilters}
+        >
+          Clear
         </button>
       </div>
 

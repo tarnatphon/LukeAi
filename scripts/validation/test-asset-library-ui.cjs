@@ -71,6 +71,30 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "projectFilter",
+  "Asset Library must expose project filtering."
+);
+
+assertIncludes(
+  component,
+  "campaignFilter",
+  "Asset Library must expose campaign filtering."
+);
+
+assertIncludes(
+  component,
+  "tagFilter",
+  "Asset Library must expose tag filtering."
+);
+
+assertIncludes(
+  component,
+  "clearMetadataFilters",
+  "Asset Library must allow metadata filters to be cleared."
+);
+
+assertIncludes(
+  component,
   "ASSET_TYPES",
   "Asset Library must expose asset type filters."
 );
@@ -166,6 +190,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-filter-grid",
+  "Asset Library metadata filter styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -198,6 +228,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library filters by type and favorites."
+);
+console.log(
+  "PASS: Asset Library filters by project, campaign and tag."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."

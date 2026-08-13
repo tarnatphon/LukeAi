@@ -9129,6 +9129,37 @@ html[data-theme^="dark"] .settings-subsection:hover {
   flex-wrap: wrap;
 }
 
+.asset-library-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.asset-library-filter-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.asset-library-filter-grid label span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.asset-library-filter-grid input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+}
+
 .asset-library-search {
   flex: 1;
   min-width: 220px;
@@ -9453,5 +9484,13 @@ html[data-theme^="dark"] .settings-subsection:hover {
 
   .asset-library-toolbar .m3-btn {
     align-self: flex-start;
+  }
+
+  .asset-library-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-library-filter-grid .m3-btn {
+    justify-self: flex-start;
   }
 }
