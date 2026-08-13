@@ -365,6 +365,30 @@ export default function ImageToVideo({
     asset.existingPath?.split(/[\\/]/).pop() ||
     asset.assetId;
 
+  const formatRelationshipAssetPath = (asset) =>
+    asset?.existingPath ||
+    "Managed record only";
+
+  const selectedRelationshipSourceAsset = useMemo(
+    () =>
+      assetRelationshipOptions.find(
+        (asset) => asset.assetId === sourceAssetId,
+      ) || null,
+    [assetRelationshipOptions, sourceAssetId],
+  );
+
+  const selectedRelationshipReferenceAssets = useMemo(
+    () =>
+      referenceAssetIds
+        .map((assetId) =>
+          assetRelationshipOptions.find(
+            (asset) => asset.assetId === assetId,
+          ),
+        )
+        .filter(Boolean),
+    [assetRelationshipOptions, referenceAssetIds],
+  );
+
   const refreshCapability = async () => {
     try {
       const data = await getImageToVideoCapabilityStatus();
@@ -1908,6 +1932,59 @@ export default function ImageToVideo({
               {assetRelationshipError}
             </p>
           )}
+
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              marginTop: 12,
+            }}
+          >
+            <div
+              style={{
+                padding: 10,
+                border:
+                  "1px solid var(--border-color)",
+                borderRadius: 10,
+              }}
+            >
+              <strong>Linked source</strong>
+              <p style={{ margin: "6px 0 0", opacity: .72 }}>
+                {selectedRelationshipSourceAsset
+                  ? `${getRelationshipAssetLabel(selectedRelationshipSourceAsset)} | ${formatRelationshipAssetPath(selectedRelationshipSourceAsset)}`
+                  : "No source Asset linked"}
+              </p>
+            </div>
+
+            <div
+              style={{
+                padding: 10,
+                border:
+                  "1px solid var(--border-color)",
+                borderRadius: 10,
+              }}
+            >
+              <strong>Linked references</strong>
+              {selectedRelationshipReferenceAssets.length > 0 ? (
+                <ul
+                  style={{
+                    margin: "6px 0 0",
+                    paddingLeft: 18,
+                  }}
+                >
+                  {selectedRelationshipReferenceAssets.map((asset) => (
+                    <li key={asset.assetId}>
+                      {getRelationshipAssetLabel(asset)} | {formatRelationshipAssetPath(asset)}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ margin: "6px 0 0", opacity: .72 }}>
+                  No reference Assets linked
+                </p>
+              )}
+            </div>
+          </div>
 
           <p style={{ marginBottom: 0, opacity: .72 }}>
             These links only attach Asset IDs to the generated video record. They do not move, copy, edit or delete files.

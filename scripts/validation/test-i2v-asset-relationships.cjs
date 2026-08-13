@@ -43,6 +43,10 @@ function assert(
   "listAssets",
   'type: "image"',
   'type: "reference"',
+  "selectedRelationshipSourceAsset",
+  "selectedRelationshipReferenceAssets",
+  "Linked source",
+  "Linked references",
 ].forEach(
   (contract) => {
     assert(
@@ -117,6 +121,13 @@ assert(
 );
 
 assert(
+  ui.includes(
+    "formatRelationshipAssetPath"
+  ),
+  "Image-to-Video relationship picker must show linked Asset paths for verification."
+);
+
+assert(
   !ui.includes(
     "deleteAsset("
   ) &&
@@ -168,6 +179,10 @@ console.log(
 
 console.log(
   "PASS: Image-to-Video can link existing Asset Library records read-only."
+);
+
+console.log(
+  "PASS: Image-to-Video shows selected Asset relationships before generation."
 );
 
 console.log(
