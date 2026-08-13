@@ -9160,6 +9160,33 @@ html[data-theme^="dark"] .settings-subsection:hover {
   font: inherit;
 }
 
+.asset-library-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.asset-library-summary-strip span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.asset-library-summary-strip strong {
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.98rem;
+}
+
 .asset-library-search {
   flex: 1;
   min-width: 220px;
@@ -9492,5 +9519,9 @@ html[data-theme^="dark"] .settings-subsection:hover {
 
   .asset-library-filter-grid .m3-btn {
     justify-self: flex-start;
+  }
+
+  .asset-library-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -299,6 +299,27 @@ export default function AssetLibrary() {
     return counts;
   }, [assets]);
 
+  const libraryStats = useMemo(() => {
+    let favoriteCount = 0;
+    let relationshipCount = 0;
+
+    for (const asset of assets) {
+      if (asset.favorite) favoriteCount += 1;
+
+      relationshipCount +=
+        (asset.derivedFrom?.length || 0) +
+        (asset.references?.length || 0) +
+        (asset.relations?.length || 0);
+    }
+
+    return {
+      total: assets.length,
+      visible: filteredAssets.length,
+      favoriteCount,
+      relationshipCount,
+    };
+  }, [assets, filteredAssets.length]);
+
   const selectedAsset = useMemo(
     () => assets.find((asset) => asset.assetId === selectedAssetId) || null,
     [assets, selectedAssetId]
@@ -398,6 +419,25 @@ export default function AssetLibrary() {
         >
           Clear
         </button>
+      </div>
+
+      <div className="asset-library-summary-strip" aria-label="Asset Library summary">
+        <span>
+          <strong>{libraryStats.total}</strong>
+          Total
+        </span>
+        <span>
+          <strong>{libraryStats.visible}</strong>
+          Visible
+        </span>
+        <span>
+          <strong>{libraryStats.favoriteCount}</strong>
+          Favorites
+        </span>
+        <span>
+          <strong>{libraryStats.relationshipCount}</strong>
+          Links
+        </span>
       </div>
 
       <div className="asset-library-tabs" aria-label="Asset type filters">

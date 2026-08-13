@@ -125,6 +125,24 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "libraryStats",
+  "Asset Library must expose read-only summary stats."
+);
+
+assertIncludes(
+  component,
+  "asset-library-summary-strip",
+  "Asset Library must render a summary strip."
+);
+
+assertIncludes(
+  component,
+  "relationshipCount",
+  "Asset Library summary must include relationship counts."
+);
+
+assertIncludes(
+  component,
   "ASSET_TYPES",
   "Asset Library must expose asset type filters."
 );
@@ -226,6 +244,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-summary-strip",
+  "Asset Library summary strip styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -264,6 +288,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library search covers metadata and relationships."
+);
+console.log(
+  "PASS: Asset Library shows read-only summary stats."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
