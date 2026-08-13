@@ -299,6 +299,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "detailTitleId",
+  "Asset detail must prepare an accessible title ID."
+);
+
+assertIncludes(
+  component,
+  "aria-labelledby={detailTitleId}",
+  "Asset detail must be labelled by the selected asset title."
+);
+
+assertIncludes(
+  component,
   "asset-library-card-selected",
   "Asset Library must visually mark the selected detail card."
 );
@@ -666,6 +678,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
+);
+console.log(
+  "PASS: Asset Library detail is labelled by its asset title."
 );
 console.log(
   "PASS: Asset Library detail shows full read-only asset metadata."

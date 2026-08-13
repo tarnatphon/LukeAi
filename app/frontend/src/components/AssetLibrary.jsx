@@ -330,6 +330,8 @@ function AssetDetailPanel({ asset, onClose }) {
       ? JSON.stringify(asset.metadata, null, 2)
       : "None recorded";
 
+  const detailTitleId = `asset-detail-title-${asset.assetId}`;
+
   const copyAssetDetailValue = async (label, value) => {
     const text =
       typeof value === "string"
@@ -355,13 +357,14 @@ function AssetDetailPanel({ asset, onClose }) {
     <aside
       className="asset-library-detail"
       aria-label="Asset detail"
+      aria-labelledby={detailTitleId}
     >
       <header>
         <div>
           <span className={`asset-library-type asset-library-type-${asset.type}`}>
             {asset.type}
           </span>
-          <h3>{getAssetTitle(asset)}</h3>
+          <h3 id={detailTitleId}>{getAssetTitle(asset)}</h3>
         </div>
         <button
           type="button"
