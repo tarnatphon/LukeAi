@@ -1963,3 +1963,41 @@ export function deleteAsset(
     },
   );
 }
+
+// LUKE_AI_REFERENCE_UPLOAD_SERVICE_V1
+export async function uploadReferenceAsset(
+  payload
+) {
+  const response =
+    await fetch(
+      "/api/references/upload",
+      {
+        method: "POST",
+
+        headers: {
+          Accept:
+            "application/json",
+
+          "Content-Type":
+            "application/json",
+        },
+
+        body:
+          JSON.stringify(
+            payload || {}
+          ),
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      "Reference upload failed."
+    );
+  }
+
+  return data;
+}

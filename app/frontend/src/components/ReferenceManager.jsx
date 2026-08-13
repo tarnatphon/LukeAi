@@ -1,4 +1,7 @@
 import React, { memo, useCallback, useMemo, useRef, useState } from "react";
+
+// LUKE_AI_REFERENCE_UPLOAD_IMPORT_V1
+import { uploadReferenceAsset } from "../services/api";
 import {
   UploadCloud,
   ImagePlus,
@@ -349,15 +352,139 @@ function ReferenceManager({
     if (imageFiles.length === 0) return;
     const remaining = MAX_REFERENCES - unifiedReferences.length;
     const accepted = imageFiles.slice(0, Math.max(0, remaining));
-    const items = await Promise.all(accepted.map(async (file, offset) => normalizeReference({
-      name: file.name,
-      src: await readImageFile(file),
-      size: file.size,
-      type: file.type,
-      pinned: unifiedReferences.length + offset === 0,
-      weight: unifiedReferences.length + offset === 0 ? 1.35 : 1,
-      influence: unifiedReferences.length + offset === 0 ? "Locked" : "Strong",
-    }, unifiedReferences.length + offset)));
+    // LUKE_AI_REFERENCE_UPLOAD_REGISTRATION_V2
+    const items =
+      await Promise.all(
+        accepted.map(
+          async (
+            file,
+            offset
+          ) => {
+            const src =
+              await readImageFile(
+                file
+              );
+
+            let uploaded =
+              null;
+
+            try {
+              uploaded =
+                await uploadReferenceAsset({
+                  dataUrl:
+                    src,
+
+                  originalName:
+                    file.name,
+
+                  referenceType:
+                    "generic",
+
+                  referenceWeight:
+                    offset === 0
+                      ? 1
+                      : 0.85,
+
+                  referenceLock:
+                    true,
+                });
+
+            } catch (error) {
+              console.warn(
+                "[references] Asset registration skipped:",
+                error?.message ||
+                  error
+              );
+            }
+
+            const reference =
+              normalizeReference({
+                id:
+                  (
+                    crypto?.randomUUID?.() ||
+                    `reference-${Date.now()}-${offset}`
+                  ),
+
+                src,
+
+                name:
+                  file.name,
+
+                mimeType:
+                  file.type,
+
+                assetId:
+                  uploaded?.asset
+                    ?.assetId ||
+                  null,
+
+                role:
+                  APPEARANCE_ROLE,
+
+                weight:
+                  uploaded?.reference
+                    ?.referenceWeight ??
+                  (
+                    offset === 0
+                      ? 1
+                      : 0.85
+                  ),
+
+                referenceType:
+                  uploaded?.reference
+                    ?.referenceType ||
+                  "generic",
+
+                referenceLock:
+                  uploaded?.reference
+                    ?.referenceLock !==
+                  false,
+
+                enabled:
+                  true,
+
+                pinned:
+                  offset === 0,
+
+                metadata: {
+                  referenceType:
+                    uploaded?.reference
+                      ?.referenceType ||
+                    "generic",
+
+                  referenceWeight:
+                    uploaded?.reference
+                      ?.referenceWeight ??
+                    (
+                      offset === 0
+                        ? 1
+                        : 0.85
+                    ),
+
+                  referenceLock:
+                    uploaded?.reference
+                      ?.referenceLock !==
+                    false,
+
+                  originalName:
+                    file.name,
+
+                  mimeType:
+                    file.type,
+
+                  source:
+                    uploaded?.asset
+                      ?.assetId
+                      ? "asset-library"
+                      : "upload",
+                },
+              });
+
+            return reference;
+          }
+        )
+      );
+
     setReferenceImages((prev) => [...prev.map((item, idx) => normalizeReference(item, idx)), ...items].slice(0, MAX_REFERENCES));
   }, [disabled, referenceImages, setReferenceImages]);
 

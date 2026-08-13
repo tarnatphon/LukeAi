@@ -23914,6 +23914,265 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
+  // LUKE_AI_REFERENCE_UPLOAD_API_V1
+  if (
+    req.method === "POST" &&
+    req.url === "/api/references/upload"
+  ) {
+    try {
+      const body =
+        await readJsonBody(
+          req
+        );
+
+      const dataUrl =
+        String(
+          body?.dataUrl || ""
+        );
+
+      const match =
+        dataUrl.match(
+          /^data:([^;]+);base64,(.+)$/
+        );
+
+      if (!match) {
+        return json(
+          res,
+          400,
+          {
+            ok: false,
+            error:
+              "Invalid reference data URL.",
+          }
+        );
+      }
+
+      const mimeType =
+        match[1];
+
+      const extensionMap = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+      };
+
+      const extension =
+        extensionMap[
+          mimeType
+        ];
+
+      if (!extension) {
+        return json(
+          res,
+          400,
+          {
+            ok: false,
+            error:
+              "Unsupported reference image type.",
+          }
+        );
+      }
+
+      const buffer =
+        Buffer.from(
+          match[2],
+          "base64"
+        );
+
+      if (
+        buffer.length < 1
+      ) {
+        return json(
+          res,
+          400,
+          {
+            ok: false,
+            error:
+              "Empty reference image.",
+          }
+        );
+      }
+
+      const digest =
+        crypto
+          .createHash("sha256")
+          .update(buffer)
+          .digest("hex")
+          .slice(0, 24);
+
+      const outputDir =
+        path.join(
+          ROOT,
+          "app",
+          "outputs",
+          "references"
+        );
+
+      fs.mkdirSync(
+        outputDir,
+        {
+          recursive: true,
+        }
+      );
+
+      const outputPath =
+        path.join(
+          outputDir,
+          `ref-${digest}${extension}`
+        );
+
+      if (
+        !fs.existsSync(
+          outputPath
+        )
+      ) {
+        fs.writeFileSync(
+          outputPath,
+          buffer
+        );
+      }
+
+      const stat =
+        fs.statSync(
+          outputPath
+        );
+
+      const registry =
+        getLukeAssetRegistry();
+
+      const referenceType =
+        String(
+          body?.referenceType ||
+          "generic"
+        )
+          .trim()
+          .toLowerCase();
+
+      const weightRaw =
+        Number(
+          body?.referenceWeight
+        );
+
+      const referenceWeight =
+        Number.isFinite(
+          weightRaw
+        )
+          ? Math.max(
+              0.2,
+              Math.min(
+                1,
+                weightRaw
+              )
+            )
+          : 0.85;
+
+      const asset =
+        registry.upsertByPath({
+          type:
+            "reference",
+
+          existingPath:
+            outputPath,
+
+          storageProviderId:
+            body?.storageProviderId ||
+            "local",
+
+          tags:
+            Array.isArray(
+              body?.tags
+            )
+              ? body.tags
+              : [],
+
+          favorite:
+            Boolean(
+              body?.favorite
+            ),
+
+          pinned:
+            Boolean(
+              body?.pinned
+            ),
+
+          project:
+            body?.project ||
+            null,
+
+          campaign:
+            body?.campaign ||
+            null,
+
+          metadata: {
+            referenceType,
+            referenceWeight,
+
+            referenceLock:
+              body?.referenceLock !==
+              false,
+
+            originalName:
+              body?.originalName ||
+              null,
+
+            mimeType,
+
+            source:
+              "upload",
+
+            sizeBytes:
+              stat.size,
+
+            sha256:
+              digest,
+          },
+        });
+
+      return json(
+        res,
+        201,
+        {
+          ok: true,
+          asset,
+
+          reference: {
+            assetId:
+              asset.assetId,
+
+            existingPath:
+              asset.existingPath,
+
+            referenceType,
+
+            referenceWeight,
+
+            referenceLock:
+              body?.referenceLock !==
+              false,
+
+            originalName:
+              body?.originalName ||
+              null,
+
+            mimeType,
+          },
+        }
+      );
+
+    } catch (error) {
+      return json(
+        res,
+        500,
+        {
+          ok: false,
+          error:
+            error?.message ||
+            "Reference upload failed.",
+        }
+      );
+    }
+  }
+
   // LUKE_AI_ASSET_REGISTRY_API_V1
   {
     const assetUrl =
