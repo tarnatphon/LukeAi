@@ -371,6 +371,24 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "(asset.derivedFrom || []).filter(Boolean).length",
+  "Asset detail derived counts must ignore blank relationship IDs."
+);
+
+assertIncludes(
+  component,
+  "(asset.references || []).filter(Boolean).length",
+  "Asset detail reference counts must ignore blank relationship IDs."
+);
+
+assertIncludes(
+  component,
+  "(asset.relations || []).filter((item) => item?.assetId).length",
+  "Asset detail other relationship counts must ignore blank relationship IDs."
+);
+
+assertIncludes(
+  component,
   "asset-library-detail-relationship-summary",
   "Asset detail must show relationship summary counts."
 );
@@ -567,6 +585,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail normalizes relationship display rows."
+);
+console.log(
+  "PASS: Asset Library detail counts visible relationship rows."
 );
 console.log(
   "PASS: Asset Library is connected to navigation."

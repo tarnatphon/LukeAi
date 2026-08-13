@@ -207,9 +207,12 @@ function AssetRelationships({
   copiedAssetField,
   onCopy,
 }) {
-  const derivedCount = asset.derivedFrom?.length || 0;
-  const referenceCount = asset.references?.length || 0;
-  const relationCount = asset.relations?.length || 0;
+  const derivedCount =
+    (asset.derivedFrom || []).filter(Boolean).length;
+  const referenceCount =
+    (asset.references || []).filter(Boolean).length;
+  const relationCount =
+    (asset.relations || []).filter((item) => item?.assetId).length;
 
   const relationEntries = [
     ...((asset.derivedFrom || []).map((assetId) => ({
