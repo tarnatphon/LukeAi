@@ -891,7 +891,11 @@ export default function AssetLibrary() {
                       onClick={() => setSelectedAssetId(asset.assetId)}
                       aria-label={`View details for ${getAssetTitle(asset)}`}
                       aria-expanded={isSelected}
-                      aria-controls={`asset-detail-panel-${asset.assetId}`}
+                      aria-controls={
+                        isSelected
+                          ? `asset-detail-panel-${asset.assetId}`
+                          : undefined
+                      }
                     >
                       <Link2 size={13} />
                       Details

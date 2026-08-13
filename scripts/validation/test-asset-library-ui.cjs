@@ -341,8 +341,8 @@ assertIncludes(
 
 assertIncludes(
   component,
-  "aria-controls={`asset-detail-panel-${asset.assetId}`}",
-  "Asset Library detail trigger must reference the detail panel accessibly."
+  "isSelected\n                          ? `asset-detail-panel-${asset.assetId}`",
+  "Asset Library detail trigger must reference the mounted detail panel accessibly."
 );
 
 assertIncludes(
