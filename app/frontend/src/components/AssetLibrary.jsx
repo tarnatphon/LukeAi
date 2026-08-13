@@ -803,6 +803,7 @@ export default function AssetLibrary() {
         <div
           className="asset-library-grid"
           role="list"
+          aria-label="Asset Library results"
         >
           {sortedAssets.map((asset) => {
             const Icon = getAssetIcon(asset.type);

@@ -245,6 +245,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "aria-label=\"Asset Library results\"",
+  "Asset Library card grid must expose a descriptive list label."
+);
+
+assertIncludes(
+  component,
   "role=\"listitem\"",
   "Asset Library cards must expose list item semantics."
 );
@@ -699,6 +705,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library exposes card collection semantics accessibly."
+);
+console.log(
+  "PASS: Asset Library labels the card results list accessibly."
 );
 console.log(
   "PASS: Asset Library cards show source prompt/model context."
