@@ -80,6 +80,9 @@ function getAssetTitle(asset) {
 }
 
 function getAssetSearchText(asset) {
+  const visibleRelations =
+    (asset.relations || []).filter((item) => item?.assetId);
+
   return [
     asset.assetId,
     asset.type,
@@ -95,11 +98,11 @@ function getAssetSearchText(asset) {
     asset.metadata?.mimeType,
     asset.metadata?.source,
     ...(asset.tags || []),
-    ...(asset.derivedFrom || []),
-    ...(asset.references || []),
-    ...(asset.relations || []).flatMap((item) => [
+    ...(asset.derivedFrom || []).filter(Boolean),
+    ...(asset.references || []).filter(Boolean),
+    ...visibleRelations.flatMap((item) => [
       item.assetId,
-      item.relation,
+      item.relation || "Related asset",
     ]),
   ]
     .filter(Boolean)

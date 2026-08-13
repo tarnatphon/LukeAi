@@ -149,6 +149,30 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "const visibleRelations =",
+  "Asset Library search must normalize visible relationship rows."
+);
+
+assertIncludes(
+  component,
+  "...(asset.derivedFrom || []).filter(Boolean)",
+  "Asset Library search must ignore blank derived relationship IDs."
+);
+
+assertIncludes(
+  component,
+  "...(asset.references || []).filter(Boolean)",
+  "Asset Library search must ignore blank reference relationship IDs."
+);
+
+assertIncludes(
+  component,
+  "item.relation || \"Related asset\"",
+  "Asset Library search must include fallback relationship labels."
+);
+
+assertIncludes(
+  component,
   "libraryStats",
   "Asset Library must expose read-only summary stats."
 );
@@ -564,6 +588,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library search covers metadata and relationships."
+);
+console.log(
+  "PASS: Asset Library search normalizes visible relationship rows."
 );
 console.log(
   "PASS: Asset Library shows read-only summary stats."
