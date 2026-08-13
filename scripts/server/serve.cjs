@@ -13446,7 +13446,8 @@ async function requestSingleModelGeneration(
   modelId,
   prompt,
   controller,
-  onDelta
+  onDelta,
+  options = {}
 ) {
   const policy =
     readTextGenerationPolicy();
@@ -13461,6 +13462,10 @@ async function requestSingleModelGeneration(
       conversation,
       {
         modelId,
+        response_format:
+          options.response_format,
+        responseFormat:
+          options.responseFormat,
       }
     );
 
@@ -13625,7 +13630,8 @@ async function requestSingleModelGeneration(
 async function streamMultiModelGeneration(
   conversationId,
   modelIds,
-  response
+  response,
+  options = {}
 ) {
   const selectedModelIds =
     normalizeSelectedModelIds(
@@ -13761,6 +13767,12 @@ async function streamMultiModelGeneration(
                         delta,
                     }
                   );
+                },
+                {
+                  response_format:
+                    options.response_format,
+                  responseFormat:
+                    options.responseFormat,
                 }
               );
 
@@ -21734,7 +21746,13 @@ const server = http.createServer(async (req, res) => {
       await streamMultiModelGeneration(
         body.conversationId.trim(),
         body.modelIds,
-        res
+        res,
+        {
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
+        }
       );
 
       return;

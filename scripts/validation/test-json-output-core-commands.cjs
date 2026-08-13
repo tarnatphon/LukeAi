@@ -130,6 +130,24 @@ assertIncludes(
   "Server text-runtime stream endpoint must accept response_format from requests."
 );
 
+assertIncludes(
+  server,
+  "async function streamMultiModelGeneration(",
+  "Server must expose multi-model generation for JSON output forwarding."
+);
+
+assertIncludes(
+  server,
+  "options = {}\n)",
+  "Server multi-model generation must accept response format options."
+);
+
+assertIncludes(
+  server,
+  "async function requestSingleModelGeneration(",
+  "Server must route JSON output options to each multi-model runtime request."
+);
+
 console.log(
   "PASS: Frontend forwards JSON output response format options."
 );
@@ -144,6 +162,10 @@ console.log(
 
 console.log(
   "PASS: Server forwards JSON output response_format through text-runtime streams."
+);
+
+console.log(
+  "PASS: Server forwards JSON output response_format through multi-model streams."
 );
 
 console.log(

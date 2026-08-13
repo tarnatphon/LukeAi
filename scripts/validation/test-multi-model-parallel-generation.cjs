@@ -302,6 +302,8 @@ async function main() {
   };
 
   const receivedModels = [];
+  const receivedGenerationBodies =
+    [];
 
   const runtimeServer =
     http.createServer(
@@ -326,6 +328,10 @@ async function main() {
 
           const modelId =
             body.model;
+
+          receivedGenerationBodies.push(
+            body
+          );
 
           receivedModels.push(
             modelId
@@ -531,6 +537,27 @@ async function main() {
           body: JSON.stringify({
             conversationId,
             modelIds,
+            response_format: {
+              type:
+                "json_schema",
+              name:
+                "multi_model_json_output",
+              schema: {
+                type:
+                  "object",
+                additionalProperties:
+                  false,
+                properties: {
+                  answer: {
+                    type:
+                      "string",
+                  },
+                },
+                required: [
+                  "answer",
+                ],
+              },
+            },
           }),
         }
       );
@@ -572,6 +599,34 @@ async function main() {
     ) {
       throw new Error(
         "Three unique models were not called."
+      );
+    }
+
+    if (
+      receivedGenerationBodies.length !==
+        3 ||
+      !receivedGenerationBodies.every(
+        (body) =>
+          body.response_format
+            ?.type ===
+            "json_schema" &&
+          body.response_format
+            ?.json_schema
+            ?.name ===
+            "multi_model_json_output" &&
+          body.response_format
+            ?.json_schema
+            ?.strict === true &&
+          body.response_format
+            ?.json_schema
+            ?.schema
+            ?.properties
+            ?.answer
+            ?.type === "string"
+      )
+    ) {
+      throw new Error(
+        "Multi-model runtime requests did not receive normalized JSON schema response_format."
       );
     }
 
@@ -652,6 +707,9 @@ async function main() {
     );
     console.log(
       "PASS: All three models generated in parallel."
+    );
+    console.log(
+      "PASS: All multi-model runtime requests received normalized JSON schema response_format."
     );
     console.log(
       "PASS: Every model streamed its response."
