@@ -167,6 +167,14 @@ function formatAssetValue(value) {
     return "Not recorded";
   }
 
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "Complex metadata";
+    }
+  }
+
   if (typeof value === "boolean") {
     return value ? "Yes" : "No";
   }

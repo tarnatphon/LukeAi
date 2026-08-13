@@ -353,6 +353,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "typeof value === \"object\"",
+  "Asset detail metadata summaries must handle nested metadata values."
+);
+
+assertIncludes(
+  component,
+  "return JSON.stringify(value);",
+  "Asset detail metadata summaries must show nested metadata as compact JSON."
+);
+
+assertIncludes(
+  component,
   "asset-library-metadata-summary",
   "Asset detail must show metadata key/value summaries."
 );
@@ -624,6 +636,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail summarizes metadata fields."
+);
+console.log(
+  "PASS: Asset Library detail formats nested metadata summaries."
 );
 console.log(
   "PASS: Asset Library detail shows capped metadata overflow."
