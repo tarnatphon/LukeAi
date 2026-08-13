@@ -330,6 +330,7 @@ function AssetDetailPanel({ asset, onClose }) {
       ? JSON.stringify(asset.metadata, null, 2)
       : "None recorded";
 
+  const detailPanelId = `asset-detail-panel-${asset.assetId}`;
   const detailTitleId = `asset-detail-title-${asset.assetId}`;
 
   const copyAssetDetailValue = async (label, value) => {
@@ -355,6 +356,7 @@ function AssetDetailPanel({ asset, onClose }) {
 
   return (
     <aside
+      id={detailPanelId}
       className="asset-library-detail"
       aria-label="Asset detail"
       aria-labelledby={detailTitleId}
@@ -889,6 +891,7 @@ export default function AssetLibrary() {
                       onClick={() => setSelectedAssetId(asset.assetId)}
                       aria-label={`View details for ${getAssetTitle(asset)}`}
                       aria-expanded={isSelected}
+                      aria-controls={`asset-detail-panel-${asset.assetId}`}
                     >
                       <Link2 size={13} />
                       Details

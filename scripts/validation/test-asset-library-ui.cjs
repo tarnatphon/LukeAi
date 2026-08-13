@@ -305,6 +305,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "detailPanelId",
+  "Asset detail must prepare an accessible panel ID."
+);
+
+assertIncludes(
+  component,
   "aria-labelledby={detailTitleId}",
   "Asset detail must be labelled by the selected asset title."
 );
@@ -331,6 +337,12 @@ assertIncludes(
   component,
   "aria-expanded={isSelected}",
   "Asset Library detail trigger must expose expanded state accessibly."
+);
+
+assertIncludes(
+  component,
+  "aria-controls={`asset-detail-panel-${asset.assetId}`}",
+  "Asset Library detail trigger must reference the detail panel accessibly."
 );
 
 assertIncludes(
@@ -699,6 +711,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail is labelled by its asset title."
+);
+console.log(
+  "PASS: Asset Library detail trigger references the detail panel accessibly."
 );
 console.log(
   "PASS: Asset Library detail shows full read-only asset metadata."
