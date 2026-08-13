@@ -323,6 +323,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "aria-selected={isSelected ? \"true\" : undefined}",
+  "Asset Library selected card must expose selection state accessibly."
+);
+
+assertIncludes(
+  component,
   "existingPath",
   "Asset Library must show the registered asset path."
 );
@@ -675,6 +681,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library highlights the selected detail card."
+);
+console.log(
+  "PASS: Asset Library exposes selected card state accessibly."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."

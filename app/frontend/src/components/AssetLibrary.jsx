@@ -811,6 +811,7 @@ export default function AssetLibrary() {
                 className={`asset-library-card ${isSelected ? "asset-library-card-selected" : ""}`}
                 key={asset.assetId}
                 aria-current={isSelected ? "true" : undefined}
+                aria-selected={isSelected ? "true" : undefined}
               >
                 <header>
                   <span className={`asset-library-type asset-library-type-${asset.type}`}>
