@@ -9335,6 +9335,35 @@ html[data-theme^="dark"] .settings-subsection:hover {
   font-size: 0.7rem;
 }
 
+.asset-library-source-context {
+  display: grid;
+  gap: 5px;
+  min-height: 44px;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.asset-library-source-context span {
+  color: var(--md-sys-color-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-library-source-context p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0;
+  overflow: hidden;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .asset-library-tags {
   display: flex;
   flex-wrap: wrap;

@@ -203,6 +203,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "asset-library-source-context",
+  "Asset Library cards must show source prompt/model context."
+);
+
+assertIncludes(
+  component,
   "storageProviderId",
   "Asset detail must show storage provider metadata."
 );
@@ -280,6 +286,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-source-context",
+  "Asset Library source context styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -324,6 +336,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library sorts loaded assets read-only."
+);
+console.log(
+  "PASS: Asset Library cards show source prompt/model context."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."

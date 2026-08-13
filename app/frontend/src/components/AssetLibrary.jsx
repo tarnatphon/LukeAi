@@ -582,6 +582,21 @@ export default function AssetLibrary() {
                   <span>{asset.storageProviderId || "local"}</span>
                 </div>
 
+                {(asset.sourceModel || asset.sourcePrompt) && (
+                  <div className="asset-library-source-context">
+                    {asset.sourceModel && (
+                      <span title={asset.sourceModel}>
+                        {asset.sourceModel}
+                      </span>
+                    )}
+                    {asset.sourcePrompt && (
+                      <p title={asset.sourcePrompt}>
+                        {asset.sourcePrompt}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {(asset.project || asset.campaign || asset.tags?.length > 0) && (
                   <div className="asset-library-tags">
                     {asset.project && <span>{asset.project}</span>}
