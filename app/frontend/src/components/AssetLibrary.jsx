@@ -320,7 +320,9 @@ function AssetDetailPanel({ asset, onClose }) {
   const metadataEntries =
     asset.metadata &&
     typeof asset.metadata === "object"
-      ? Object.entries(asset.metadata)
+      ? Object.entries(asset.metadata).sort(([left], [right]) =>
+          left.localeCompare(right)
+        )
       : [];
 
   const metadata =

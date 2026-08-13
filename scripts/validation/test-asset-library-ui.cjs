@@ -353,6 +353,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "Object.entries(asset.metadata).sort",
+  "Asset detail metadata summaries must use stable key ordering."
+);
+
+assertIncludes(
+  component,
   "typeof value === \"object\"",
   "Asset detail metadata summaries must handle nested metadata values."
 );
@@ -636,6 +642,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail summarizes metadata fields."
+);
+console.log(
+  "PASS: Asset Library detail sorts metadata summaries consistently."
 );
 console.log(
   "PASS: Asset Library detail formats nested metadata summaries."
