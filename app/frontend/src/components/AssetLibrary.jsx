@@ -550,10 +550,9 @@ export default function AssetLibrary() {
         <div className="asset-library-grid">
           {sortedAssets.map((asset) => {
             const Icon = getAssetIcon(asset.type);
-            const relationCount =
-              (asset.derivedFrom?.length || 0) +
-              (asset.references?.length || 0) +
-              (asset.relations?.length || 0);
+            const derivedCount = asset.derivedFrom?.length || 0;
+            const referenceCount = asset.references?.length || 0;
+            const relationCount = asset.relations?.length || 0;
 
             return (
               <article className="asset-library-card" key={asset.assetId}>
@@ -609,15 +608,26 @@ export default function AssetLibrary() {
 
                 <footer>
                   <span title={asset.assetId}>{asset.assetId}</span>
-                  <button
-                    type="button"
-                    className="asset-library-detail-trigger"
-                    onClick={() => setSelectedAssetId(asset.assetId)}
-                    aria-label={`View details for ${getAssetTitle(asset)}`}
-                  >
-                    <Link2 size={13} />
-                    Details {relationCount}
-                  </button>
+                  <div className="asset-library-relationship-summary">
+                    <span title="Derived-from links">
+                      D {derivedCount}
+                    </span>
+                    <span title="Reference links">
+                      R {referenceCount}
+                    </span>
+                    <span title="Other relationships">
+                      L {relationCount}
+                    </span>
+                    <button
+                      type="button"
+                      className="asset-library-detail-trigger"
+                      onClick={() => setSelectedAssetId(asset.assetId)}
+                      aria-label={`View details for ${getAssetTitle(asset)}`}
+                    >
+                      <Link2 size={13} />
+                      Details
+                    </button>
+                  </div>
                 </footer>
               </article>
             );

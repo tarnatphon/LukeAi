@@ -9394,6 +9394,25 @@ html[data-theme^="dark"] .settings-subsection:hover {
   white-space: nowrap;
 }
 
+.asset-library-relationship-summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.asset-library-relationship-summary span {
+  min-height: 24px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
 .asset-library-detail-trigger,
 .asset-library-icon-button {
   border: 1px solid var(--border-color-muted);

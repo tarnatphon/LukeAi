@@ -179,6 +179,24 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "derivedCount",
+  "Asset Library cards must show derived relationship counts."
+);
+
+assertIncludes(
+  component,
+  "referenceCount",
+  "Asset Library cards must show reference relationship counts."
+);
+
+assertIncludes(
+  component,
+  "asset-library-relationship-summary",
+  "Asset Library cards must show split relationship summaries."
+);
+
+assertIncludes(
+  component,
   "AssetDetailPanel",
   "Asset Library must expose a read-only asset detail surface."
 );
@@ -292,6 +310,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-relationship-summary",
+  "Asset Library relationship summary styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -339,6 +363,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library cards show source prompt/model context."
+);
+console.log(
+  "PASS: Asset Library cards show split relationship counts."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
