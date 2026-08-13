@@ -23188,6 +23188,32 @@ function getLastUserQuery(messages) {
   return "";
 }
 
+// LUKE_AI_JSON_OUTPUT_CORE_COMMANDS_V1
+function normalizeLlmResponseFormat(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    const mode = value.trim();
+    return mode ? { type: mode } : undefined;
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const type = String(value.type || "").trim();
+  if (!type) {
+    return undefined;
+  }
+
+  return {
+    ...value,
+    type,
+  };
+}
+
 async function augmentMessagesWithWebSearch(messages, body) {
   if (body.useWeb !== true && body.use_web !== true) {
     return { messages, webSources: [], webContext: "" };
@@ -23240,6 +23266,7 @@ async function doLlmChat(req, res, body, retryCount = 0) {
       presence_penalty: Number.isFinite(Number(body.presence_penalty)) ? Number(body.presence_penalty) : 0.0,
       seed: Number.isInteger(Number(body.seed)) ? Number(body.seed) : undefined,
       stop: Array.isArray(body.stop) ? body.stop : (body.stop ? [body.stop] : undefined),
+      response_format: normalizeLlmResponseFormat(body.response_format || body.responseFormat),
     });
 
     if (isStream) {
