@@ -620,7 +620,10 @@ export default function AssetLibrary() {
   };
 
   return (
-    <section className="asset-library">
+    <section
+      className="asset-library"
+      aria-busy={isLoading}
+    >
       <div className="asset-library-header">
         <div>
           <div className="asset-library-eyebrow">

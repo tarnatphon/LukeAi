@@ -197,6 +197,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "aria-busy={isLoading}",
+  "Asset Library surface must expose loading state accessibly."
+);
+
+assertIncludes(
+  component,
   "aria-live=\"polite\"",
   "Asset Library status updates must use polite live regions."
 );
@@ -696,6 +702,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library announces status and error states accessibly."
+);
+console.log(
+  "PASS: Asset Library exposes loading busy state accessibly."
 );
 console.log(
   "PASS: Asset Library summary counts visible relationship IDs."
