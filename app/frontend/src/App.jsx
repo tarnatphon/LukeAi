@@ -18,6 +18,8 @@ import RuntimeDownloadDashboard from "./components/RuntimeDownloadDashboard";
 import TextModelManager from "./components/TextModelManager";
 // LUKE_AI_PERSISTENT_TEXT_CHAT_UI_V1
 import PersistentTextChat from "./components/PersistentTextChat";
+// LUKE_AI_ASSET_LIBRARY_UI_V1
+import AssetLibrary from "./components/AssetLibrary";
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -778,6 +780,10 @@ function App() {
 
         <div style={{ display: activeTab === "image-video" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <ImageToVideo specs={specs} showAlert={showAlert} />
+        </div>
+
+        <div style={{ display: activeTab === "assets" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "auto" }}>
+          <AssetLibrary />
         </div>
 
         <div style={{ display: activeTab === "models" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>

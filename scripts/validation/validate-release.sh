@@ -667,6 +667,13 @@ else
 fi
 
 if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-asset-library-ui.cjs
+else
+  echo "FAIL: Node.js is required for Asset Library UI validation"
+  exit 1
+fi
+
+if command -v node >/dev/null 2>&1; then
   node scripts/validation/test-reference-asset-schema.cjs
 else
   echo "FAIL: Node.js is required for Reference Asset Schema validation"

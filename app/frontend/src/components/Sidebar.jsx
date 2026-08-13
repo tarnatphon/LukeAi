@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
+import { Archive, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
 
 function formatSidebarDate(value) {
   const date = new Date(value);
@@ -60,6 +60,11 @@ function Sidebar({
           <div className={`nav-item ${activeTab === "image-video" ? "active" : ""}`} onClick={() => setActiveTab("image-video")}>
             <Film size={20} />
             <span>Animate Image</span>
+          </div>
+
+          <div className={`nav-item ${activeTab === "assets" ? "active" : ""}`} onClick={() => setActiveTab("assets")}>
+            <Archive size={20} />
+            <span>Assets</span>
           </div>
 
           <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
