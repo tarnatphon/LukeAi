@@ -9562,6 +9562,45 @@ html[data-theme^="dark"] .settings-subsection:hover {
   overflow-wrap: anywhere;
 }
 
+.asset-library-detail-row dd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.asset-library-detail-row dd > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.asset-library-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 7px;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
+  font: inherit;
+  font-size: 0.67rem;
+  font-weight: 800;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.asset-library-copy-button:hover {
+  border-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-primary);
+}
+
+.asset-library-copy-button-inline {
+  align-self: flex-start;
+}
+
 .asset-library-detail-section {
   display: flex;
   flex-direction: column;

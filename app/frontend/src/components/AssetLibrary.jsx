@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   Box,
+  Copy,
   Film,
   Image,
   Link2,
@@ -150,11 +151,36 @@ function formatAssetValue(value) {
   return String(value);
 }
 
-function AssetDetailRow({ label, children }) {
+function AssetDetailRow({
+  label,
+  children,
+  copyValue,
+  copiedAssetField,
+  onCopy,
+}) {
+  const canCopy =
+    copyValue !== undefined &&
+    copyValue !== null &&
+    copyValue !== "";
+
   return (
     <div className="asset-library-detail-row">
       <dt>{label}</dt>
-      <dd>{children}</dd>
+      <dd>
+        <span>{children}</span>
+        {canCopy && (
+          <button
+            type="button"
+            className="asset-library-copy-button"
+            onClick={() => onCopy(label, copyValue)}
+            title={`Copy ${label}`}
+            aria-label={`Copy ${label}`}
+          >
+            <Copy size={13} />
+            <span>{copiedAssetField === label ? "Copied" : "Copy"}</span>
+          </button>
+        )}
+      </dd>
     </div>
   );
 }
@@ -230,6 +256,8 @@ function AssetRelationships({ asset }) {
 }
 
 function AssetDetailPanel({ asset, onClose }) {
+  const [copiedAssetField, setCopiedAssetField] = useState("");
+
   if (!asset) return null;
 
   const metadataEntries =
@@ -242,6 +270,27 @@ function AssetDetailPanel({ asset, onClose }) {
     metadataEntries.length > 0
       ? JSON.stringify(asset.metadata, null, 2)
       : "None recorded";
+
+  const copyAssetDetailValue = async (label, value) => {
+    const text =
+      typeof value === "string"
+        ? value
+        : JSON.stringify(value, null, 2);
+
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAssetField(label);
+      window.setTimeout(() => {
+        setCopiedAssetField((current) =>
+          current === label ? "" : current
+        );
+      }, 1600);
+    } catch {
+      setCopiedAssetField("");
+    }
+  };
 
   return (
     <aside
@@ -267,16 +316,31 @@ function AssetDetailPanel({ asset, onClose }) {
       </header>
 
       <dl className="asset-library-detail-grid">
-        <AssetDetailRow label="Asset ID">
+        <AssetDetailRow
+          label="Asset ID"
+          copyValue={asset.assetId}
+          copiedAssetField={copiedAssetField}
+          onCopy={copyAssetDetailValue}
+        >
           {asset.assetId}
         </AssetDetailRow>
         <AssetDetailRow label="Type">
           {formatAssetValue(asset.type)}
         </AssetDetailRow>
-        <AssetDetailRow label="Existing path">
+        <AssetDetailRow
+          label="Existing path"
+          copyValue={asset.existingPath}
+          copiedAssetField={copiedAssetField}
+          onCopy={copyAssetDetailValue}
+        >
           {formatAssetValue(asset.existingPath)}
         </AssetDetailRow>
-        <AssetDetailRow label="Storage provider">
+        <AssetDetailRow
+          label="Storage provider"
+          copyValue={asset.storageProviderId || "local"}
+          copiedAssetField={copiedAssetField}
+          onCopy={copyAssetDetailValue}
+        >
           {formatAssetValue(asset.storageProviderId || "local")}
         </AssetDetailRow>
         <AssetDetailRow label="Created">
@@ -297,10 +361,20 @@ function AssetDetailPanel({ asset, onClose }) {
         <AssetDetailRow label="Pinned">
           {formatAssetValue(asset.pinned)}
         </AssetDetailRow>
-        <AssetDetailRow label="Source model">
+        <AssetDetailRow
+          label="Source model"
+          copyValue={asset.sourceModel}
+          copiedAssetField={copiedAssetField}
+          onCopy={copyAssetDetailValue}
+        >
           {formatAssetValue(asset.sourceModel)}
         </AssetDetailRow>
-        <AssetDetailRow label="Source prompt">
+        <AssetDetailRow
+          label="Source prompt"
+          copyValue={asset.sourcePrompt}
+          copiedAssetField={copiedAssetField}
+          onCopy={copyAssetDetailValue}
+        >
           {formatAssetValue(asset.sourcePrompt)}
         </AssetDetailRow>
       </dl>
@@ -329,6 +403,18 @@ function AssetDetailPanel({ asset, onClose }) {
           </div>
         )}
         <pre>{metadata}</pre>
+        {metadataEntries.length > 0 && (
+          <button
+            type="button"
+            className="asset-library-copy-button asset-library-copy-button-inline"
+            onClick={() => copyAssetDetailValue("Metadata", asset.metadata)}
+            title="Copy Metadata"
+            aria-label="Copy Metadata"
+          >
+            <Copy size={13} />
+            <span>{copiedAssetField === "Metadata" ? "Copied" : "Copy metadata"}</span>
+          </button>
+        )}
       </section>
     </aside>
   );

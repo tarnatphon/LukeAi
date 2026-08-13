@@ -329,6 +329,24 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "copyAssetDetailValue",
+  "Asset detail must allow important read-only values to be copied."
+);
+
+assertIncludes(
+  component,
+  "navigator.clipboard.writeText",
+  "Asset detail copy controls must use the system clipboard only."
+);
+
+assertIncludes(
+  component,
+  "asset-library-copy-button",
+  "Asset detail must render copy controls for inspectable fields."
+);
+
+assertIncludes(
+  component,
   "asset-library-detail-relationship-summary",
   "Asset detail must show relationship summary counts."
 );
@@ -430,6 +448,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-copy-button",
+  "Asset detail copy button styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -507,6 +531,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail summarizes relationships."
+);
+console.log(
+  "PASS: Asset Library detail exposes read-only copy controls."
 );
 console.log(
   "PASS: Asset Library is connected to navigation."
