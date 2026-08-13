@@ -521,6 +521,15 @@ export default function AssetLibrary() {
     loadAssets();
   }, [loadAssets]);
 
+  useEffect(() => {
+    if (
+      selectedAssetId &&
+      !assets.some((asset) => asset.assetId === selectedAssetId)
+    ) {
+      setSelectedAssetId("");
+    }
+  }, [assets, selectedAssetId]);
+
   const filteredAssets = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return assets;
