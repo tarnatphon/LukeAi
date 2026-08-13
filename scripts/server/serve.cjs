@@ -23208,6 +23208,29 @@ function normalizeLlmResponseFormat(value) {
     return undefined;
   }
 
+  if (type === "json_schema") {
+    const jsonSchema = value.json_schema && typeof value.json_schema === "object"
+      ? value.json_schema
+      : {};
+    const schema = jsonSchema.schema && typeof jsonSchema.schema === "object"
+      ? jsonSchema.schema
+      : value.schema && typeof value.schema === "object"
+        ? value.schema
+        : null;
+    if (!schema) {
+      return undefined;
+    }
+
+    return {
+      type,
+      json_schema: {
+        name: String(jsonSchema.name || value.name || "luke_json_output").trim() || "luke_json_output",
+        schema,
+        strict: jsonSchema.strict !== false && value.strict !== false,
+      },
+    };
+  }
+
   return {
     ...value,
     type,

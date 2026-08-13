@@ -583,6 +583,25 @@ export async function stopLlm() {
   return await readJsonResponse(res, "The local server returned an invalid text backend response.");
 }
 
+function buildLlmResponseFormat(options = {}) {
+  if (options.responseFormat) {
+    return options.responseFormat;
+  }
+
+  if (!options.jsonSchema) {
+    return undefined;
+  }
+
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: options.jsonSchemaName || "luke_json_output",
+      schema: options.jsonSchema,
+      strict: options.jsonSchemaStrict !== false,
+    },
+  };
+}
+
 export async function chatWithLlm(messages, options = {}) {
   const res = await fetchWithTimeoutAndRetry("/api/llm/chat", {
     method: "POST",
@@ -600,7 +619,7 @@ export async function chatWithLlm(messages, options = {}) {
       presence_penalty: options.presencePenalty,
       seed: options.seed,
       stop: options.stop,
-      response_format: options.responseFormat,
+      response_format: buildLlmResponseFormat(options),
       useWeb: options.useWeb === true,
       timeFilter: options.timeFilter || "any",
     }),
@@ -632,7 +651,7 @@ export async function streamChatWithLlm(messages, options = {}, onToken = () => 
       presence_penalty: options.presencePenalty,
       seed: options.seed,
       stop: options.stop,
-      response_format: options.responseFormat,
+      response_format: buildLlmResponseFormat(options),
       useWeb: options.useWeb === true,
       timeFilter: options.timeFilter || "any",
     }),

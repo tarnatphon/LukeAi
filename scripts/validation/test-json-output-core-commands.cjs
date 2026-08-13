@@ -24,8 +24,38 @@ const server = read("scripts/server/serve.cjs");
 
 assertIncludes(
   api,
-  "response_format: options.responseFormat",
-  "Frontend text chat API must forward JSON output response formats."
+  "function buildLlmResponseFormat(options = {})",
+  "Frontend text chat API must expose a JSON output response format builder."
+);
+
+assertIncludes(
+  api,
+  "if (options.responseFormat)",
+  "Frontend response format builder must preserve explicit responseFormat payloads."
+);
+
+assertIncludes(
+  api,
+  "if (!options.jsonSchema)",
+  "Frontend response format builder must keep JSON schema output opt-in."
+);
+
+assertIncludes(
+  api,
+  "name: options.jsonSchemaName || \"luke_json_output\"",
+  "Frontend JSON schema response format must use a stable default schema name."
+);
+
+assertIncludes(
+  api,
+  "strict: options.jsonSchemaStrict !== false",
+  "Frontend JSON schema response format must default to strict mode."
+);
+
+assertIncludes(
+  api,
+  "response_format: buildLlmResponseFormat(options)",
+  "Frontend text chat API must forward built JSON output response formats."
 );
 
 assertIncludes(
@@ -50,6 +80,30 @@ assertIncludes(
   server,
   "typeof value !== \"object\" || Array.isArray(value)",
   "Server must ignore invalid response format payloads."
+);
+
+assertIncludes(
+  server,
+  "if (type === \"json_schema\")",
+  "Server must handle JSON schema response formats explicitly."
+);
+
+assertIncludes(
+  server,
+  "if (!schema)",
+  "Server must ignore JSON schema response formats without an object schema."
+);
+
+assertIncludes(
+  server,
+  "name: String(jsonSchema.name || value.name || \"luke_json_output\").trim() || \"luke_json_output\"",
+  "Server must provide a stable JSON schema response format name."
+);
+
+assertIncludes(
+  server,
+  "strict: jsonSchema.strict !== false && value.strict !== false",
+  "Server must default JSON schema response formats to strict mode."
 );
 
 assertIncludes(
