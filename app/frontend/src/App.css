@@ -9491,6 +9491,33 @@ html[data-theme^="dark"] .settings-subsection:hover {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.asset-library-detail-relationship-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.asset-library-detail-relationship-summary span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-color-muted);
+  border-radius: 7px;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.asset-library-detail-relationship-summary strong {
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.9rem;
+}
+
 .asset-library-detail-row,
 .asset-library-relationships div {
   min-width: 0;

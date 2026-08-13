@@ -177,6 +177,10 @@ function AssetDetailList({ title, items = [] }) {
 }
 
 function AssetRelationships({ asset }) {
+  const derivedCount = asset.derivedFrom?.length || 0;
+  const referenceCount = asset.references?.length || 0;
+  const relationCount = asset.relations?.length || 0;
+
   const relationEntries = [
     ...((asset.derivedFrom || []).map((assetId) => ({
       label: "Derived from",
@@ -195,6 +199,20 @@ function AssetRelationships({ asset }) {
   return (
     <section className="asset-library-detail-section">
       <h4>Relationships</h4>
+      <div className="asset-library-detail-relationship-summary">
+        <span>
+          <strong>{derivedCount}</strong>
+          Derived
+        </span>
+        <span>
+          <strong>{referenceCount}</strong>
+          References
+        </span>
+        <span>
+          <strong>{relationCount}</strong>
+          Other links
+        </span>
+      </div>
       {relationEntries.length > 0 ? (
         <dl className="asset-library-relationships">
           {relationEntries.map((item, index) => (

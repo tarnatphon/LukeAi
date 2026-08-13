@@ -292,6 +292,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  component,
+  "asset-library-detail-relationship-summary",
+  "Asset detail must show relationship summary counts."
+);
+
+assertIncludes(
   app,
   "LUKE_AI_ASSET_LIBRARY_UI_V1",
   "Asset Library marker is missing from App."
@@ -364,6 +370,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-detail-relationship-summary",
+  "Asset detail relationship summary styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -429,6 +441,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail shows full read-only asset metadata."
+);
+console.log(
+  "PASS: Asset Library detail summarizes relationships."
 );
 console.log(
   "PASS: Asset Library is connected to navigation."
