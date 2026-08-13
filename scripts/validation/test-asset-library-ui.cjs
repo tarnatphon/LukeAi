@@ -509,6 +509,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "asset-library-copy-status",
+  "Asset detail copy confirmation must render as a status message."
+);
+
+assertIncludes(
+  component,
+  "{copiedAssetField ? `${copiedAssetField} copied.` : \"\"}",
+  "Asset detail copy confirmation must announce the copied field."
+);
+
+assertIncludes(
+  component,
   "setCopiedAssetField(\"\");\n  }, [asset?.assetId]);",
   "Asset detail copy feedback must reset when the selected asset changes."
 );
@@ -658,6 +670,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-copy-status",
+  "Asset detail copy status styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -783,6 +801,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail exposes read-only copy controls."
+);
+console.log(
+  "PASS: Asset Library detail announces copy confirmations accessibly."
 );
 console.log(
   "PASS: Asset Library detail clears stale copy feedback after asset changes."

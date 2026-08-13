@@ -484,6 +484,14 @@ function AssetDetailPanel({ asset, onClose }) {
           </button>
         )}
       </section>
+
+      <p
+        className="asset-library-copy-status"
+        role="status"
+        aria-live="polite"
+      >
+        {copiedAssetField ? `${copiedAssetField} copied.` : ""}
+      </p>
     </aside>
   );
 }
