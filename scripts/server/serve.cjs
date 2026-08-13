@@ -9974,6 +9974,12 @@ function getTextModelHardwareProfile() {
         .LUKE_AI_TEST_AVAILABLE_RAM_BYTES
     );
 
+  const testFreeStorage =
+    Number(
+      process.env
+        .LUKE_AI_TEST_FREE_STORAGE_BYTES
+    );
+
   const totalRamBytes =
     process.env.NODE_ENV === "test" &&
     Number.isFinite(testTotalRam)
@@ -10001,9 +10007,12 @@ function getTextModelHardwareProfile() {
       : storage?.external;
 
   const freeStorageCandidate =
-    Number(
-      selectedStorage?.freeBytes
-    );
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testFreeStorage)
+      ? testFreeStorage
+      : Number(
+          selectedStorage?.freeBytes
+        );
 
   return {
     platform: process.platform,

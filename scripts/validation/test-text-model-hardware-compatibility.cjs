@@ -231,6 +231,8 @@ async function main() {
           String(16 * 1024 ** 3),
         LUKE_AI_TEST_AVAILABLE_RAM_BYTES:
           String(12 * 1024 ** 3),
+        LUKE_AI_TEST_FREE_STORAGE_BYTES:
+          String(256 * 1024 ** 3),
       },
       stdio: [
         "ignore",
