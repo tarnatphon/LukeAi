@@ -310,9 +310,11 @@ function AssetRelationships({
 
 function AssetDetailPanel({ asset, onClose }) {
   const [copiedAssetField, setCopiedAssetField] = useState("");
+  const [copyAssetStatus, setCopyAssetStatus] = useState("");
 
   useEffect(() => {
     setCopiedAssetField("");
+    setCopyAssetStatus("");
   }, [asset?.assetId]);
 
   if (!asset) return null;
@@ -344,13 +346,18 @@ function AssetDetailPanel({ asset, onClose }) {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedAssetField(label);
+      setCopyAssetStatus(`${label} copied.`);
       window.setTimeout(() => {
         setCopiedAssetField((current) =>
           current === label ? "" : current
         );
+        setCopyAssetStatus((current) =>
+          current === `${label} copied.` ? "" : current
+        );
       }, 1600);
     } catch {
       setCopiedAssetField("");
+      setCopyAssetStatus(`${label} could not be copied.`);
     }
   };
 
@@ -490,7 +497,7 @@ function AssetDetailPanel({ asset, onClose }) {
         role="status"
         aria-live="polite"
       >
-        {copiedAssetField ? `${copiedAssetField} copied.` : ""}
+        {copyAssetStatus}
       </p>
     </aside>
   );

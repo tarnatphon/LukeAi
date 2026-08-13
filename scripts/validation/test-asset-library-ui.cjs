@@ -515,14 +515,38 @@ assertIncludes(
 
 assertIncludes(
   component,
-  "{copiedAssetField ? `${copiedAssetField} copied.` : \"\"}",
+  "copyAssetStatus",
+  "Asset detail copy confirmation must use dedicated status text."
+);
+
+assertIncludes(
+  component,
+  "setCopyAssetStatus(\"\");",
+  "Asset detail copy confirmation must reset after asset changes."
+);
+
+assertIncludes(
+  component,
+  "setCopyAssetStatus(`${label} copied.`);",
   "Asset detail copy confirmation must announce the copied field."
 );
 
 assertIncludes(
   component,
-  "setCopiedAssetField(\"\");\n  }, [asset?.assetId]);",
+  "setCopyAssetStatus(`${label} could not be copied.`);",
+  "Asset detail copy confirmation must announce clipboard failures."
+);
+
+assertIncludes(
+  component,
+  "setCopiedAssetField(\"\");",
   "Asset detail copy feedback must reset when the selected asset changes."
+);
+
+assertIncludes(
+  component,
+  "}, [asset?.assetId]);",
+  "Asset detail copy feedback reset must depend on the selected asset."
 );
 
 assertIncludes(
@@ -804,6 +828,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail announces copy confirmations accessibly."
+);
+console.log(
+  "PASS: Asset Library detail announces clipboard copy failures."
 );
 console.log(
   "PASS: Asset Library detail clears stale copy feedback after asset changes."
