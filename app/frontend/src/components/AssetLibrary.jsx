@@ -59,6 +59,34 @@ function getAssetTitle(asset) {
   );
 }
 
+function getAssetSearchText(asset) {
+  return [
+    asset.assetId,
+    asset.type,
+    asset.existingPath,
+    asset.project,
+    asset.campaign,
+    asset.sourcePrompt,
+    asset.sourceModel,
+    asset.storageProviderId,
+    asset.metadata?.originalName,
+    asset.metadata?.filename,
+    asset.metadata?.title,
+    asset.metadata?.mimeType,
+    asset.metadata?.source,
+    ...(asset.tags || []),
+    ...(asset.derivedFrom || []),
+    ...(asset.references || []),
+    ...(asset.relations || []).flatMap((item) => [
+      item.assetId,
+      item.relation,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 function formatAssetValue(value) {
   if (value === undefined || value === null || value === "") {
     return "Not recorded";
@@ -259,21 +287,7 @@ export default function AssetLibrary() {
     if (!needle) return assets;
 
     return assets.filter((asset) => {
-      const haystack = [
-        asset.assetId,
-        asset.type,
-        asset.existingPath,
-        asset.project,
-        asset.campaign,
-        asset.sourcePrompt,
-        asset.sourceModel,
-        ...(asset.tags || []),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(needle);
+      return getAssetSearchText(asset).includes(needle);
     });
   }, [assets, query]);
 

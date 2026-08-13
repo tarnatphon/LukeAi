@@ -95,6 +95,36 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "getAssetSearchText",
+  "Asset Library must centralize searchable asset fields."
+);
+
+assertIncludes(
+  component,
+  "asset.metadata?.originalName",
+  "Asset Library search must include original metadata names."
+);
+
+assertIncludes(
+  component,
+  "asset.metadata?.mimeType",
+  "Asset Library search must include metadata MIME types."
+);
+
+assertIncludes(
+  component,
+  "asset.storageProviderId",
+  "Asset Library search must include storage provider IDs."
+);
+
+assertIncludes(
+  component,
+  "asset.relations",
+  "Asset Library search must include relationship metadata."
+);
+
+assertIncludes(
+  component,
   "ASSET_TYPES",
   "Asset Library must expose asset type filters."
 );
@@ -231,6 +261,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library filters by project, campaign and tag."
+);
+console.log(
+  "PASS: Asset Library search covers metadata and relationships."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
