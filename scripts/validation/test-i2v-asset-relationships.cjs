@@ -153,6 +153,16 @@ assert(
 );
 
 assert(
+  ui.includes(
+    "setAssetRelationshipNotice(\"\");\n                setSourceAssetId"
+  ) &&
+  ui.includes(
+    "setAssetRelationshipNotice(\"\");\n                setReferenceAssetIds"
+  ),
+  "Image-to-Video relationship picker must clear stale cleanup notices after manual selection."
+);
+
+assert(
   styles.includes(
     "i2v-asset-picker-counts"
   ) &&
@@ -237,6 +247,10 @@ console.log(
 
 console.log(
   "PASS: Image-to-Video explains stale linked Asset cleanup."
+);
+
+console.log(
+  "PASS: Image-to-Video clears stale cleanup notices after manual selection."
 );
 
 console.log(

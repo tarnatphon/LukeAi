@@ -1906,9 +1906,10 @@ export default function ImageToVideo({
             <span>Source Asset</span>
             <select
               value={sourceAssetId || ""}
-              onChange={(event) =>
-                setSourceAssetId(event.target.value || null)
-              }
+              onChange={(event) => {
+                setAssetRelationshipNotice("");
+                setSourceAssetId(event.target.value || null);
+              }}
             >
               <option value="">No linked source Asset</option>
               {imageAssetOptions.map((asset) => (
@@ -1932,14 +1933,15 @@ export default function ImageToVideo({
             <select
               multiple
               value={referenceAssetIds}
-              onChange={(event) =>
+              onChange={(event) => {
+                setAssetRelationshipNotice("");
                 setReferenceAssetIds(
                   Array.from(
                     event.target.selectedOptions,
                     (option) => option.value,
                   ),
-                )
-              }
+                );
+              }}
               style={{
                 minHeight: 96,
               }}
