@@ -658,3 +658,10 @@ else
   echo "FAIL: Node.js is required for Completed I2V Asset Registration validation"
   exit 1
 fi
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-i2v-asset-relationships.cjs
+else
+  echo "FAIL: Node.js is required for I2V Asset Relationship validation"
+  exit 1
+fi

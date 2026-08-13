@@ -224,8 +224,19 @@ function downloadBatchFile(
 }
 
 export default function ImageToVideo({
-
  specs, showAlert }) {
+
+  // LUKE_AI_I2V_ASSET_RELATIONSHIP_STATE_V1
+  const [
+    sourceAssetId,
+    setSourceAssetId,
+  ] = useState(null);
+
+  const [
+    referenceAssetIds,
+    setReferenceAssetIds,
+  ] = useState([]);
+
 
   // LUKE_AI_I2V_RUNTIME_HEALTH_STATE_V1
     const [
@@ -1538,6 +1549,18 @@ export default function ImageToVideo({
 
             imageDataUrl:
               source.dataUrl,
+          // LUKE_AI_I2V_ASSET_RELATIONSHIP_PAYLOAD_V1
+          sourceAssetId:
+            sourceAssetId ||
+            null,
+
+          referenceAssetIds:
+            Array.isArray(
+              referenceAssetIds
+            )
+              ? referenceAssetIds
+              : [],
+
 
             references:
               references.map(
@@ -1645,6 +1668,18 @@ export default function ImageToVideo({
           modelId: "auto",
           imageDataUrl:
             source.dataUrl,
+          // LUKE_AI_I2V_ASSET_RELATIONSHIP_PAYLOAD_V1
+          sourceAssetId:
+            sourceAssetId ||
+            null,
+
+          referenceAssetIds:
+            Array.isArray(
+              referenceAssetIds
+            )
+              ? referenceAssetIds
+              : [],
+
           references:
             references.map(
               (item) => ({

@@ -24905,6 +24905,71 @@ if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
               type:
                 "video",
 
+              // LUKE_AI_I2V_VIDEO_RELATIONSHIPS_V1
+              derivedFrom:
+                body.sourceAssetId
+                  ? [
+                      String(
+                        body.sourceAssetId
+                      ),
+                    ]
+                  : [],
+
+              references:
+                Array.isArray(
+                  body.referenceAssetIds
+                )
+                  ? body.referenceAssetIds
+                      .map(
+                        (assetId) =>
+                          String(
+                            assetId || ""
+                          ).trim()
+                      )
+                      .filter(Boolean)
+                  : [],
+
+              relations: [
+                ...(
+                  body.sourceAssetId
+                    ? [
+                        {
+                          assetId:
+                            String(
+                              body.sourceAssetId
+                            ),
+
+                          relation:
+                            "derived_from",
+                        },
+                      ]
+                    : []
+                ),
+
+                ...(
+                  Array.isArray(
+                    body.referenceAssetIds
+                  )
+                    ? body.referenceAssetIds
+                        .map(
+                          (assetId) =>
+                            String(
+                              assetId || ""
+                            ).trim()
+                        )
+                        .filter(Boolean)
+                        .map(
+                          (assetId) => ({
+                            assetId,
+                            relation:
+                              "reference",
+                          })
+                        )
+                    : []
+                ),
+              ],
+
+
               existingPath:
                 outputPath,
 
