@@ -163,6 +163,15 @@ assert(
 );
 
 assert(
+  (
+    ui.match(
+      /disabled=\{assetRelationshipLoading\}/g
+    ) || []
+  ).length >= 3,
+  "Image-to-Video relationship picker must disable refresh and selection controls while loading."
+);
+
+assert(
   styles.includes(
     "i2v-asset-picker-counts"
   ) &&
@@ -251,6 +260,10 @@ console.log(
 
 console.log(
   "PASS: Image-to-Video clears stale cleanup notices after manual selection."
+);
+
+console.log(
+  "PASS: Image-to-Video disables Asset relationship controls while loading."
 );
 
 console.log(

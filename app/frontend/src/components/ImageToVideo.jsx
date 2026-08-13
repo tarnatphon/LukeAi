@@ -1906,6 +1906,7 @@ export default function ImageToVideo({
             <span>Source Asset</span>
             <select
               value={sourceAssetId || ""}
+              disabled={assetRelationshipLoading}
               onChange={(event) => {
                 setAssetRelationshipNotice("");
                 setSourceAssetId(event.target.value || null);
@@ -1933,6 +1934,7 @@ export default function ImageToVideo({
             <select
               multiple
               value={referenceAssetIds}
+              disabled={assetRelationshipLoading}
               onChange={(event) => {
                 setAssetRelationshipNotice("");
                 setReferenceAssetIds(
