@@ -238,6 +238,11 @@ export default function ImageToVideo({
     setReferenceAssetIds,
   ] = useState([]);
 
+  const [
+    assetRelationshipNotice,
+    setAssetRelationshipNotice,
+  ] = useState("");
+
 
   // LUKE_AI_I2V_RUNTIME_HEALTH_STATE_V1
     const [
@@ -321,6 +326,7 @@ export default function ImageToVideo({
   const refreshAssetRelationshipOptions = useCallback(async () => {
     setAssetRelationshipLoading(true);
     setAssetRelationshipError("");
+    setAssetRelationshipNotice("");
 
     try {
       const [images, referencesResult] = await Promise.all([
@@ -338,16 +344,30 @@ export default function ImageToVideo({
       );
 
       setAssetRelationshipOptions(nextAssets);
-      setSourceAssetId((currentAssetId) =>
-        currentAssetId && availableAssetIds.has(currentAssetId)
-          ? currentAssetId
-          : null,
-      );
-      setReferenceAssetIds((currentAssetIds) =>
-        currentAssetIds.filter((assetId) =>
+      setSourceAssetId((currentAssetId) => {
+        if (!currentAssetId || availableAssetIds.has(currentAssetId)) {
+          return currentAssetId;
+        }
+
+        setAssetRelationshipNotice(
+          "A linked source Asset was removed because it is no longer available.",
+        );
+
+        return null;
+      });
+      setReferenceAssetIds((currentAssetIds) => {
+        const nextAssetIds = currentAssetIds.filter((assetId) =>
           availableAssetIds.has(assetId),
-        ),
-      );
+        );
+
+        if (nextAssetIds.length !== currentAssetIds.length) {
+          setAssetRelationshipNotice(
+            "One or more linked reference Assets were removed because they are no longer available.",
+          );
+        }
+
+        return nextAssetIds;
+      });
     } catch (error) {
       setAssetRelationshipError(
         error?.message ||
@@ -1944,6 +1964,12 @@ export default function ImageToVideo({
           {assetRelationshipError && (
             <p style={{ color: "var(--md-sys-color-error)" }}>
               {assetRelationshipError}
+            </p>
+          )}
+
+          {assetRelationshipNotice && (
+            <p className="i2v-asset-picker-notice">
+              {assetRelationshipNotice}
             </p>
           )}
 

@@ -53,9 +53,12 @@ function assert(
   "selectedRelationshipReferenceAssets",
   "i2v-asset-picker-counts",
   "i2v-asset-picker-empty",
+  "i2v-asset-picker-notice",
+  "assetRelationshipNotice",
   "source Assets available",
   "reference Assets available",
   "No eligible Asset Library records are available to link yet.",
+  "no longer available",
   "availableAssetIds",
   "Linked source",
   "Linked references",
@@ -155,6 +158,9 @@ assert(
   ) &&
   styles.includes(
     "i2v-asset-picker-empty"
+  ) &&
+  styles.includes(
+    "i2v-asset-picker-notice"
   ),
   "Image-to-Video relationship picker count/empty styles are missing."
 );
@@ -227,6 +233,10 @@ console.log(
 
 console.log(
   "PASS: Image-to-Video clears stale selected Asset IDs after refresh."
+);
+
+console.log(
+  "PASS: Image-to-Video explains stale linked Asset cleanup."
 );
 
 console.log(
