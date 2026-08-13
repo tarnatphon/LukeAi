@@ -9285,6 +9285,11 @@ html[data-theme^="dark"] .settings-subsection:hover {
   background: var(--md-sys-color-surface);
 }
 
+.asset-library-card-selected {
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+}
+
 .asset-library-card header,
 .asset-library-card footer,
 .asset-library-meta {

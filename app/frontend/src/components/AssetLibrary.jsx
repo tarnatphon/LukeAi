@@ -553,9 +553,14 @@ export default function AssetLibrary() {
             const derivedCount = asset.derivedFrom?.length || 0;
             const referenceCount = asset.references?.length || 0;
             const relationCount = asset.relations?.length || 0;
+            const isSelected = selectedAssetId === asset.assetId;
 
             return (
-              <article className="asset-library-card" key={asset.assetId}>
+              <article
+                className={`asset-library-card ${isSelected ? "asset-library-card-selected" : ""}`}
+                key={asset.assetId}
+                aria-current={isSelected ? "true" : undefined}
+              >
                 <header>
                   <span className={`asset-library-type asset-library-type-${asset.type}`}>
                     <Icon size={15} />

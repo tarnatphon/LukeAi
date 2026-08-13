@@ -203,6 +203,18 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "asset-library-card-selected",
+  "Asset Library must visually mark the selected detail card."
+);
+
+assertIncludes(
+  component,
+  "aria-current",
+  "Asset Library selected card must expose current state accessibly."
+);
+
+assertIncludes(
+  component,
   "existingPath",
   "Asset Library must show the registered asset path."
 );
@@ -334,6 +346,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  styles,
+  "asset-library-card-selected",
+  "Asset Library selected-card styles are missing."
+);
+
+assertIncludes(
   api,
   "export function listAssets",
   "listAssets service is missing."
@@ -387,6 +405,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library cards show hidden tag counts."
+);
+console.log(
+  "PASS: Asset Library highlights the selected detail card."
 );
 console.log(
   "PASS: Asset Library shows paths and relationship counts."
