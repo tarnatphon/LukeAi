@@ -71,6 +71,12 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "aria-pressed={favoriteOnly}",
+  "Asset Library favorite toggle must expose pressed state accessibly."
+);
+
+assertIncludes(
+  component,
   "projectFilter",
   "Asset Library must expose project filtering."
 );
@@ -271,6 +277,12 @@ assertIncludes(
   component,
   "ASSET_TYPES",
   "Asset Library must expose asset type filters."
+);
+
+assertIncludes(
+  component,
+  "aria-pressed={activeType === type}",
+  "Asset Library type filters must expose pressed state accessibly."
 );
 
 assertIncludes(
@@ -678,6 +690,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library filters by type and favorites."
+);
+console.log(
+  "PASS: Asset Library exposes filter pressed states accessibly."
 );
 console.log(
   "PASS: Asset Library filters by project, campaign and tag."

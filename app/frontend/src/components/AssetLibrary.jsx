@@ -663,6 +663,7 @@ export default function AssetLibrary() {
           type="button"
           className={`m3-btn ${favoriteOnly ? "m3-btn-filled" : "m3-btn-outlined"}`}
           onClick={() => setFavoriteOnly((value) => !value)}
+          aria-pressed={favoriteOnly}
         >
           <Star size={16} />
           Favorites
@@ -764,6 +765,7 @@ export default function AssetLibrary() {
             type="button"
             className={activeType === type ? "active" : ""}
             onClick={() => setActiveType(type)}
+            aria-pressed={activeType === type}
           >
             {type === "all" ? "All" : type}
             {type !== "all" && summary.has(type) && (
