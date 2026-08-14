@@ -461,6 +461,36 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "function buildAssetDetailSnapshot(asset)",
+  "Asset detail must provide a read-only snapshot builder."
+);
+
+assertIncludes(
+  component,
+  "buildAssetDetailSnapshot(asset)",
+  "Asset detail must expose a copyable snapshot action."
+);
+
+assertIncludes(
+  component,
+  "Asset snapshot",
+  "Asset detail snapshot copy confirmation must use a dedicated label."
+);
+
+assertIncludes(
+  component,
+  "relations: (asset.relations || [])",
+  "Asset detail snapshot must include normalized relationship metadata."
+);
+
+assertIncludes(
+  component,
+  "metadata: asset.metadata || {}",
+  "Asset detail snapshot must include raw metadata."
+);
+
+assertIncludes(
+  component,
   "return JSON.stringify(value);",
   "Asset detail metadata summaries must show nested metadata as compact JSON."
 );
@@ -671,6 +701,12 @@ assertIncludes(
 
 assertIncludes(
   styles,
+  "asset-library-detail-actions",
+  "Asset detail snapshot action styles are missing."
+);
+
+assertIncludes(
+  styles,
   "asset-library-detail-relationship-summary",
   "Asset detail relationship summary styles are missing."
 );
@@ -816,6 +852,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail formats nested metadata summaries."
+);
+console.log(
+  "PASS: Asset Library detail exposes copyable read-only snapshots."
 );
 console.log(
   "PASS: Asset Library detail shows capped metadata overflow."

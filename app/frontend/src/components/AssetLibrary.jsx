@@ -182,6 +182,34 @@ function formatAssetValue(value) {
   return String(value);
 }
 
+function buildAssetDetailSnapshot(asset) {
+  return {
+    assetId: asset.assetId || "",
+    type: asset.type || "",
+    title: getAssetTitle(asset),
+    existingPath: asset.existingPath || "",
+    storageProviderId: asset.storageProviderId || "local",
+    createdAt: asset.createdAt || "",
+    updatedAt: asset.updatedAt || "",
+    project: asset.project || "",
+    campaign: asset.campaign || "",
+    tags: asset.tags || [],
+    favorite: asset.favorite === true,
+    pinned: asset.pinned === true,
+    sourcePrompt: asset.sourcePrompt || "",
+    sourceModel: asset.sourceModel || "",
+    derivedFrom: (asset.derivedFrom || []).filter(Boolean),
+    references: (asset.references || []).filter(Boolean),
+    relations: (asset.relations || [])
+      .filter((item) => item?.assetId)
+      .map((item) => ({
+        relation: item.relation || "Related asset",
+        assetId: item.assetId,
+      })),
+    metadata: asset.metadata || {},
+  };
+}
+
 function AssetDetailRow({
   label,
   children,
@@ -375,15 +403,36 @@ function AssetDetailPanel({ asset, onClose }) {
           </span>
           <h3 id={detailTitleId}>{getAssetTitle(asset)}</h3>
         </div>
-        <button
-          type="button"
-          className="asset-library-icon-button"
-          onClick={onClose}
-          title="Close asset detail"
-          aria-label="Close asset detail"
-        >
-          <X size={16} />
-        </button>
+        <div className="asset-library-detail-actions">
+          <button
+            type="button"
+            className="asset-library-copy-button"
+            onClick={() =>
+              copyAssetDetailValue(
+                "Asset snapshot",
+                buildAssetDetailSnapshot(asset)
+              )
+            }
+            title="Copy Asset Snapshot"
+            aria-label="Copy Asset Snapshot"
+          >
+            <Copy size={13} />
+            <span>
+              {copiedAssetField === "Asset snapshot"
+                ? "Copied"
+                : "Copy snapshot"}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="asset-library-icon-button"
+            onClick={onClose}
+            title="Close asset detail"
+            aria-label="Close asset detail"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </header>
 
       <dl className="asset-library-detail-grid">

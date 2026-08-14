@@ -9497,6 +9497,14 @@ html[data-theme^="dark"] .settings-subsection:hover {
   overflow-wrap: anywhere;
 }
 
+.asset-library-detail-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .asset-library-detail-grid,
 .asset-library-relationships {
   display: grid;
