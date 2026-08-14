@@ -588,7 +588,11 @@ function buildLlmResponseFormat(options = {}) {
     return options.responseFormat;
   }
 
-  if (!options.jsonSchema) {
+  if (
+    !options.jsonSchema ||
+    typeof options.jsonSchema !== "object" ||
+    Array.isArray(options.jsonSchema)
+  ) {
     return undefined;
   }
 

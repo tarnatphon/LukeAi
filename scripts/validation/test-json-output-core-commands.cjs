@@ -36,8 +36,20 @@ assertIncludes(
 
 assertIncludes(
   api,
-  "if (!options.jsonSchema)",
+  "!options.jsonSchema ||",
   "Frontend response format builder must keep JSON schema output opt-in."
+);
+
+assertIncludes(
+  api,
+  "typeof options.jsonSchema !== \"object\"",
+  "Frontend response format builder must ignore non-object JSON schemas."
+);
+
+assertIncludes(
+  api,
+  "Array.isArray(options.jsonSchema)",
+  "Frontend response format builder must ignore array JSON schemas."
 );
 
 assertIncludes(
