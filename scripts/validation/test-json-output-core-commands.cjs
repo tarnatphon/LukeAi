@@ -198,6 +198,18 @@ assertIncludes(
 
 assertIncludes(
   server,
+  "value.jsonSchemaName",
+  "Server must support camelCase JSON schema name hints."
+);
+
+assertIncludes(
+  server,
+  "jsonSchema.title",
+  "Server must support JSON schema wrapper titles as name hints."
+);
+
+assertIncludes(
+  server,
   "schema.title",
   "Server must support JSON Schema titles as response format names."
 );

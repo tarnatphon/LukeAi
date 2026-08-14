@@ -597,6 +597,8 @@ async function main() {
             },
             responseFormat: {
               type: "JSON_SCHEMA",
+              jsonSchemaName:
+                "Explicit Output Name!",
               jsonSchema: {
                 title:
                   "Test Schema Output!",
@@ -647,7 +649,7 @@ async function main() {
         .response_format
         .json_schema
         ?.name !==
-        "Test_Schema_Output" ||
+        "Explicit_Output_Name" ||
       schemaRuntimeBody
         .response_format
         .json_schema
