@@ -599,11 +599,21 @@ function buildLlmResponseFormat(options = {}) {
   return {
     type: "json_schema",
     json_schema: {
-      name: options.jsonSchemaName || "luke_json_output",
+      name: normalizeLlmJsonSchemaName(options.jsonSchemaName),
       schema: options.jsonSchema,
       strict: options.jsonSchemaStrict !== false,
     },
   };
+}
+
+function normalizeLlmJsonSchemaName(value) {
+  const name = String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+
+  return name || "luke_json_output";
 }
 
 export async function chatWithLlm(messages, options = {}) {

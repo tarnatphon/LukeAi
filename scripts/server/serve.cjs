@@ -11915,6 +11915,16 @@ async function unloadTextRuntimeModel(
 }
 
 // LUKE_AI_JSON_OUTPUT_CORE_COMMANDS_V1
+function normalizeLlmJsonSchemaName(value) {
+  const name = String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+
+  return name || "luke_json_output";
+}
+
 function normalizeLlmResponseFormat(value) {
   if (!value) {
     return undefined;
@@ -11950,7 +11960,7 @@ function normalizeLlmResponseFormat(value) {
     return {
       type,
       json_schema: {
-        name: String(jsonSchema.name || value.name || "luke_json_output").trim() || "luke_json_output",
+        name: normalizeLlmJsonSchemaName(jsonSchema.name || value.name),
         schema,
         strict: jsonSchema.strict !== false && value.strict !== false,
       },

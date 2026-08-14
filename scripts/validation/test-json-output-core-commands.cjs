@@ -54,7 +54,25 @@ assertIncludes(
 
 assertIncludes(
   api,
-  "name: options.jsonSchemaName || \"luke_json_output\"",
+  "function normalizeLlmJsonSchemaName(value)",
+  "Frontend text chat API must normalize JSON schema names."
+);
+
+assertIncludes(
+  api,
+  ".replace(/[^A-Za-z0-9_-]+/g, \"_\")",
+  "Frontend JSON schema names must be restricted to safe characters."
+);
+
+assertIncludes(
+  api,
+  ".slice(0, 64)",
+  "Frontend JSON schema names must be capped at a safe length."
+);
+
+assertIncludes(
+  api,
+  "name: normalizeLlmJsonSchemaName(options.jsonSchemaName)",
   "Frontend JSON schema response format must use a stable default schema name."
 );
 
@@ -108,7 +126,13 @@ assertIncludes(
 
 assertIncludes(
   server,
-  "name: String(jsonSchema.name || value.name || \"luke_json_output\").trim() || \"luke_json_output\"",
+  "function normalizeLlmJsonSchemaName(value)",
+  "Server must normalize JSON schema names."
+);
+
+assertIncludes(
+  server,
+  "name: normalizeLlmJsonSchemaName(jsonSchema.name || value.name)",
   "Server must provide a stable JSON schema response format name."
 );
 
