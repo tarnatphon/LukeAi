@@ -597,9 +597,9 @@ async function main() {
             },
             responseFormat: {
               type: "JSON_SCHEMA",
-              json_schema_name:
+              schema_name:
                 "Explicit Output Name!",
-              jsonSchema: {
+              schema: {
                 title:
                   "Test Schema Output!",
                 type: "object",
@@ -614,7 +614,7 @@ async function main() {
                   "ok",
                 ],
               },
-              json_schema_strict: false,
+              jsonSchemaStrict: false,
             },
           }),
         }

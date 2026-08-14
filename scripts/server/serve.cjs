@@ -11983,6 +11983,8 @@ function normalizeLlmResponseFormat(value) {
     const schemaName =
       jsonSchema.name ||
       value.name ||
+      value.schema_name ||
+      value.schemaName ||
       value.json_schema_name ||
       value.jsonSchemaName ||
       jsonSchema.title ||
@@ -11997,7 +11999,6 @@ function normalizeLlmResponseFormat(value) {
         schema,
         strict: jsonSchema.strict !== false &&
           value.strict !== false &&
-          value.json_schema_strict !== false &&
           value.jsonSchemaStrict !== false,
       },
     };

@@ -198,6 +198,18 @@ assertIncludes(
 
 assertIncludes(
   server,
+  "value.schema_name",
+  "Server must support snake_case direct schema name hints."
+);
+
+assertIncludes(
+  server,
+  "value.schemaName",
+  "Server must support camelCase direct schema name hints."
+);
+
+assertIncludes(
+  server,
   "value.json_schema_name",
   "Server must support snake_case JSON schema name hints."
 );
@@ -224,12 +236,6 @@ assertIncludes(
   server,
   "name: normalizeLlmJsonSchemaName(schemaName)",
   "Server must normalize derived JSON schema response format names."
-);
-
-assertIncludes(
-  server,
-  "value.json_schema_strict !== false",
-  "Server must support snake_case JSON schema strict overrides."
 );
 
 assertIncludes(
