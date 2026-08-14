@@ -132,6 +132,18 @@ assertIncludes(
 
 assertIncludes(
   server,
+  "isLlmResponseFormatObject(value.jsonSchema)",
+  "Server must accept camelCase JSON schema response format metadata."
+);
+
+assertIncludes(
+  server,
+  "!Array.isArray(value)",
+  "Server must validate response format objects reject arrays."
+);
+
+assertIncludes(
+  server,
   "if (!schema)",
   "Server must ignore JSON schema response formats without an object schema."
 );
@@ -140,6 +152,12 @@ assertIncludes(
   server,
   "function normalizeLlmJsonSchemaName(value)",
   "Server must normalize JSON schema names."
+);
+
+assertIncludes(
+  server,
+  "function isLlmResponseFormatObject(value)",
+  "Server must share response format object validation."
 );
 
 assertIncludes(
@@ -162,8 +180,8 @@ assertIncludes(
 
 assertIncludes(
   server,
-  "strict: jsonSchema.strict !== false && value.strict !== false",
-  "Server must default JSON schema response formats to strict mode."
+  "value.jsonSchemaStrict !== false",
+  "Server must support camelCase JSON schema strict overrides."
 );
 
 assertIncludes(

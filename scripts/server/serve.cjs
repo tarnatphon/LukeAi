@@ -11925,6 +11925,10 @@ function normalizeLlmJsonSchemaName(value) {
   return name || "luke_json_output";
 }
 
+function isLlmResponseFormatObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeLlmResponseFormat(value) {
   if (!value) {
     return undefined;
@@ -11945,14 +11949,18 @@ function normalizeLlmResponseFormat(value) {
   }
 
   if (type === "json_schema") {
-    const jsonSchema = value.json_schema && typeof value.json_schema === "object"
+    const jsonSchema = isLlmResponseFormatObject(value.json_schema)
       ? value.json_schema
-      : {};
-    const schema = jsonSchema.schema && typeof jsonSchema.schema === "object"
+      : isLlmResponseFormatObject(value.jsonSchema)
+        ? value.jsonSchema
+        : {};
+    const schema = isLlmResponseFormatObject(jsonSchema.schema)
       ? jsonSchema.schema
-      : value.schema && typeof value.schema === "object"
+      : isLlmResponseFormatObject(value.schema)
         ? value.schema
-        : null;
+        : isLlmResponseFormatObject(value.jsonSchema)
+          ? value.jsonSchema
+          : null;
     if (!schema) {
       return undefined;
     }
@@ -11968,7 +11976,9 @@ function normalizeLlmResponseFormat(value) {
       json_schema: {
         name: normalizeLlmJsonSchemaName(schemaName),
         schema,
-        strict: jsonSchema.strict !== false && value.strict !== false,
+        strict: jsonSchema.strict !== false &&
+          value.strict !== false &&
+          value.jsonSchemaStrict !== false,
       },
     };
   }

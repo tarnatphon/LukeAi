@@ -589,9 +589,9 @@ async function main() {
           body: JSON.stringify({
             conversationId:
               schemaConversationId,
-            response_format: {
+            responseFormat: {
               type: "JSON_SCHEMA",
-              schema: {
+              jsonSchema: {
                 title:
                   "Test Schema Output!",
                 type: "object",
@@ -606,7 +606,7 @@ async function main() {
                   "ok",
                 ],
               },
-              strict: false,
+              jsonSchemaStrict: false,
             },
           }),
         }
