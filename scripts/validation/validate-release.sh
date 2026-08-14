@@ -588,11 +588,26 @@ else
 fi
 
 I2V_RUNTIME_PYTHON="app/runtimes/image-to-video/venv/bin/python"
+I2V_VALIDATION_PYTHON="${LUKE_AI_I2V_VALIDATION_PYTHON:-}"
 
-if [ -x "$I2V_RUNTIME_PYTHON" ]; then
-  "$I2V_RUNTIME_PYTHON" scripts/validation/test_image_to_video_duration_worker.py
+if [ -n "$I2V_VALIDATION_PYTHON" ] \
+  && { [ ! -x "$I2V_VALIDATION_PYTHON" ] \
+    || ! "$I2V_VALIDATION_PYTHON" -c 'import imageio_ffmpeg' >/dev/null 2>&1; }; then
+  echo "FAIL: Configured Duration Worker validation Python is invalid"
+  exit 1
+elif [ -n "$I2V_VALIDATION_PYTHON" ]; then
+  :
+elif [ -x "$I2V_RUNTIME_PYTHON" ]; then
+  I2V_VALIDATION_PYTHON="$I2V_RUNTIME_PYTHON"
+elif command -v python3 >/dev/null 2>&1 \
+  && python3 -c 'import imageio_ffmpeg' >/dev/null 2>&1; then
+  I2V_VALIDATION_PYTHON="$(command -v python3)"
+fi
+
+if [ -n "$I2V_VALIDATION_PYTHON" ]; then
+  "$I2V_VALIDATION_PYTHON" scripts/validation/test_image_to_video_duration_worker.py
 else
-  echo "FAIL: Image-to-Video runtime Python is required for Duration Worker validation"
+  echo "FAIL: Python with imageio_ffmpeg is required for Duration Worker validation"
   exit 1
 fi
 
