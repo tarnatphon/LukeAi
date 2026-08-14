@@ -473,6 +473,42 @@ assertIncludes(
 
 assertIncludes(
   component,
+  "function buildAssetLibraryViewSnapshot(",
+  "Asset Library must provide a read-only view snapshot builder."
+);
+
+assertIncludes(
+  component,
+  "copyAssetLibraryViewSnapshot",
+  "Asset Library must expose a copyable current-view snapshot action."
+);
+
+assertIncludes(
+  component,
+  "assets: sortedAssets",
+  "Asset Library view snapshot must use the currently sorted visible assets."
+);
+
+assertIncludes(
+  component,
+  "filters: {",
+  "Asset Library view snapshot must include active filters."
+);
+
+assertIncludes(
+  component,
+  "stats: libraryStats",
+  "Asset Library view snapshot must include read-only summary stats."
+);
+
+assertIncludes(
+  component,
+  "Asset view snapshot copied.",
+  "Asset Library view snapshot must announce copy success accessibly."
+);
+
+assertIncludes(
+  component,
   "Asset snapshot",
   "Asset detail snapshot copy confirmation must use a dedicated label."
 );
@@ -707,6 +743,12 @@ assertIncludes(
 
 assertIncludes(
   styles,
+  "asset-library-view-snapshot-button",
+  "Asset Library view snapshot button styles are missing."
+);
+
+assertIncludes(
+  styles,
   "asset-library-detail-relationship-summary",
   "Asset detail relationship summary styles are missing."
 );
@@ -855,6 +897,9 @@ console.log(
 );
 console.log(
   "PASS: Asset Library detail exposes copyable read-only snapshots."
+);
+console.log(
+  "PASS: Asset Library exposes copyable current-view snapshots."
 );
 console.log(
   "PASS: Asset Library detail shows capped metadata overflow."

@@ -9203,7 +9203,7 @@ html[data-theme^="dark"] .settings-subsection:hover {
 
 .asset-library-summary-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  grid-template-columns: repeat(4, minmax(90px, 1fr)) minmax(120px, auto);
   gap: 8px;
 }
 
@@ -9226,6 +9226,11 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .asset-library-summary-strip strong {
   color: var(--md-sys-color-on-surface);
   font-size: 0.98rem;
+}
+
+.asset-library-view-snapshot-button {
+  min-height: 38px;
+  align-self: stretch;
 }
 
 .asset-library-search {

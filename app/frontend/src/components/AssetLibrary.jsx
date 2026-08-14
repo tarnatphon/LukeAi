@@ -210,6 +210,33 @@ function buildAssetDetailSnapshot(asset) {
   };
 }
 
+function buildAssetLibraryViewSnapshot({
+  activeViewChips,
+  assets,
+  filters,
+  stats,
+}) {
+  return {
+    generatedAt: new Date().toISOString(),
+    filters,
+    activeView: activeViewChips,
+    stats,
+    assets: assets.map((asset) => ({
+      assetId: asset.assetId || "",
+      type: asset.type || "",
+      title: getAssetTitle(asset),
+      existingPath: asset.existingPath || "",
+      storageProviderId: asset.storageProviderId || "local",
+      updatedAt: asset.updatedAt || "",
+      project: asset.project || "",
+      campaign: asset.campaign || "",
+      tags: asset.tags || [],
+      sourceModel: asset.sourceModel || "",
+      relationshipCount: getAssetRelationshipCount(asset),
+    })),
+  };
+}
+
 function AssetDetailRow({
   label,
   children,
@@ -564,6 +591,7 @@ export default function AssetLibrary() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [viewCopyStatus, setViewCopyStatus] = useState("");
 
   const loadAssets = useCallback(async () => {
     setIsLoading(true);
@@ -661,6 +689,10 @@ export default function AssetLibrary() {
     return chips;
   }, [activeType, campaignFilter, favoriteOnly, projectFilter, query, sortMode, tagFilter]);
 
+  useEffect(() => {
+    setViewCopyStatus("");
+  }, [activeType, campaignFilter, favoriteOnly, projectFilter, query, sortMode, tagFilter]);
+
   const hasMetadataFilters =
     projectFilter.trim() ||
     campaignFilter.trim() ||
@@ -681,6 +713,35 @@ export default function AssetLibrary() {
     setSortMode("updated-desc");
     setQuery("");
     setSelectedAssetId("");
+  };
+
+  const copyAssetLibraryViewSnapshot = async () => {
+    const snapshot = buildAssetLibraryViewSnapshot({
+      activeViewChips,
+      assets: sortedAssets,
+      filters: {
+        query: query.trim(),
+        type: activeType,
+        favoriteOnly,
+        project: projectFilter.trim(),
+        campaign: campaignFilter.trim(),
+        tag: tagFilter.trim(),
+        sortMode,
+      },
+      stats: libraryStats,
+    });
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
+      setViewCopyStatus("Asset view snapshot copied.");
+      window.setTimeout(() => {
+        setViewCopyStatus((current) =>
+          current === "Asset view snapshot copied." ? "" : current
+        );
+      }, 1600);
+    } catch {
+      setViewCopyStatus("Asset view snapshot could not be copied.");
+    }
   };
 
   return (
@@ -820,7 +881,25 @@ export default function AssetLibrary() {
           <strong>{libraryStats.relationshipCount}</strong>
           Links
         </span>
+        <button
+          type="button"
+          className="asset-library-copy-button asset-library-view-snapshot-button"
+          onClick={copyAssetLibraryViewSnapshot}
+          disabled={sortedAssets.length === 0}
+          title="Copy Asset View Snapshot"
+          aria-label="Copy Asset View Snapshot"
+        >
+          <Copy size={13} />
+          Copy view
+        </button>
       </div>
+      <p
+        className="asset-library-copy-status"
+        role="status"
+        aria-live="polite"
+      >
+        {viewCopyStatus}
+      </p>
 
       <div className="asset-library-tabs" aria-label="Asset type filters">
         {ASSET_TYPES.map((type) => (
