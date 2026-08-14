@@ -223,6 +223,22 @@ if [ "$STATUS" -eq 0 ]; then
   fi
 fi
 
+if [ "$STATUS" -eq 0 ]; then
+  if "$PACKAGE_DIR/app/tools/node-mac/bin/npm" \
+    --prefix "$PACKAGE_DIR/scripts/server" \
+    ci \
+    --omit=dev \
+    --ignore-scripts \
+    --no-audit \
+    --no-fund 2>&1 |
+    tee -a "$REPORT_FILE"; then
+    log "PASS: Server Production Dependencies พร้อมใน Package"
+  else
+    log "FAIL: ติดตั้ง Server Production Dependencies ไม่สำเร็จ"
+    STATUS=1
+  fi
+fi
+
 log ""
 log "[6/9] อัปเดต Version Metadata ใน Package"
 
