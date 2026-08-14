@@ -162,6 +162,18 @@ assertIncludes(
 
 assertIncludes(
   server,
+  "function hasLlmResponseFormatSchemaField(value)",
+  "Server must distinguish JSON schema wrappers from direct schemas."
+);
+
+assertIncludes(
+  server,
+  "!hasLlmResponseFormatSchemaField(value.jsonSchema)",
+  "Server must not treat invalid camelCase schema wrappers as direct schemas."
+);
+
+assertIncludes(
+  server,
   "const schemaName =",
   "Server must derive a stable JSON schema response format name."
 );

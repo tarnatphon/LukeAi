@@ -11929,6 +11929,11 @@ function isLlmResponseFormatObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
 
+function hasLlmResponseFormatSchemaField(value) {
+  return isLlmResponseFormatObject(value) &&
+    Object.prototype.hasOwnProperty.call(value, "schema");
+}
+
 function normalizeLlmResponseFormat(value) {
   if (!value) {
     return undefined;
@@ -11958,7 +11963,8 @@ function normalizeLlmResponseFormat(value) {
       ? jsonSchema.schema
       : isLlmResponseFormatObject(value.schema)
         ? value.schema
-        : isLlmResponseFormatObject(value.jsonSchema)
+        : isLlmResponseFormatObject(value.jsonSchema) &&
+            !hasLlmResponseFormatSchemaField(value.jsonSchema)
           ? value.jsonSchema
           : null;
     if (!schema) {
