@@ -11999,6 +11999,9 @@ function normalizeLlmResponseFormat(value) {
         schema,
         strict: jsonSchema.strict !== false &&
           value.strict !== false &&
+          value.schema_strict !== false &&
+          value.schemaStrict !== false &&
+          value.json_schema_strict !== false &&
           value.jsonSchemaStrict !== false,
       },
     };

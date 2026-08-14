@@ -614,7 +614,7 @@ async function main() {
                   "ok",
                 ],
               },
-              jsonSchemaStrict: false,
+              schema_strict: false,
             },
           }),
         }
