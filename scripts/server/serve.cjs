@@ -11931,7 +11931,7 @@ function normalizeLlmResponseFormat(value) {
   }
 
   if (typeof value === "string") {
-    const mode = value.trim();
+    const mode = value.trim().toLowerCase();
     return mode ? { type: mode } : undefined;
   }
 
@@ -11939,7 +11939,7 @@ function normalizeLlmResponseFormat(value) {
     return undefined;
   }
 
-  const type = String(value.type || "").trim();
+  const type = String(value.type || "").trim().toLowerCase();
   if (!type) {
     return undefined;
   }

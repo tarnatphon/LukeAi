@@ -102,8 +102,14 @@ assertIncludes(
 
 assertIncludes(
   server,
-  "return mode ? { type: mode } : undefined;",
+  "const mode = value.trim().toLowerCase();",
   "Server must support string response format modes."
+);
+
+assertIncludes(
+  server,
+  "const type = String(value.type || \"\").trim().toLowerCase();",
+  "Server must normalize object response format types."
 );
 
 assertIncludes(

@@ -590,7 +590,7 @@ async function main() {
             conversationId:
               schemaConversationId,
             response_format: {
-              type: "json_schema",
+              type: "JSON_SCHEMA",
               name:
                 "test_schema_output",
               schema: {
