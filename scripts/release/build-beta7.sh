@@ -21,6 +21,7 @@ PACKAGE_DIR="$STAGING_ROOT/LUKE-AI-STUDIO-$VERSION"
 ZIP_FILE="$RELEASE_DIR/LUKE-AI-STUDIO-$VERSION.zip"
 SHA_FILE="$ZIP_FILE.sha256"
 MANIFEST_FILE="$RELEASE_DIR/latest-$VERSION.json"
+LATEST_MANIFEST_FILE="$RELEASE_DIR/latest.json"
 NOTES_FILE="$RELEASE_DIR/RELEASE-NOTES.md"
 REPORT_FILE="$RELEASE_DIR/BUILD-REPORT.txt"
 
@@ -413,6 +414,7 @@ PY
     >"$NOTES_FILE"
 
   if python3 -m json.tool "$MANIFEST_FILE" >/dev/null 2>&1; then
+    cp "$MANIFEST_FILE" "$LATEST_MANIFEST_FILE"
     log "PASS: Manifest และ Release Notes พร้อม"
   else
     log "FAIL: Manifest ไม่ถูกต้อง"
@@ -433,6 +435,7 @@ if [ "$STATUS" -eq 0 ]; then
   log "ZIP     : $ZIP_FILE"
   log "SHA256  : $SHA_FILE"
   log "Manifest: $MANIFEST_FILE"
+  log "Latest  : $LATEST_MANIFEST_FILE"
   log "Notes   : $NOTES_FILE"
   log "Runtime : $RUNTIME_CACHE"
   log "Report  : $REPORT_FILE"
