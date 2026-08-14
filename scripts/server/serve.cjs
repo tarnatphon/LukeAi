@@ -11934,13 +11934,22 @@ function hasLlmResponseFormatSchemaField(value) {
     Object.prototype.hasOwnProperty.call(value, "schema");
 }
 
+function normalizeLlmResponseFormatType(value) {
+  const type =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  return type === "json" ? "json_object" : type;
+}
+
 function normalizeLlmResponseFormat(value) {
   if (!value) {
     return undefined;
   }
 
   if (typeof value === "string") {
-    const mode = value.trim().toLowerCase();
+    const mode = normalizeLlmResponseFormatType(value);
     return mode ? { type: mode } : undefined;
   }
 
@@ -11948,7 +11957,7 @@ function normalizeLlmResponseFormat(value) {
     return undefined;
   }
 
-  const type = String(value.type || "").trim().toLowerCase();
+  const type = normalizeLlmResponseFormatType(value.type);
   if (!type) {
     return undefined;
   }

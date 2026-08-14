@@ -114,13 +114,13 @@ assertIncludes(
 
 assertIncludes(
   server,
-  "const mode = value.trim().toLowerCase();",
+  "const mode = normalizeLlmResponseFormatType(value);",
   "Server must support string response format modes."
 );
 
 assertIncludes(
   server,
-  "const type = String(value.type || \"\").trim().toLowerCase();",
+  "const type = normalizeLlmResponseFormatType(value.type);",
   "Server must normalize object response format types."
 );
 
@@ -170,6 +170,18 @@ assertIncludes(
   server,
   "function hasLlmResponseFormatSchemaField(value)",
   "Server must distinguish JSON schema wrappers from direct schemas."
+);
+
+assertIncludes(
+  server,
+  "function normalizeLlmResponseFormatType(value)",
+  "Server must normalize response format type aliases."
+);
+
+assertIncludes(
+  server,
+  "type === \"json\" ? \"json_object\" : type",
+  "Server must normalize json shorthand to json_object."
 );
 
 assertIncludes(
