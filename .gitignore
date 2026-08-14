@@ -31,3 +31,6 @@ runtime-logs/
 validation-reports/
 venv/
 releases/staging-*/
+# LUKE AI STUDIO generated Image-to-Video runtime
+/app/runtimes/image-to-video/venv/
+/app/runtimes/image-to-video/installed.json

@@ -1,7 +1,390 @@
+// LUKE_AI_I2V_MAINTENANCE_IMPORT_V1
+const {
+  planImageToVideoCleanup,
+  applyImageToVideoCleanup,
+} = require("./image-to-video-maintenance.cjs");
+
+// LUKE_AI_I2V_PROCESS_RUNNER_IMPORT_V2
+const {
+  ImageToVideoProcessRunner,
+} = require("./image-to-video-process-runner.cjs");
+
+// LUKE_AI_I2V_JOB_MANAGER_IMPORT_V1
+const {
+  ImageToVideoJobManager,
+} = require("./image-to-video-job-manager.cjs");
+
+// LUKE_AI_I2V_JOB_MANAGER_SINGLETON_V1
+let imageToVideoJobManagerInstance = null;
+
+// LUKE_AI_I2V_PROCESS_RUNNER_SINGLETON_V2
+let imageToVideoProcessRunnerInstance = null;
+
+// LUKE_AI_ASSET_REGISTRY_SINGLETON_V1
+let lukeAssetRegistry = null;
+
+function getLukeAssetRegistry() {
+  if (!lukeAssetRegistry) {
+    lukeAssetRegistry =
+      new AssetRegistry({
+        statePath:
+          path.join(
+            process.cwd(),
+            "app",
+            "runtime-state",
+            "assets",
+            "asset-registry.json",
+          ),
+      });
+  }
+
+  return lukeAssetRegistry;
+}
+
+function getImageToVideoProcessRunner() {
+  if (
+    imageToVideoProcessRunnerInstance === null
+  ) {
+    imageToVideoProcessRunnerInstance =
+      new ImageToVideoProcessRunner({
+        root: ROOT,
+        jobManager:
+          getImageToVideoJobManager(),
+      });
+  }
+
+  return imageToVideoProcessRunnerInstance;
+}
+
+// LUKE_AI_I2V_STARTUP_MAINTENANCE_STATE_V1
+let imageToVideoMaintenanceStatus = {
+  state: "not-run",
+  ranAt: null,
+  plan: null,
+  result: null,
+  error: null,
+};
+
+function runImageToVideoStartupMaintenance() {
+  if (
+    imageToVideoMaintenanceStatus.state === "completed" ||
+    imageToVideoMaintenanceStatus.state === "running"
+  ) {
+    return imageToVideoMaintenanceStatus;
+  }
+
+  imageToVideoMaintenanceStatus = {
+    state: "running",
+    ranAt:
+      new Date().toISOString(),
+    plan: null,
+    result: null,
+    error: null,
+  };
+
+  try {
+    const manager =
+      getImageToVideoJobManager();
+
+    const jobs =
+      manager.listJobs({
+        limit: 200,
+      });
+
+    const plan =
+      planImageToVideoCleanup({
+        root: ROOT,
+        jobs,
+      });
+
+    const result =
+      applyImageToVideoCleanup(
+        plan
+      );
+
+    imageToVideoMaintenanceStatus = {
+      state: "completed",
+      ranAt:
+        new Date().toISOString(),
+
+      plan: {
+        removeCount:
+          Array.isArray(plan.remove)
+            ? plan.remove.length
+            : 0,
+
+        preserveCount:
+          Array.isArray(plan.preserve)
+            ? plan.preserve.length
+            : 0,
+
+        policy:
+          plan.policy || null,
+      },
+
+      result: {
+        removedCount:
+          Number(
+            result?.removedCount ||
+            0
+          ),
+      },
+
+      error: null,
+    };
+
+  } catch (error) {
+    imageToVideoMaintenanceStatus = {
+      state: "failed",
+      ranAt:
+        new Date().toISOString(),
+      plan: null,
+      result: null,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : String(error),
+    };
+  }
+
+  return imageToVideoMaintenanceStatus;
+}
+
+function getImageToVideoRecoveryStatus() {
+  const manager =
+    getImageToVideoJobManager();
+
+  const jobs =
+    manager.listJobs({
+      limit: 200,
+    });
+
+  const recoveredJobs =
+    jobs.filter(
+      (job) =>
+        job?.recovery?.reason ===
+        "APPLICATION_RESTART" ||
+        job?.error?.code ===
+        "PROCESS_INTERRUPTED"
+    );
+
+  const activeJobs =
+    jobs.filter(
+      (job) =>
+        [
+          "queued",
+          "running",
+          "cancelling",
+        ].includes(
+          job.state
+        )
+    );
+
+  return {
+    maintenance:
+      imageToVideoMaintenanceStatus,
+
+    activeJobs,
+
+    recoveredJobs,
+
+    summary:
+      manager.getSummary(),
+  };
+}
+
+function getImageToVideoJobManager() {
+  if (
+    imageToVideoJobManagerInstance === null
+  ) {
+    imageToVideoJobManagerInstance =
+      new ImageToVideoJobManager({
+        statePath: path.join(
+          ROOT,
+          "app",
+          "runtime-state",
+          "image-to-video",
+          "jobs.json"
+        ),
+        maxHistory: 200,
+      });
+  }
+
+  return imageToVideoJobManagerInstance;
+}
+
+async function readImageToVideoJobBody(req) {
+  const chunks = [];
+
+  for await (const chunk of req) {
+    chunks.push(
+      Buffer.isBuffer(chunk)
+        ? chunk
+        : Buffer.from(chunk)
+    );
+  }
+
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  const text =
+    Buffer.concat(chunks)
+      .toString("utf8")
+      .trim();
+
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const error =
+      new Error(
+        "Invalid JSON request body."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+
+// LUKE_AI_IMAGE_TO_VIDEO_RUNTIME_CAPABILITY_IMPORT_V2
+const {
+  ImageToVideoRuntimeCapabilityManager,
+} = require("./image-to-video-runtime-capability-manager.cjs");
+
+// LUKE_AI_STORAGE_RECOVERY_READINESS_CERTIFIER_IMPORT_V1
+const {
+  StorageRecoveryReadinessCertifier,
+} = require("./storage-recovery-readiness-certifier.cjs");
+
+// LUKE_AI_STORAGE_RECOVERY_SIMULATION_IMPORT_V1
+const {
+  StorageRecoverySimulationManager,
+} = require("./storage-recovery-simulation-manager.cjs");
+
+// LUKE_AI_STORAGE_RECOVERY_RUNBOOK_IMPORT_V1
+const {
+  StorageRecoveryRunbookManager,
+} = require("./storage-recovery-runbook-manager.cjs");
+
+// LUKE_AI_STORAGE_DISASTER_RECOVERY_IMPORT_V1
+const {
+  StorageDisasterRecoveryDashboard,
+} = require("./storage-disaster-recovery-dashboard.cjs");
+
+// LUKE_AI_DEEP_CLOUD_INTEGRITY_IMPORT_V1
+const {
+  StorageDeepCloudIntegrityManager,
+} = require("./storage-deep-cloud-integrity-manager.cjs");
+
+// LUKE_AI_STORAGE_INTEGRITY_IMPORT_V2
+const {
+  StorageIntegrityScanner,
+} = require("./storage-integrity-scanner.cjs");
+
+// LUKE_AI_STORAGE_ARCHIVE_RESTORE_IMPORT_V2
+const {
+  StorageArchiveRestoreManager,
+} = require("./storage-archive-restore-manager.cjs");
+
+// LUKE_AI_STORAGE_SAFE_ARCHIVE_IMPORT_V2
+const {
+  StorageSafeArchiveManager,
+} = require("./storage-safe-archive-manager.cjs");
+
+// LUKE_AI_STORAGE_LIFECYCLE_IMPORT_V2
+const {
+  StorageLifecycleManager,
+} = require("./storage-lifecycle-manager.cjs");
+
+// LUKE_AI_STORAGE_CAPACITY_IMPORT_V1
+const {
+  StorageCapacityManager,
+} = require("./storage-capacity-manager.cjs");
+
+// LUKE_AI_STORAGE_WORKLOAD_DETECTOR_IMPORT_V2
+const {
+  StorageWorkloadDetector,
+} = require("./storage-workload-detector.cjs");
+
+// LUKE_AI_STORAGE_POLICY_IMPORT_V2
+const {
+  StoragePolicyManager,
+} = require("./storage-policy-manager.cjs");
+
+// LUKE_AI_STORAGE_HEALTH_SCORER_IMPORT_V2
+const {
+  StorageHealthScorer,
+} = require("./storage-health-scorer.cjs");
+
+// LUKE_AI_STORAGE_AVAILABILITY_WATCHER_IMPORT_V2
+const {
+  StorageAvailabilityWatcher,
+} = require("./storage-availability-watcher.cjs");
+
+// LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_IMPORT_V2
+const {
+  UnifiedStorageTransferQueue,
+} = require("./unified-storage-transfer-queue.cjs");
+
+// LUKE_AI_S3_COMPATIBLE_STORAGE_IMPORT_V2
+const {
+  S3CompatibleStorageAdapter,
+} = require("./s3-compatible-storage-adapter.cjs");
+
+// LUKE_AI_STORAGE_KEYCHAIN_IMPORT_V1
+const {
+  MacOSKeychainCredentialVault,
+} = require("./macos-keychain-credential-vault.cjs");
+
+// LUKE_AI_UNIFIED_STORAGE_PROVIDER_IMPORT_V1
+const {
+  UnifiedStorageProviderCore,
+} = require("./unified-storage-provider-core.cjs");
+
+// LUKE_AI_STORAGE_FOLDER_PICKER_IMPORT_V2
+const {
+  chooseStorageFolder,
+} = require("./storage-folder-picker.cjs");
+
+// LUKE_AI_STORAGE_DESTINATION_MANAGER_IMPORT_V2
+const {
+  StorageDestinationManager,
+} = require("./storage-destination-manager.cjs");
+
+// LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_IMPORT_V2
+const {
+  RuntimeInstallQueue,
+} = require("./text-runtime-installer.cjs");
+
+// LUKE_AI_RUNTIME_AUTO_DETECTION_IMPORT_V3
+const {
+  detectTextRuntimes,
+  createPreset:
+    createTextRuntimePreset,
+} = require("./text-runtime-detector.cjs");
+
+// LUKE_AI_RUNTIME_SUPERVISOR_IMPORT_V3
+const {
+  TextRuntimeSupervisor,
+} = require("./text-runtime-supervisor.cjs");
+
 // serve.cjs — portable static file server + backend process manager
 // Serves app/dist/, manages sd-vulkan.exe lifecycle with correct CLI flags
 // serve.cjs — portable static file server + backend process manager
 // Serves app/dist/, manages sd-vulkan.exe lifecycle with correct CLI flags
+
+// LUKE_AI_ASSET_REGISTRY_IMPORT_V1
+const {
+  AssetRegistry,
+} = require(
+  "./asset-registry.cjs"
+);
 
 const http     = require("http");
 const https    = require("https");
@@ -5703,7 +6086,70 @@ function saveGeneratedOutput(imageDataUrl, metadata = {}) {
   };
   fs.writeFileSync(metadataPath, JSON.stringify(savedMetadata, null, 2), "utf8");
   console.log(`  [api] Saved generated output: ${imageFilename}`);
-  return savedMetadata;
+    // LUKE_AI_GENERATED_IMAGE_ASSET_REGISTRATION_V1
+  try {
+    const savedOutput =
+      savedMetadata;
+
+    const existingPath =
+      savedOutput?.path ||
+      savedOutput?.outputPath ||
+      savedOutput?.filePath ||
+      savedOutput?.absolutePath ||
+      null;
+
+    if (existingPath) {
+      const registry =
+        getLukeAssetRegistry();
+
+      registry.upsertByPath({
+        type:
+          "image",
+
+        existingPath,
+
+        storageProviderId:
+          savedOutput?.storageProviderId ||
+          "local",
+
+        sourcePrompt:
+          metadata?.prompt ||
+          metadata?.sourcePrompt ||
+          null,
+
+        sourceModel:
+          metadata?.model ||
+          metadata?.modelId ||
+          metadata?.sourceModel ||
+          null,
+
+        project:
+          metadata?.project ||
+          null,
+
+        campaign:
+          metadata?.campaign ||
+          null,
+
+        metadata: {
+          ...metadata,
+
+          generatedOutput:
+            savedOutput,
+
+          registrationSource:
+            "saveGeneratedOutput",
+        },
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "[assets] Generated Image registration skipped:",
+      error?.message || error
+    );
+  }
+
+return savedMetadata;
 }
 
 function listGeneratedOutputs() {
@@ -5832,7 +6278,14541 @@ function json(res, code, obj) {
 }
 
 // ── HTTP Server ───────────────────────────────────────────────────────────────
+
+// LUKE_AI_RUNTIME_DEPENDENCY_API_V2
+const runtimeDependencyCatalogPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "runtime-dependencies.json"
+);
+
+function readRuntimeDependencyCatalog() {
+  const raw = fs.readFileSync(
+    runtimeDependencyCatalogPath,
+    "utf8"
+  );
+
+  const catalog = JSON.parse(raw);
+
+  if (
+    !catalog ||
+    !Array.isArray(catalog.dependencies)
+  ) {
+    throw new Error(
+      "Runtime dependency catalog is invalid."
+    );
+  }
+
+  return catalog;
+}
+
+function resolveRuntimeDependencyPath(relativePath) {
+  return path.resolve(ROOT, relativePath);
+}
+
+function inspectRuntimeDependencyCheck(check) {
+  if (!check || typeof check !== "object") {
+    return {
+      ok: false,
+      error: "Invalid runtime dependency check",
+    };
+  }
+
+  if (
+    check.type === "file" ||
+    check.type === "executable"
+  ) {
+    const absolutePath =
+      resolveRuntimeDependencyPath(check.path);
+
+    const exists = fs.existsSync(absolutePath);
+    let executable = false;
+
+    if (exists && check.type === "executable") {
+      try {
+        fs.accessSync(
+          absolutePath,
+          fs.constants.X_OK
+        );
+
+        executable = true;
+      } catch {}
+    }
+
+    return {
+      type: check.type,
+      path: absolutePath,
+      exists,
+      executable:
+        check.type === "executable"
+          ? executable
+          : undefined,
+      ok:
+        check.type === "executable"
+          ? exists && executable
+          : exists,
+    };
+  }
+
+  if (check.type === "directory") {
+    const absolutePath =
+      resolveRuntimeDependencyPath(check.path);
+
+    const exists = fs.existsSync(absolutePath);
+    let directory = false;
+    let writable = false;
+
+    if (exists) {
+      try {
+        directory =
+          fs.statSync(absolutePath).isDirectory();
+
+        fs.accessSync(
+          absolutePath,
+          fs.constants.W_OK
+        );
+
+        writable = true;
+      } catch {}
+    }
+
+    return {
+      type: check.type,
+      path: absolutePath,
+      exists,
+      directory,
+      writable,
+      ok: exists && directory && writable,
+    };
+  }
+
+  if (check.type === "python-module") {
+    return {
+      type: check.type,
+      module: check.module,
+      status: "not-probed",
+      ok: false,
+    };
+  }
+
+  return {
+    type: check.type,
+    ok: false,
+    error: "Unsupported runtime dependency check",
+  };
+}
+
+function buildRuntimeDependencyStatus() {
+  const catalog = readRuntimeDependencyCatalog();
+
+  const dependencies = catalog.dependencies.map(
+    (dependency) => {
+      const checks = Array.isArray(dependency.checks)
+        ? dependency.checks.map(
+            inspectRuntimeDependencyCheck
+          )
+        : [];
+
+      const installed =
+        checks.length > 0 &&
+        checks.every(
+          (check) => check.ok === true
+        );
+
+      return {
+        id: dependency.id,
+        name: dependency.name,
+        category: dependency.category,
+        required: dependency.required === true,
+        platforms: dependency.platforms || [],
+        installed,
+        state: installed ? "ready" : "missing",
+        checks,
+        install: dependency.install || {},
+      };
+    }
+  );
+
+  const required = dependencies.filter(
+    (dependency) => dependency.required
+  );
+
+  const optional = dependencies.filter(
+    (dependency) => !dependency.required
+  );
+
+  return {
+    ok: required.every(
+      (dependency) => dependency.installed
+    ),
+    platform: `${process.platform}-${process.arch}`,
+    catalogVersion: catalog.catalogVersion,
+    defaultDownloadDirectory:
+      catalog.defaultDownloadDirectory,
+    fallbackDownloadDirectory:
+      catalog.fallbackDownloadDirectory,
+    summary: {
+      total: dependencies.length,
+      ready: dependencies.filter(
+        (dependency) => dependency.installed
+      ).length,
+      missing: dependencies.filter(
+        (dependency) => !dependency.installed
+      ).length,
+      requiredMissing: required.filter(
+        (dependency) => !dependency.installed
+      ).length,
+      optionalMissing: optional.filter(
+        (dependency) => !dependency.installed
+      ).length,
+    },
+    dependencies,
+  };
+}
+
+
+// LUKE_AI_RUNTIME_INSTALL_STATE_MACHINE_V1
+const runtimeInstallStatePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "install-jobs.json"
+);
+
+const runtimeInstallTransitions = {
+  queued: ["preparing", "cancelled"],
+  preparing: ["downloading", "failed", "cancelled"],
+  downloading: ["verifying", "failed", "cancelled"],
+  verifying: ["installing", "failed", "cancelled"],
+  installing: ["completed", "rolling-back", "failed"],
+  "rolling-back": ["rolled-back", "failed"],
+  completed: [],
+  failed: ["rolling-back"],
+  cancelled: [],
+  "rolled-back": [],
+};
+
+function ensureRuntimeInstallStateFile() {
+  fs.mkdirSync(
+    path.dirname(runtimeInstallStatePath),
+    {
+      recursive: true,
+    }
+  );
+
+  if (!fs.existsSync(runtimeInstallStatePath)) {
+    fs.writeFileSync(
+      runtimeInstallStatePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          updatedAt: null,
+          jobs: [],
+        },
+        null,
+        2
+      ) + "\n",
+      "utf8"
+    );
+  }
+}
+
+function readRuntimeInstallState() {
+  ensureRuntimeInstallStateFile();
+
+  const raw = fs.readFileSync(
+    runtimeInstallStatePath,
+    "utf8"
+  );
+
+  const state = JSON.parse(raw);
+
+  if (!state || !Array.isArray(state.jobs)) {
+    throw new Error(
+      "Runtime install state is invalid."
+    );
+  }
+
+  return state;
+}
+
+function writeRuntimeInstallState(state) {
+  state.updatedAt = new Date().toISOString();
+
+  const temporaryPath =
+    `${runtimeInstallStatePath}.tmp`;
+
+  fs.writeFileSync(
+    temporaryPath,
+    JSON.stringify(state, null, 2) + "\n",
+    "utf8"
+  );
+
+  fs.renameSync(
+    temporaryPath,
+    runtimeInstallStatePath
+  );
+}
+
+function createRuntimeInstallJob(
+  dependencyId,
+  downloadDirectory
+) {
+  const catalog = readRuntimeDependencyCatalog();
+
+  const dependency = catalog.dependencies.find(
+    (item) => item.id === dependencyId
+  );
+
+  if (!dependency) {
+    const error = new Error(
+      `Unknown runtime dependency: ${dependencyId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const state = readRuntimeInstallState();
+
+  const activeJob = state.jobs.find(
+    (job) =>
+      job.dependencyId === dependencyId &&
+      ![
+        "completed",
+        "failed",
+        "cancelled",
+        "rolled-back",
+      ].includes(job.state)
+  );
+
+  if (activeJob) {
+    const error = new Error(
+      `An install job is already active for ${dependencyId}`
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const now = new Date().toISOString();
+
+  const job = {
+    id:
+      `runtime-${Date.now()}-` +
+      Math.random().toString(16).slice(2, 10),
+    dependencyId,
+    state: "queued",
+    progress: {
+      percent: 0,
+      downloadedBytes: 0,
+      totalBytes: null,
+      speedBytesPerSecond: 0,
+    },
+    downloadDirectory:
+      downloadDirectory ||
+      resolveRuntimeStorageDirectory({
+        create: true,
+        createFallback: true,
+      }).selectedDirectory ||
+      catalog.fallbackDownloadDirectory,
+    checksum: {
+      algorithm: "sha256",
+      expected: null,
+      actual: null,
+      verified: false,
+    },
+    error: null,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+  };
+
+  state.jobs.unshift(job);
+
+  state.jobs = state.jobs.slice(0, 100);
+
+  writeRuntimeInstallState(state);
+
+  return job;
+}
+
+function updateRuntimeInstallJob(
+  jobId,
+  nextState,
+  progress = {}
+) {
+  const state = readRuntimeInstallState();
+
+  const job = state.jobs.find(
+    (item) => item.id === jobId
+  );
+
+  if (!job) {
+    const error = new Error(
+      `Runtime install job not found: ${jobId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    nextState &&
+    nextState !== job.state
+  ) {
+    const allowed =
+      runtimeInstallTransitions[job.state] || [];
+
+    if (!allowed.includes(nextState)) {
+      const error = new Error(
+        `Invalid runtime install transition: ` +
+        `${job.state} -> ${nextState}`
+      );
+
+      error.statusCode = 409;
+      throw error;
+    }
+
+    job.state = nextState;
+  }
+
+  if (
+    progress &&
+    typeof progress === "object"
+  ) {
+    if (
+      Number.isFinite(progress.percent)
+    ) {
+      job.progress.percent = Math.max(
+        0,
+        Math.min(100, progress.percent)
+      );
+    }
+
+    if (
+      Number.isFinite(progress.downloadedBytes)
+    ) {
+      job.progress.downloadedBytes =
+        Math.max(0, progress.downloadedBytes);
+    }
+
+    if (
+      Number.isFinite(progress.totalBytes)
+    ) {
+      job.progress.totalBytes =
+        Math.max(0, progress.totalBytes);
+    }
+
+    if (
+      Number.isFinite(progress.speedBytesPerSecond)
+    ) {
+      job.progress.speedBytesPerSecond =
+        Math.max(
+          0,
+          progress.speedBytesPerSecond
+        );
+    }
+  }
+
+  if (job.state === "completed") {
+    job.progress.percent = 100;
+    job.completedAt = new Date().toISOString();
+  }
+
+  if (
+    ["failed", "cancelled", "rolled-back"].includes(
+      job.state
+    )
+  ) {
+    job.completedAt = new Date().toISOString();
+  }
+
+  job.updatedAt = new Date().toISOString();
+
+  writeRuntimeInstallState(state);
+
+  return job;
+}
+
+function getRuntimeInstallJob(jobId) {
+  const state = readRuntimeInstallState();
+
+  return state.jobs.find(
+    (job) => job.id === jobId
+  ) || null;
+}
+
+function listRuntimeInstallJobs() {
+  return readRuntimeInstallState().jobs;
+}
+
+function readJsonRequestBody(req, limitBytes = 1048576) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+
+    req.on("data", (chunk) => {
+      size += chunk.length;
+
+      if (size > limitBytes) {
+        const error = new Error(
+          "Request body is too large."
+        );
+
+        error.statusCode = 413;
+        reject(error);
+        req.destroy();
+        return;
+      }
+
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      if (chunks.length === 0) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(
+          JSON.parse(
+            Buffer.concat(chunks).toString("utf8")
+          )
+        );
+      } catch {
+        const error = new Error(
+          "Invalid JSON request body."
+        );
+
+        error.statusCode = 400;
+        reject(error);
+      }
+    });
+
+    req.on("error", reject);
+  });
+}
+
+
+// LUKE_AI_RUNTIME_SAFE_DOWNLOAD_WORKER_V1
+const runtimeDownloadControllers = new Map();
+
+function getRuntimeDownloadRoot(job) {
+  if (
+    typeof job.downloadDirectory === "string" &&
+    job.downloadDirectory.trim()
+  ) {
+    return expandRuntimeHomePath(
+      job.downloadDirectory
+    );
+  }
+
+  const storage =
+    resolveRuntimeStorageDirectory({
+      create: true,
+      createFallback: true,
+    });
+
+  if (
+    !storage.ok ||
+    !storage.selectedDirectory
+  ) {
+    const error = new Error(
+      "No writable runtime download directory is available."
+    );
+
+    error.code =
+      "RUNTIME_STORAGE_UNAVAILABLE";
+
+    throw error;
+  }
+
+  return storage.selectedDirectory;
+}
+
+function getRuntimeJobPaths(job) {
+  const root = getRuntimeDownloadRoot(job);
+  const jobRoot = path.join(
+    root,
+    ".luke-runtime",
+    job.id
+  );
+
+  return {
+    root,
+    jobRoot,
+    temporaryFile: path.join(
+      jobRoot,
+      "download.part"
+    ),
+    verifiedFile: path.join(
+      jobRoot,
+      "download.verified"
+    ),
+    installDirectory: path.join(
+      root,
+      "installed",
+      job.dependencyId
+    ),
+    backupDirectory: path.join(
+      root,
+      ".luke-runtime-backups",
+      `${job.dependencyId}-${job.id}`
+    ),
+  };
+}
+
+function ensureWritableDirectory(directory) {
+  fs.mkdirSync(directory, {
+    recursive: true,
+  });
+
+  fs.accessSync(
+    directory,
+    fs.constants.W_OK
+  );
+}
+
+function calculateFileSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = require("node:crypto").createHash("sha256");
+    const input = fs.createReadStream(filePath);
+
+    input.on("error", reject);
+
+    input.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+
+    input.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+  });
+}
+
+function removeRuntimePath(targetPath) {
+  if (!targetPath || !fs.existsSync(targetPath)) {
+    return;
+  }
+
+  fs.rmSync(targetPath, {
+    recursive: true,
+    force: true,
+  });
+}
+
+function copyRuntimePath(source, destination) {
+  if (!fs.existsSync(source)) {
+    return;
+  }
+
+  ensureWritableDirectory(
+    path.dirname(destination)
+  );
+
+  fs.cpSync(
+    source,
+    destination,
+    {
+      recursive: true,
+      force: true,
+    }
+  );
+}
+
+function updateRuntimeJobFields(
+  jobId,
+  fields = {}
+) {
+  const state = readRuntimeInstallState();
+
+  const job = state.jobs.find(
+    (item) => item.id === jobId
+  );
+
+  if (!job) {
+    const error = new Error(
+      `Runtime install job not found: ${jobId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  Object.assign(job, fields);
+  job.updatedAt = new Date().toISOString();
+
+  writeRuntimeInstallState(state);
+
+  return job;
+}
+
+function getRuntimeDependencyAsset(
+  dependencyId,
+  override = {}
+) {
+  const catalog = readRuntimeDependencyCatalog();
+
+  const dependency = catalog.dependencies.find(
+    (item) => item.id === dependencyId
+  );
+
+  if (!dependency) {
+    const error = new Error(
+      `Unknown runtime dependency: ${dependencyId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const source = {
+    ...(dependency.download || {}),
+    ...(override || {}),
+  };
+
+  if (
+    typeof source.url !== "string" ||
+    !source.url.trim()
+  ) {
+    const error = new Error(
+      `No download URL configured for ${dependencyId}`
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    typeof source.sha256 !== "string" ||
+    !/^[a-fA-F0-9]{64}$/.test(source.sha256)
+  ) {
+    const error = new Error(
+      `A valid SHA256 is required for ${dependencyId}`
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    dependency,
+    url: source.url.trim(),
+    sha256: source.sha256.toLowerCase(),
+    filename:
+      typeof source.filename === "string" &&
+      source.filename.trim()
+        ? path.basename(source.filename.trim())
+        : `${dependencyId}.package`,
+  };
+}
+
+async function downloadRuntimeAsset(
+  job,
+  asset,
+  controller
+) {
+  const paths = getRuntimeJobPaths(job);
+
+  ensureWritableDirectory(paths.jobRoot);
+
+  removeRuntimePath(paths.temporaryFile);
+  removeRuntimePath(paths.verifiedFile);
+
+  const response = await fetch(
+    asset.url,
+    {
+      redirect: "follow",
+      signal: controller.signal,
+    }
+  );
+
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `Runtime download failed with HTTP ${response.status}`
+    );
+  }
+
+  const totalBytesHeader =
+    response.headers.get("content-length");
+
+  const totalBytes =
+    totalBytesHeader &&
+    Number.isFinite(Number(totalBytesHeader))
+      ? Number(totalBytesHeader)
+      : null;
+
+  const output = fs.createWriteStream(
+    paths.temporaryFile,
+    {
+      flags: "wx",
+    }
+  );
+
+  const reader = response.body.getReader();
+  const startedAt = Date.now();
+  let downloadedBytes = 0;
+  let lastPersistedAt = 0;
+
+  try {
+    while (true) {
+      const result = await reader.read();
+
+      if (result.done) {
+        break;
+      }
+
+      const chunk = Buffer.from(result.value);
+
+      await new Promise((resolve, reject) => {
+        output.write(chunk, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+
+      downloadedBytes += chunk.length;
+
+      const now = Date.now();
+
+      if (
+        now - lastPersistedAt >= 250 ||
+        (
+          totalBytes &&
+          downloadedBytes >= totalBytes
+        )
+      ) {
+        const elapsedSeconds = Math.max(
+          0.001,
+          (now - startedAt) / 1000
+        );
+
+        const percent = totalBytes
+          ? Math.min(
+              99,
+              Math.floor(
+                downloadedBytes /
+                totalBytes *
+                100
+              )
+            )
+          : 0;
+
+        updateRuntimeInstallJob(
+          job.id,
+          undefined,
+          {
+            percent,
+            downloadedBytes,
+            totalBytes,
+            speedBytesPerSecond:
+              Math.floor(
+                downloadedBytes /
+                elapsedSeconds
+              ),
+          }
+        );
+
+        lastPersistedAt = now;
+      }
+    }
+  } finally {
+    await new Promise((resolve) => {
+      output.end(resolve);
+    });
+  }
+
+  return {
+    ...paths,
+    downloadedBytes,
+    totalBytes,
+  };
+}
+
+async function verifyRuntimeDownload(
+  job,
+  asset,
+  paths
+) {
+  const actualSha256 =
+    await calculateFileSha256(
+      paths.temporaryFile
+    );
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      checksum: {
+        algorithm: "sha256",
+        expected: asset.sha256,
+        actual: actualSha256,
+        verified:
+          actualSha256 === asset.sha256,
+      },
+    }
+  );
+
+  if (actualSha256 !== asset.sha256) {
+    const error = new Error(
+      "Runtime package SHA256 verification failed."
+    );
+
+    error.code = "CHECKSUM_MISMATCH";
+    throw error;
+  }
+
+  fs.renameSync(
+    paths.temporaryFile,
+    paths.verifiedFile
+  );
+
+  return actualSha256;
+}
+
+function prepareRuntimeRollback(job, paths) {
+  removeRuntimePath(paths.backupDirectory);
+
+  if (fs.existsSync(paths.installDirectory)) {
+    copyRuntimePath(
+      paths.installDirectory,
+      paths.backupDirectory
+    );
+  }
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      rollback: {
+        backupDirectory:
+          paths.backupDirectory,
+        previousInstallExisted:
+          fs.existsSync(
+            paths.backupDirectory
+          ),
+        restored: false,
+      },
+    }
+  );
+}
+
+function installRuntimePackage(job, asset, paths) {
+  ensureWritableDirectory(
+    paths.installDirectory
+  );
+
+  const destination = path.join(
+    paths.installDirectory,
+    asset.filename
+  );
+
+  fs.copyFileSync(
+    paths.verifiedFile,
+    destination
+  );
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      installedAsset: {
+        path: destination,
+        filename: asset.filename,
+        sha256: asset.sha256,
+      },
+    }
+  );
+
+  return destination;
+}
+
+function rollbackRuntimeInstallation(
+  job,
+  paths
+) {
+  removeRuntimePath(
+    paths.installDirectory
+  );
+
+  if (
+    fs.existsSync(
+      paths.backupDirectory
+    )
+  ) {
+    copyRuntimePath(
+      paths.backupDirectory,
+      paths.installDirectory
+    );
+  }
+
+  updateRuntimeJobFields(
+    job.id,
+    {
+      rollback: {
+        ...job.rollback,
+        restored: true,
+        restoredAt:
+          new Date().toISOString(),
+      },
+    }
+  );
+}
+
+async function runRuntimeInstallJob(
+  jobId,
+  assetOverride = {}
+) {
+  let job = getRuntimeInstallJob(jobId);
+
+  if (!job) {
+    throw new Error(
+      `Runtime install job not found: ${jobId}`
+    );
+  }
+
+  const controller = new AbortController();
+
+  runtimeDownloadControllers.set(
+    jobId,
+    controller
+  );
+
+  let paths = null;
+
+  try {
+    const asset = getRuntimeDependencyAsset(
+      job.dependencyId,
+      assetOverride
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "preparing",
+      {
+        percent: 1,
+      }
+    );
+
+    paths = getRuntimeJobPaths(job);
+
+    ensureWritableDirectory(paths.root);
+    ensureWritableDirectory(paths.jobRoot);
+
+    updateRuntimeJobFields(
+      jobId,
+      {
+        source: {
+          url: asset.url,
+          filename: asset.filename,
+        },
+        error: null,
+      }
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "downloading",
+      {
+        percent: 2,
+      }
+    );
+
+    paths = await downloadRuntimeAsset(
+      job,
+      asset,
+      controller
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "verifying",
+      {
+        percent: 99,
+        downloadedBytes:
+          paths.downloadedBytes,
+        totalBytes:
+          paths.totalBytes ||
+          paths.downloadedBytes,
+      }
+    );
+
+    await verifyRuntimeDownload(
+      job,
+      asset,
+      paths
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "installing",
+      {
+        percent: 99,
+      }
+    );
+
+    prepareRuntimeRollback(
+      job,
+      paths
+    );
+
+    installRuntimePackage(
+      job,
+      asset,
+      paths
+    );
+
+    job = updateRuntimeInstallJob(
+      jobId,
+      "completed",
+      {
+        percent: 100,
+      }
+    );
+
+    updateRuntimeJobFields(
+      jobId,
+      {
+        error: null,
+      }
+    );
+
+    removeRuntimePath(paths.jobRoot);
+
+    return getRuntimeInstallJob(jobId);
+  } catch (error) {
+    job = getRuntimeInstallJob(jobId);
+
+    const cancelled =
+      error &&
+      (
+        error.name === "AbortError" ||
+        error.code === "ABORT_ERR"
+      );
+
+    if (cancelled) {
+      if (
+        job &&
+        ![
+          "completed",
+          "cancelled",
+          "rolled-back",
+        ].includes(job.state)
+      ) {
+        updateRuntimeInstallJob(
+          jobId,
+          "cancelled"
+        );
+      }
+    } else {
+      if (
+        job &&
+        job.state === "installing"
+      ) {
+        updateRuntimeInstallJob(
+          jobId,
+          "rolling-back"
+        );
+
+        rollbackRuntimeInstallation(
+          getRuntimeInstallJob(jobId),
+          paths || getRuntimeJobPaths(job)
+        );
+
+        updateRuntimeInstallJob(
+          jobId,
+          "rolled-back"
+        );
+      } else if (
+        job &&
+        ![
+          "failed",
+          "cancelled",
+          "rolled-back",
+        ].includes(job.state)
+      ) {
+        updateRuntimeInstallJob(
+          jobId,
+          "failed"
+        );
+      }
+
+      updateRuntimeJobFields(
+        jobId,
+        {
+          error: {
+            message:
+              error instanceof Error
+                ? error.message
+                : String(error),
+            code:
+              error && error.code
+                ? String(error.code)
+                : null,
+            occurredAt:
+              new Date().toISOString(),
+          },
+        }
+      );
+    }
+
+    if (paths) {
+      removeRuntimePath(
+        paths.temporaryFile
+      );
+
+      removeRuntimePath(
+        paths.verifiedFile
+      );
+    }
+
+    throw error;
+  } finally {
+    runtimeDownloadControllers.delete(jobId);
+  }
+}
+
+function startRuntimeInstallJob(
+  jobId,
+  assetOverride = {}
+) {
+  setImmediate(() => {
+    runRuntimeInstallJob(
+      jobId,
+      assetOverride
+    ).catch((error) => {
+      console.error(
+        `[runtime] Install job ${jobId} failed:`,
+        error instanceof Error
+          ? error.message
+          : String(error)
+      );
+    });
+  });
+}
+
+function cancelRuntimeInstallWorker(jobId) {
+  const controller =
+    runtimeDownloadControllers.get(jobId);
+
+  if (controller) {
+    controller.abort();
+    return true;
+  }
+
+  return false;
+}
+
+
+// LUKE_AI_RUNTIME_STORAGE_AVAILABILITY_V1
+function expandRuntimeHomePath(value) {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return "";
+  }
+
+  const homeDirectory =
+    process.env.HOME ||
+    process.env.USERPROFILE ||
+    ROOT;
+
+  return path.resolve(
+    value.trim().replace(
+      /^~(?=$|\/)/,
+      homeDirectory
+    )
+  );
+}
+
+function inspectRuntimeStorageDirectory(
+  directory,
+  options = {}
+) {
+  const resolvedPath =
+    expandRuntimeHomePath(directory);
+
+  const result = {
+    path: resolvedPath,
+    exists: false,
+    directory: false,
+    writable: false,
+    created: false,
+    freeBytes: null,
+    totalBytes: null,
+    error: null,
+  };
+
+  if (!resolvedPath) {
+    result.error =
+      "Runtime storage path is empty.";
+
+    return result;
+  }
+
+  try {
+    if (
+      !fs.existsSync(resolvedPath) &&
+      options.create === true
+    ) {
+      fs.mkdirSync(
+        resolvedPath,
+        {
+          recursive: true,
+        }
+      );
+
+      result.created = true;
+    }
+
+    result.exists =
+      fs.existsSync(resolvedPath);
+
+    if (!result.exists) {
+      return result;
+    }
+
+    result.directory =
+      fs.statSync(resolvedPath).isDirectory();
+
+    if (!result.directory) {
+      result.error =
+        "Runtime storage path is not a directory.";
+
+      return result;
+    }
+
+    fs.accessSync(
+      resolvedPath,
+      fs.constants.W_OK
+    );
+
+    result.writable = true;
+
+    if (typeof fs.statfsSync === "function") {
+      const stats =
+        fs.statfsSync(resolvedPath);
+
+      result.freeBytes =
+        Number(stats.bavail) *
+        Number(stats.bsize);
+
+      result.totalBytes =
+        Number(stats.blocks) *
+        Number(stats.bsize);
+    }
+  } catch (error) {
+    result.error =
+      error instanceof Error
+        ? error.message
+        : String(error);
+  }
+
+  return result;
+}
+
+function resolveRuntimeStorageDirectory(
+  options = {}
+) {
+  const catalog =
+    readRuntimeDependencyCatalog();
+
+  const policy =
+    catalog.storagePolicy || {};
+
+  const minimumFreeBytes =
+    Number.isFinite(
+      Number(policy.minimumFreeBytes)
+    )
+      ? Number(policy.minimumFreeBytes)
+      : 0;
+
+  // LUKE_AI_RUNTIME_STORAGE_MOUNT_GUARD_V1
+  const preferredDirectory =
+    expandRuntimeHomePath(
+      catalog.defaultDownloadDirectory
+    );
+
+  const configuredExternalRoot =
+    expandRuntimeHomePath(
+      policy.externalVolumeRoot || ""
+    );
+
+  const externalRootMounted =
+    Boolean(configuredExternalRoot) &&
+    fs.existsSync(configuredExternalRoot) &&
+    fs.statSync(configuredExternalRoot).isDirectory();
+
+  const preferredIsInsideExternalRoot =
+    externalRootMounted &&
+    (
+      preferredDirectory === configuredExternalRoot ||
+      preferredDirectory.startsWith(
+        `${configuredExternalRoot}${path.sep}`
+      )
+    );
+
+  const mayCreateExternalDirectory =
+    options.create === true &&
+    policy.createDirectoryWhenWritable === true &&
+    preferredIsInsideExternalRoot;
+
+  const external =
+    inspectRuntimeStorageDirectory(
+      preferredDirectory,
+      {
+        create: mayCreateExternalDirectory,
+      }
+    );
+
+  external.volumeRoot =
+    configuredExternalRoot || null;
+
+  external.volumeMounted =
+    externalRootMounted;
+
+  external.creationAllowed =
+    mayCreateExternalDirectory;
+
+  const externalHasSpace =
+    external.freeBytes === null ||
+    external.freeBytes >= minimumFreeBytes;
+
+  const externalAvailable =
+    external.exists &&
+    external.directory &&
+    external.writable &&
+    externalHasSpace;
+
+  const fallback =
+    inspectRuntimeStorageDirectory(
+      catalog.fallbackDownloadDirectory,
+      {
+        create:
+          options.createFallback !== false,
+      }
+    );
+
+  const fallbackHasSpace =
+    fallback.freeBytes === null ||
+    fallback.freeBytes >= minimumFreeBytes;
+
+  const fallbackAvailable =
+    fallback.exists &&
+    fallback.directory &&
+    fallback.writable &&
+    fallbackHasSpace;
+
+  let selected = null;
+  let usingFallback = false;
+  let reason = null;
+
+  if (externalAvailable) {
+    selected = external;
+  } else if (
+    policy.fallbackWhenUnavailable !== false &&
+    fallbackAvailable
+  ) {
+    selected = fallback;
+    usingFallback = true;
+
+    if (!external.exists) {
+      reason = "external-drive-not-mounted";
+    } else if (!external.directory) {
+      reason = "external-path-not-directory";
+    } else if (!external.writable) {
+      reason = "external-path-not-writable";
+    } else if (!externalHasSpace) {
+      reason = "external-drive-low-space";
+    } else {
+      reason = "external-drive-unavailable";
+    }
+  } else {
+    reason = "no-writable-storage";
+  }
+
+  return {
+    ok: Boolean(selected),
+    preferredDirectory,
+    externalVolumeRoot:
+      configuredExternalRoot || null,
+    externalVolumeMounted:
+      externalRootMounted,
+    externalDirectoryCreationAllowed:
+      mayCreateExternalDirectory,
+    fallbackDirectory:
+      expandRuntimeHomePath(
+        catalog.fallbackDownloadDirectory
+      ),
+    selectedDirectory:
+      selected?.path || null,
+    usingFallback,
+    reason,
+    minimumFreeBytes,
+    external,
+    fallback,
+  };
+}
+
+
+// LUKE_AI_RUNTIME_STORAGE_CLEANUP_V1
+const runtimeCleanupCategories = {
+  outputs: {
+    label: "Generated outputs",
+    path: path.join(ROOT, "app", "outputs"),
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  transcriptions: {
+    label: "Transcriptions",
+    path: path.join(ROOT, "app", "transcriptions"),
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  cache: {
+    label: "Runtime cache",
+    resolvePath() {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        });
+
+      return storage.selectedDirectory
+        ? path.join(
+            storage.selectedDirectory,
+            ".luke-runtime"
+          )
+        : null;
+    },
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  backups: {
+    label: "Runtime backups",
+    resolvePath() {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        });
+
+      return storage.selectedDirectory
+        ? path.join(
+            storage.selectedDirectory,
+            ".luke-runtime-backups"
+          )
+        : null;
+    },
+    cleanupAllowed: true,
+    preserveDirectory: true,
+  },
+  models: {
+    label: "AI models",
+    path: path.join(ROOT, "app", "models"),
+    cleanupAllowed: false,
+    preserveDirectory: true,
+  },
+  chatHistory: {
+    label: "Chat history",
+    path: path.join(ROOT, "app", "chat-history"),
+    cleanupAllowed: false,
+    preserveDirectory: true,
+  },
+  installedRuntimes: {
+    label: "Installed runtimes",
+    resolvePath() {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        });
+
+      return storage.selectedDirectory
+        ? path.join(
+            storage.selectedDirectory,
+            "installed"
+          )
+        : null;
+    },
+    cleanupAllowed: false,
+    preserveDirectory: true,
+  },
+};
+
+function resolveRuntimeCleanupCategoryPath(
+  category
+) {
+  if (!category) {
+    return null;
+  }
+
+  if (typeof category.resolvePath === "function") {
+    return category.resolvePath();
+  }
+
+  return category.path || null;
+}
+
+function isPathInside(parentPath, childPath) {
+  if (!parentPath || !childPath) {
+    return false;
+  }
+
+  const parent = path.resolve(parentPath);
+  const child = path.resolve(childPath);
+
+  return (
+    child === parent ||
+    child.startsWith(`${parent}${path.sep}`)
+  );
+}
+
+function collectRuntimeProtectedPaths() {
+  const protectedPaths = new Set();
+  const state = readRuntimeInstallState();
+
+  for (const job of state.jobs) {
+    if (
+      !job ||
+      ![
+        "queued",
+        "preparing",
+        "downloading",
+        "verifying",
+        "installing",
+        "rolling-back",
+      ].includes(job.state)
+    ) {
+      continue;
+    }
+
+    const paths = getRuntimeJobPaths(job);
+
+    for (const protectedPath of [
+      paths.jobRoot,
+      paths.temporaryFile,
+      paths.verifiedFile,
+      paths.installDirectory,
+      paths.backupDirectory,
+      job.installedAsset?.path,
+    ]) {
+      if (protectedPath) {
+        protectedPaths.add(
+          path.resolve(protectedPath)
+        );
+      }
+    }
+  }
+
+  return [...protectedPaths];
+}
+
+function isRuntimePathProtected(
+  candidatePath,
+  protectedPaths
+) {
+  const candidate = path.resolve(candidatePath);
+
+  return protectedPaths.some(
+    (protectedPath) =>
+      isPathInside(candidate, protectedPath) ||
+      isPathInside(protectedPath, candidate)
+  );
+}
+
+// LUKE_AI_RUNTIME_STORAGE_CLEANUP_PROTECTION_FIX_V1
+function isRuntimeCleanupRootBlocked(
+  cleanupRoot,
+  protectedPaths
+) {
+  const resolvedRoot = path.resolve(cleanupRoot);
+
+  return protectedPaths.some(
+    (protectedPath) =>
+      isPathInside(
+        path.resolve(protectedPath),
+        resolvedRoot
+      )
+  );
+}
+
+function inspectRuntimeStorageEntry(
+  entryPath,
+  protectedPaths
+) {
+  const resolvedPath = path.resolve(entryPath);
+
+  const result = {
+    path: resolvedPath,
+    exists: false,
+    type: "missing",
+    sizeBytes: 0,
+    fileCount: 0,
+    directoryCount: 0,
+    symlinkCount: 0,
+    protected: isRuntimeCleanupRootBlocked(
+      resolvedPath,
+      protectedPaths
+    ),
+    error: null,
+  };
+
+  if (!fs.existsSync(resolvedPath)) {
+    return result;
+  }
+
+  try {
+    const rootStat = fs.lstatSync(resolvedPath);
+
+    result.exists = true;
+
+    if (rootStat.isSymbolicLink()) {
+      result.type = "symlink";
+      result.symlinkCount = 1;
+      result.protected = true;
+      return result;
+    }
+
+    if (rootStat.isFile()) {
+      result.type = "file";
+      result.sizeBytes = rootStat.size;
+      result.fileCount = 1;
+      return result;
+    }
+
+    if (!rootStat.isDirectory()) {
+      result.type = "other";
+      result.protected = true;
+      return result;
+    }
+
+    result.type = "directory";
+
+    const stack = [resolvedPath];
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+
+      let entries = [];
+
+      try {
+        entries = fs.readdirSync(
+          current,
+          {
+            withFileTypes: true,
+          }
+        );
+      } catch (error) {
+        result.error =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        continue;
+      }
+
+      for (const entry of entries) {
+        const childPath = path.join(
+          current,
+          entry.name
+        );
+
+        let stat;
+
+        try {
+          stat = fs.lstatSync(childPath);
+        } catch {
+          continue;
+        }
+
+        if (stat.isSymbolicLink()) {
+          result.symlinkCount += 1;
+          continue;
+        }
+
+        if (stat.isDirectory()) {
+          result.directoryCount += 1;
+          stack.push(childPath);
+          continue;
+        }
+
+        if (stat.isFile()) {
+          result.fileCount += 1;
+          result.sizeBytes += stat.size;
+        }
+      }
+    }
+  } catch (error) {
+    result.error =
+      error instanceof Error
+        ? error.message
+        : String(error);
+  }
+
+  return result;
+}
+
+function buildRuntimeStorageUsage() {
+  const protectedPaths =
+    collectRuntimeProtectedPaths();
+
+  const categories = Object.entries(
+    runtimeCleanupCategories
+  ).map(([id, category]) => {
+    const categoryPath =
+      resolveRuntimeCleanupCategoryPath(
+        category
+      );
+
+    const usage = categoryPath
+      ? inspectRuntimeStorageEntry(
+          categoryPath,
+          protectedPaths
+        )
+      : {
+          path: null,
+          exists: false,
+          type: "missing",
+          sizeBytes: 0,
+          fileCount: 0,
+          directoryCount: 0,
+          symlinkCount: 0,
+          protected: false,
+          error: null,
+        };
+
+    return {
+      id,
+      label: category.label,
+      cleanupAllowed:
+        category.cleanupAllowed === true,
+      preserveDirectory:
+        category.preserveDirectory === true,
+      ...usage,
+    };
+  });
+
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    protectedPaths,
+    summary: {
+      totalBytes: categories.reduce(
+        (total, category) =>
+          total + category.sizeBytes,
+        0
+      ),
+      cleanableBytes: categories
+        .filter(
+          (category) =>
+            category.cleanupAllowed &&
+            !category.protected
+        )
+        .reduce(
+          (total, category) =>
+            total + category.sizeBytes,
+          0
+        ),
+      categoryCount: categories.length,
+      protectedCategoryCount:
+        categories.filter(
+          (category) => category.protected
+        ).length,
+    },
+    categories,
+  };
+}
+
+function removeRuntimeCleanupContents(
+  rootPath,
+  protectedPaths,
+  options = {}
+) {
+  const resolvedRoot = path.resolve(rootPath);
+
+  const result = {
+    deletedBytes: 0,
+    deletedFiles: 0,
+    deletedDirectories: 0,
+    skippedProtected: [],
+    skippedSymlinks: [],
+    errors: [],
+  };
+
+  if (!fs.existsSync(resolvedRoot)) {
+    return result;
+  }
+
+  const rootStat = fs.lstatSync(resolvedRoot);
+
+  if (
+    rootStat.isSymbolicLink() ||
+    !rootStat.isDirectory()
+  ) {
+    result.errors.push(
+      "Cleanup root must be a real directory."
+    );
+
+    return result;
+  }
+
+  function visit(directory) {
+    let entries = [];
+
+    try {
+      entries = fs.readdirSync(
+        directory,
+        {
+          withFileTypes: true,
+        }
+      );
+    } catch (error) {
+      result.errors.push(
+        error instanceof Error
+          ? error.message
+          : String(error)
+      );
+
+      return;
+    }
+
+    for (const entry of entries) {
+      const childPath = path.join(
+        directory,
+        entry.name
+      );
+
+      if (
+        !isPathInside(
+          resolvedRoot,
+          childPath
+        )
+      ) {
+        result.errors.push(
+          `Unsafe cleanup path rejected: ${childPath}`
+        );
+
+        continue;
+      }
+
+      let stat;
+
+      try {
+        stat = fs.lstatSync(childPath);
+      } catch {
+        continue;
+      }
+
+      if (stat.isSymbolicLink()) {
+        result.skippedSymlinks.push(
+          childPath
+        );
+
+        continue;
+      }
+
+      if (
+        isRuntimePathProtected(
+          childPath,
+          protectedPaths
+        )
+      ) {
+        result.skippedProtected.push(
+          childPath
+        );
+
+        continue;
+      }
+
+      if (stat.isDirectory()) {
+        visit(childPath);
+
+        if (options.dryRun !== true) {
+          try {
+            const remaining =
+              fs.readdirSync(childPath);
+
+            if (remaining.length === 0) {
+              fs.rmdirSync(childPath);
+              result.deletedDirectories += 1;
+            }
+          } catch (error) {
+            result.errors.push(
+              error instanceof Error
+                ? error.message
+                : String(error)
+            );
+          }
+        }
+
+        continue;
+      }
+
+      if (stat.isFile()) {
+        result.deletedBytes += stat.size;
+        result.deletedFiles += 1;
+
+        if (options.dryRun !== true) {
+          try {
+            fs.unlinkSync(childPath);
+          } catch (error) {
+            result.errors.push(
+              error instanceof Error
+                ? error.message
+                : String(error)
+            );
+          }
+        }
+      }
+    }
+  }
+
+  visit(resolvedRoot);
+
+  return result;
+}
+
+function cleanupRuntimeStorageCategory(
+  categoryId,
+  options = {}
+) {
+  const category =
+    runtimeCleanupCategories[categoryId];
+
+  if (!category) {
+    const error = new Error(
+      `Unknown cleanup category: ${categoryId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (category.cleanupAllowed !== true) {
+    const error = new Error(
+      `Cleanup is not allowed for ${categoryId}`
+    );
+
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const categoryPath =
+    resolveRuntimeCleanupCategoryPath(
+      category
+    );
+
+  if (!categoryPath) {
+    const error = new Error(
+      `Cleanup path is unavailable for ${categoryId}`
+    );
+
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const protectedPaths =
+    collectRuntimeProtectedPaths();
+
+  if (
+    isRuntimeCleanupRootBlocked(
+      categoryPath,
+      protectedPaths
+    )
+  ) {
+    const error = new Error(
+      `Cleanup category root is currently protected: ${categoryId}`
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const before =
+    inspectRuntimeStorageEntry(
+      categoryPath,
+      protectedPaths
+    );
+
+  const cleanup =
+    removeRuntimeCleanupContents(
+      categoryPath,
+      protectedPaths,
+      {
+        dryRun: options.dryRun === true,
+      }
+    );
+
+  const after =
+    options.dryRun === true
+      ? before
+      : inspectRuntimeStorageEntry(
+          categoryPath,
+          protectedPaths
+        );
+
+  return {
+    ok: cleanup.errors.length === 0,
+    categoryId,
+    dryRun: options.dryRun === true,
+    before,
+    after,
+    cleanup,
+  };
+}
+
+
+// LUKE_AI_TEXT_MODEL_CATALOG_QUEUE_V1
+const textModelCatalogPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-models",
+  "signed-catalog.json"
+);
+
+const textModelPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-models",
+  "catalog-policy.json"
+);
+
+const textModelQueuePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-models",
+  "download-queue.json"
+);
+
+function readJsonFileStrict(filePath, label) {
+  const value = JSON.parse(
+    fs.readFileSync(filePath, "utf8")
+  );
+
+  if (!value || typeof value !== "object") {
+    throw new Error(`${label} is invalid.`);
+  }
+
+  return value;
+}
+
+function writeJsonFileAtomic(filePath, value) {
+  fs.mkdirSync(
+    path.dirname(filePath),
+    {
+      recursive: true,
+    }
+  );
+
+  const temporaryPath = `${filePath}.tmp`;
+
+  fs.writeFileSync(
+    temporaryPath,
+    JSON.stringify(value, null, 2) + "\n",
+    "utf8"
+  );
+
+  fs.renameSync(
+    temporaryPath,
+    filePath
+  );
+}
+
+function readTextModelCatalog() {
+  const catalog = readJsonFileStrict(
+    textModelCatalogPath,
+    "Text model catalog"
+  );
+
+  if (!Array.isArray(catalog.models)) {
+    throw new Error(
+      "Text model catalog contains no models."
+    );
+  }
+
+  return catalog;
+}
+
+function readTextModelPolicy() {
+  return readJsonFileStrict(
+    textModelPolicyPath,
+    "Text model policy"
+  );
+}
+
+function readTextModelQueue() {
+  const queue = readJsonFileStrict(
+    textModelQueuePath,
+    "Text model queue"
+  );
+
+  if (!Array.isArray(queue.items)) {
+    throw new Error(
+      "Text model queue is invalid."
+    );
+  }
+
+  return queue;
+}
+
+function writeTextModelQueue(queue) {
+  queue.updatedAt = new Date().toISOString();
+
+  writeJsonFileAtomic(
+    textModelQueuePath,
+    queue
+  );
+}
+
+function getCatalogModelVariant(
+  modelId,
+  variantId
+) {
+  const catalog =
+    readTextModelCatalog();
+
+  const model =
+    catalog.models.find(
+      (item) =>
+        item.id === modelId
+    );
+
+  if (!model) {
+    const error = new Error(
+      `Unknown text model: ${modelId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const hardwareRecommendation =
+    typeof getTextModelHardwareRecommendation ===
+      "function"
+      ? getTextModelHardwareRecommendation(
+          modelId
+        )
+      : null;
+
+  const selectedVariantId =
+    variantId ||
+    hardwareRecommendation
+      ?.recommendedVariantId ||
+    model.recommendedVariant ||
+    model.variants?.[0]?.id;
+
+  const variant =
+    (model.variants || []).find(
+      (item) =>
+        item.id === selectedVariantId
+    );
+
+  if (!variant) {
+    const error = new Error(
+      `Unknown model variant: ${selectedVariantId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return {
+    model,
+    variant,
+  };
+}
+
+function validateTrustedModelDownload(
+  model,
+  variant
+) {
+  const catalog = readTextModelCatalog();
+
+  const allowedHosts = new Set(
+    catalog.trust?.allowedHosts || []
+  );
+
+  const allowedPublishers = new Set(
+    catalog.trust?.allowedPublishers || []
+  );
+
+  if (!allowedPublishers.has(model.publisher)) {
+    const error = new Error(
+      "Model publisher is not trusted."
+    );
+
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const downloadUrl = new URL(
+    variant.download?.url
+  );
+
+  const trustedTestLoopback =
+    process.env.NODE_ENV === "test" &&
+    downloadUrl.protocol === "http:" &&
+    [
+      "127.0.0.1",
+      "localhost",
+      "::1",
+    ].includes(downloadUrl.hostname);
+
+  if (
+    (
+      downloadUrl.protocol !== "https:" &&
+      !trustedTestLoopback
+    ) ||
+    !allowedHosts.has(downloadUrl.hostname)
+  ) {
+    const error = new Error(
+      "Model download URL is not trusted."
+    );
+
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+async function resolveHuggingFaceSha256(
+  model,
+  variant
+) {
+  if (
+    typeof variant.download?.sha256 === "string" &&
+    /^[a-f0-9]{64}$/i.test(
+      variant.download.sha256
+    )
+  ) {
+    return variant.download.sha256.toLowerCase();
+  }
+
+  if (
+    variant.download?.provider !== "huggingface" ||
+    variant.download?.resolveSha256FromMetadata !== true
+  ) {
+    throw new Error(
+      "Trusted SHA256 is unavailable."
+    );
+  }
+
+  const metadataUrl = new URL(
+    variant.download.metadataUrl
+  );
+
+  if (
+    metadataUrl.protocol !== "https:" ||
+    metadataUrl.hostname !== "huggingface.co"
+  ) {
+    throw new Error(
+      "Untrusted model metadata URL."
+    );
+  }
+
+  const response = await fetch(
+    metadataUrl,
+    {
+      headers: {
+        accept: "application/json",
+        "user-agent":
+          "LUKE-AI-STUDIO/TextModelManager",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to resolve model metadata: HTTP ${response.status}`
+    );
+  }
+
+  const metadata = await response.json();
+
+  const sibling = (
+    metadata.siblings || []
+  ).find(
+    (item) =>
+      item.rfilename === variant.filename
+  );
+
+  const sha256 =
+    sibling?.lfs?.sha256 ||
+    sibling?.xetHash ||
+    null;
+
+  if (
+    typeof sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/i.test(sha256)
+  ) {
+    throw new Error(
+      "Model metadata did not provide a valid SHA256."
+    );
+  }
+
+  return sha256.toLowerCase();
+}
+
+function sanitizeTextModelQueue(queue) {
+  const policy = readTextModelPolicy();
+
+  const maximumBatchSelection =
+    Number(
+      policy.downloadPolicy
+        ?.maximumBatchSelection
+    ) || 3;
+
+  const activeItems = queue.items.filter(
+    (item) =>
+      ![
+        "completed",
+        "cancelled",
+        "failed",
+        "skipped",
+      ].includes(item.state)
+  );
+
+  if (
+    activeItems.length >
+    maximumBatchSelection
+  ) {
+    throw new Error(
+      `Text model queue cannot contain more than ${maximumBatchSelection} active items.`
+    );
+  }
+
+  return queue;
+}
+
+async function enqueueTextModel(
+  modelId,
+  variantId
+) {
+  const policy = readTextModelPolicy();
+
+  const maximumBatchSelection =
+    Number(
+      policy.downloadPolicy
+        ?.maximumBatchSelection
+    ) || 3;
+
+  const queue = readTextModelQueue();
+
+  const activeItems = queue.items.filter(
+    (item) =>
+      ![
+        "completed",
+        "cancelled",
+        "failed",
+        "skipped",
+      ].includes(item.state)
+  );
+
+  if (
+    activeItems.length >=
+    maximumBatchSelection
+  ) {
+    const error = new Error(
+      `เลือกดาวน์โหลดได้สูงสุด ${maximumBatchSelection} โมเดลต่อชุด`
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const duplicate = activeItems.find(
+    (item) =>
+      item.modelId === modelId &&
+      item.variantId === variantId
+  );
+
+  if (duplicate) {
+    const error = new Error(
+      "โมเดลนี้อยู่ในคิวดาวน์โหลดแล้ว"
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const {
+    model,
+    variant,
+  } = getCatalogModelVariant(
+    modelId,
+    variantId
+  );
+
+  const hardwareStatus =
+    getTextModelHardwareRecommendation(
+      modelId
+    );
+
+  const selectedHardwareVariant =
+    hardwareStatus
+      ?.variants
+      ?.find(
+        (item) =>
+          item.id === variant.id
+      );
+
+  if (
+    selectedHardwareVariant &&
+    selectedHardwareVariant.downloadable !==
+      true
+  ) {
+    const insufficientStorage =
+      selectedHardwareVariant
+        .reasons
+        ?.includes(
+          "insufficient-storage"
+        );
+
+    const error = new Error(
+      insufficientStorage
+        ? "พื้นที่จัดเก็บไม่เพียงพอสำหรับโมเดลนี้"
+        : "โมเดลรุ่นนี้ไม่เหมาะกับสเปกเครื่องปัจจุบัน"
+    );
+
+    error.statusCode = 409;
+    error.code =
+      insufficientStorage
+        ? "INSUFFICIENT_STORAGE"
+        : "HARDWARE_INCOMPATIBLE";
+
+    throw error;
+  }
+
+  validateTrustedModelDownload(
+    model,
+    variant
+  );
+
+  const sha256 =
+    await resolveHuggingFaceSha256(
+      model,
+      variant
+    );
+
+  const now = new Date().toISOString();
+
+  const item = {
+    id:
+      `text-model-${Date.now()}-` +
+      Math.random().toString(16).slice(2, 10),
+    modelId: model.id,
+    variantId: variant.id,
+    publisher: model.publisher,
+    modelName:
+      model.name?.th ||
+      model.name?.en ||
+      model.id,
+    version: model.version,
+    format: model.format,
+    runtime: model.runtime,
+    filename: variant.filename,
+    sizeBytes: variant.sizeBytes,
+    quantization: variant.quantization,
+    download: {
+      url: variant.download.url,
+      sha256,
+    },
+    state: "queued",
+    progress: {
+      percent: 0,
+      downloadedBytes: 0,
+      totalBytes: variant.sizeBytes,
+      speedBytesPerSecond: 0,
+    },
+    queuePosition:
+      activeItems.length + 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  queue.items.push(item);
+
+  sanitizeTextModelQueue(queue);
+  writeTextModelQueue(queue);
+
+  startTextModelQueueWorker();
+
+  return item;
+}
+
+
+// LUKE_AI_TEXT_MODEL_DOWNLOAD_WORKER_V1
+const textModelDownloadControllers = new Map();
+let textModelQueueWorkerRunning = false;
+
+const textModelTerminalStates = new Set([
+  "completed",
+  "cancelled",
+  "failed",
+  "skipped",
+]);
+
+function getTextModelQueueItem(itemId) {
+  return (
+    readTextModelQueue().items.find(
+      (item) => item.id === itemId
+    ) || null
+  );
+}
+
+function updateTextModelQueueItem(
+  itemId,
+  updates = {}
+) {
+  const queue = readTextModelQueue();
+
+  const item = queue.items.find(
+    (entry) => entry.id === itemId
+  );
+
+  if (!item) {
+    const error = new Error(
+      `Text model queue item not found: ${itemId}`
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    updates.progress &&
+    typeof updates.progress === "object"
+  ) {
+    item.progress = {
+      ...(item.progress || {}),
+      ...updates.progress,
+    };
+  }
+
+  for (
+    const [key, value]
+    of Object.entries(updates)
+  ) {
+    if (key !== "progress") {
+      item[key] = value;
+    }
+  }
+
+  item.updatedAt = new Date().toISOString();
+
+  writeTextModelQueue(queue);
+
+  return item;
+}
+
+function normalizeTextModelQueuePositions() {
+  const queue = readTextModelQueue();
+
+  const activeItems = queue.items
+    .filter(
+      (item) =>
+        !textModelTerminalStates.has(item.state)
+    )
+    .sort(
+      (left, right) =>
+        Number(left.queuePosition || 0) -
+        Number(right.queuePosition || 0)
+    );
+
+  activeItems.forEach((item, index) => {
+    item.queuePosition = index + 1;
+  });
+
+  writeTextModelQueue(queue);
+}
+
+function getNextQueuedTextModelItem() {
+  return (
+    readTextModelQueue()
+      .items
+      .filter(
+        (item) => item.state === "queued"
+      )
+      .sort(
+        (left, right) =>
+          Number(left.queuePosition || 0) -
+          Number(right.queuePosition || 0)
+      )[0] || null
+  );
+}
+
+function getTextModelStorageRoot() {
+  if (
+    typeof resolveRuntimeStorageDirectory ===
+    "function"
+  ) {
+    const storage =
+      resolveRuntimeStorageDirectory({
+        create: true,
+        createFallback: true,
+      });
+
+    if (
+      storage.ok &&
+      storage.selectedDirectory
+    ) {
+      return storage.selectedDirectory;
+    }
+  }
+
+  const homeDirectory =
+    process.env.HOME ||
+    process.env.USERPROFILE ||
+    ROOT;
+
+  const fallbackDirectory = path.join(
+    homeDirectory,
+    "Downloads",
+    "LUKE-AI-STUDIO"
+  );
+
+  fs.mkdirSync(
+    fallbackDirectory,
+    {
+      recursive: true,
+    }
+  );
+
+  return fallbackDirectory;
+}
+
+function getTextModelItemPaths(item) {
+  const storageRoot =
+    getTextModelStorageRoot();
+
+  const stagingDirectory = path.join(
+    storageRoot,
+    ".luke-text-model-staging",
+    item.id
+  );
+
+  const modelDirectory = path.join(
+    storageRoot,
+    "models",
+    "text",
+    item.modelId,
+    item.version,
+    item.variantId
+  );
+
+  return {
+    storageRoot,
+    stagingDirectory,
+    modelDirectory,
+    temporaryFile: path.join(
+      stagingDirectory,
+      `${item.filename}.part`
+    ),
+    completedFile: path.join(
+      modelDirectory,
+      item.filename
+    ),
+  };
+}
+
+function calculateTextModelSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash =
+      require("node:crypto")
+        .createHash("sha256");
+
+    const input =
+      fs.createReadStream(filePath);
+
+    input.on("error", reject);
+
+    input.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+
+    input.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+  });
+}
+
+async function downloadTextModelQueueItem(item) {
+  const controller =
+    new AbortController();
+
+  textModelDownloadControllers.set(
+    item.id,
+    controller
+  );
+
+  const paths =
+    getTextModelItemPaths(item);
+
+  fs.mkdirSync(
+    paths.stagingDirectory,
+    {
+      recursive: true,
+    }
+  );
+
+  fs.mkdirSync(
+    paths.modelDirectory,
+    {
+      recursive: true,
+    }
+  );
+
+  let existingBytes = 0;
+
+  if (fs.existsSync(paths.temporaryFile)) {
+    existingBytes =
+      fs.statSync(paths.temporaryFile).size;
+  }
+
+  const headers = {};
+
+  if (existingBytes > 0) {
+    headers.range =
+      `bytes=${existingBytes}-`;
+  }
+
+  updateTextModelQueueItem(
+    item.id,
+    {
+      state: "downloading",
+      error: null,
+      storage: {
+        root: paths.storageRoot,
+        temporaryFile:
+          paths.temporaryFile,
+        completedFile:
+          paths.completedFile,
+      },
+      progress: {
+        downloadedBytes:
+          existingBytes,
+      },
+    }
+  );
+
+  const response = await fetch(
+    item.download.url,
+    {
+      headers,
+      redirect: "follow",
+      signal: controller.signal,
+    }
+  );
+
+  if (
+    !response.ok ||
+    !response.body
+  ) {
+    throw new Error(
+      `Model download failed with HTTP ${response.status}`
+    );
+  }
+
+  const rangeAccepted =
+    existingBytes > 0 &&
+    response.status === 206;
+
+  if (
+    existingBytes > 0 &&
+    !rangeAccepted
+  ) {
+    fs.rmSync(
+      paths.temporaryFile,
+      {
+        force: true,
+      }
+    );
+
+    existingBytes = 0;
+  }
+
+  const contentLength = Number(
+    response.headers.get(
+      "content-length"
+    )
+  );
+
+  const totalBytes =
+    Number.isFinite(contentLength)
+      ? existingBytes + contentLength
+      : Number(item.sizeBytes) || null;
+
+  const output =
+    fs.createWriteStream(
+      paths.temporaryFile,
+      {
+        flags:
+          rangeAccepted
+            ? "a"
+            : "w",
+      }
+    );
+
+  const reader =
+    response.body.getReader();
+
+  let downloadedBytes =
+    existingBytes;
+
+  const startedAt = Date.now();
+  let lastPersistedAt = 0;
+
+  try {
+    while (true) {
+      const result =
+        await reader.read();
+
+      if (result.done) {
+        break;
+      }
+
+      const chunk =
+        Buffer.from(result.value);
+
+      await new Promise(
+        (resolve, reject) => {
+          output.write(
+            chunk,
+            (error) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+
+              resolve();
+            }
+          );
+        }
+      );
+
+      downloadedBytes +=
+        chunk.length;
+
+      const now = Date.now();
+
+      if (
+        now - lastPersistedAt >= 300
+      ) {
+        const elapsedSeconds =
+          Math.max(
+            0.001,
+            (now - startedAt) / 1000
+          );
+
+        const sessionBytes =
+          downloadedBytes -
+          existingBytes;
+
+        const percent =
+          totalBytes
+            ? Math.min(
+                99,
+                Math.floor(
+                  downloadedBytes /
+                  totalBytes *
+                  100
+                )
+              )
+            : 0;
+
+        updateTextModelQueueItem(
+          item.id,
+          {
+            progress: {
+              percent,
+              downloadedBytes,
+              totalBytes,
+              speedBytesPerSecond:
+                Math.floor(
+                  sessionBytes /
+                  elapsedSeconds
+                ),
+            },
+          }
+        );
+
+        lastPersistedAt = now;
+      }
+    }
+  } finally {
+    await new Promise((resolve) => {
+      output.end(resolve);
+    });
+  }
+
+  updateTextModelQueueItem(
+    item.id,
+    {
+      state: "verifying",
+      progress: {
+        percent: 99,
+        downloadedBytes,
+        totalBytes:
+          totalBytes ||
+          downloadedBytes,
+        speedBytesPerSecond: 0,
+      },
+    }
+  );
+
+  const actualSha256 =
+    await calculateTextModelSha256(
+      paths.temporaryFile
+    );
+
+  const expectedSha256 =
+    String(
+      item.download.sha256 || ""
+    ).toLowerCase();
+
+  if (
+    !expectedSha256 ||
+    actualSha256 !== expectedSha256
+  ) {
+    const error = new Error(
+      "Text model SHA256 verification failed."
+    );
+
+    error.code = "CHECKSUM_MISMATCH";
+    throw error;
+  }
+
+  if (fs.existsSync(paths.completedFile)) {
+    const installedSha256 =
+      await calculateTextModelSha256(
+        paths.completedFile
+      );
+
+    if (installedSha256 === expectedSha256) {
+      fs.rmSync(
+        paths.temporaryFile,
+        {
+          force: true,
+        }
+      );
+    } else {
+      const conflictPath =
+        `${paths.completedFile}.previous-${Date.now()}`;
+
+      fs.renameSync(
+        paths.completedFile,
+        conflictPath
+      );
+
+      fs.renameSync(
+        paths.temporaryFile,
+        paths.completedFile
+      );
+    }
+  } else {
+    fs.renameSync(
+      paths.temporaryFile,
+      paths.completedFile
+    );
+  }
+
+  fs.rmSync(
+    paths.stagingDirectory,
+    {
+      recursive: true,
+      force: true,
+    }
+  );
+
+  const completedItem =
+    updateTextModelQueueItem(
+      item.id,
+      {
+        state: "completed",
+        installedPath:
+          paths.completedFile,
+        checksum: {
+          algorithm: "sha256",
+          expected:
+            expectedSha256,
+          actual:
+            actualSha256,
+          verified: true,
+        },
+        completedAt:
+          new Date().toISOString(),
+        progress: {
+          percent: 100,
+          downloadedBytes,
+          totalBytes:
+            totalBytes ||
+            downloadedBytes,
+          speedBytesPerSecond: 0,
+        },
+      }
+    );
+
+  registerInstalledTextModel(
+    completedItem
+  );
+}
+
+async function processTextModelQueue() {
+  if (textModelQueueWorkerRunning) {
+    return;
+  }
+
+  textModelQueueWorkerRunning = true;
+
+  try {
+    while (true) {
+      const item =
+        getNextQueuedTextModelItem();
+
+      if (!item) {
+        break;
+      }
+
+      const queue =
+        readTextModelQueue();
+
+      queue.activeItemId = item.id;
+      writeTextModelQueue(queue);
+
+      try {
+        await downloadTextModelQueueItem(
+          item
+        );
+      } catch (error) {
+        const latestItem =
+          getTextModelQueueItem(item.id);
+
+        const paused =
+          latestItem?.state === "paused";
+
+        const cancelled =
+          latestItem?.state === "cancelled";
+
+        updateTextModelQueueItem(
+          item.id,
+          {
+            state:
+              paused
+                ? "paused"
+                : cancelled
+                  ? "cancelled"
+                  : "failed",
+            error:
+              paused || cancelled
+                ? null
+                : {
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : String(error),
+                    code:
+                      error?.code
+                        ? String(error.code)
+                        : null,
+                    occurredAt:
+                      new Date().toISOString(),
+                  },
+          }
+        );
+      } finally {
+        textModelDownloadControllers.delete(
+          item.id
+        );
+
+        const latestQueue =
+          readTextModelQueue();
+
+        if (
+          latestQueue.activeItemId ===
+          item.id
+        ) {
+          latestQueue.activeItemId = null;
+          writeTextModelQueue(
+            latestQueue
+          );
+        }
+
+        normalizeTextModelQueuePositions();
+      }
+    }
+  } finally {
+    textModelQueueWorkerRunning = false;
+  }
+}
+
+function startTextModelQueueWorker() {
+  setImmediate(() => {
+    processTextModelQueue().catch(
+      (error) => {
+        console.error(
+          "[text-models] Queue worker failed:",
+          error instanceof Error
+            ? error.message
+            : String(error)
+        );
+      }
+    );
+  });
+}
+
+function pauseTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (item.state !== "downloading") {
+    const error = new Error(
+      "Only an active download can be paused."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  updateTextModelQueueItem(
+    itemId,
+    {
+      state: "paused",
+    }
+  );
+
+  textModelDownloadControllers
+    .get(itemId)
+    ?.abort();
+
+  return getTextModelQueueItem(itemId);
+}
+
+function resumeTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    ![
+      "paused",
+      "failed",
+    ].includes(item.state)
+  ) {
+    const error = new Error(
+      "Only paused or failed downloads can resume."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const updated =
+    updateTextModelQueueItem(
+      itemId,
+      {
+        state: "queued",
+        error: null,
+      }
+    );
+
+  startTextModelQueueWorker();
+
+  return updated;
+}
+
+function cancelTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    textModelTerminalStates.has(
+      item.state
+    )
+  ) {
+    const error = new Error(
+      "Queue item is already finished."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const updated =
+    updateTextModelQueueItem(
+      itemId,
+      {
+        state: "cancelled",
+        cancelledAt:
+          new Date().toISOString(),
+      }
+    );
+
+  textModelDownloadControllers
+    .get(itemId)
+    ?.abort();
+
+  normalizeTextModelQueuePositions();
+
+  return updated;
+}
+
+function skipTextModelQueueItem(itemId) {
+  const item =
+    getTextModelQueueItem(itemId);
+
+  if (!item) {
+    const error = new Error(
+      "Text model queue item not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (item.state !== "queued") {
+    const error = new Error(
+      "Only queued items can be skipped."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const updated =
+    updateTextModelQueueItem(
+      itemId,
+      {
+        state: "skipped",
+        skippedAt:
+          new Date().toISOString(),
+      }
+    );
+
+  normalizeTextModelQueuePositions();
+
+  return updated;
+}
+
+function moveTextModelQueueItem(
+  itemId,
+  direction
+) {
+  const queue =
+    readTextModelQueue();
+
+  const activeItems = queue.items
+    .filter(
+      (item) =>
+        !textModelTerminalStates.has(
+          item.state
+        )
+    )
+    .sort(
+      (left, right) =>
+        Number(left.queuePosition || 0) -
+        Number(right.queuePosition || 0)
+    );
+
+  const index =
+    activeItems.findIndex(
+      (item) => item.id === itemId
+    );
+
+  if (index < 0) {
+    const error = new Error(
+      "Queue item is not movable."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const targetIndex =
+    direction === "up"
+      ? index - 1
+      : direction === "down"
+        ? index + 1
+        : 0;
+
+  if (
+    targetIndex < 0 ||
+    targetIndex >= activeItems.length
+  ) {
+    return activeItems[index];
+  }
+
+  const current =
+    activeItems[index];
+
+  const target =
+    activeItems[targetIndex];
+
+  const currentPosition =
+    current.queuePosition;
+
+  current.queuePosition =
+    target.queuePosition;
+
+  target.queuePosition =
+    currentPosition;
+
+  writeTextModelQueue(queue);
+  normalizeTextModelQueuePositions();
+
+  return getTextModelQueueItem(itemId);
+}
+
+
+// LUKE_AI_TEXT_MODEL_UPDATE_MANAGER_V1
+const installedTextModelsPath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-models",
+  "installed-models.json"
+);
+
+function readInstalledTextModels() {
+  if (!fs.existsSync(installedTextModelsPath)) {
+    const initialState = {
+      schemaVersion: 1,
+      updatedAt: null,
+      activeModelId: null,
+      models: [],
+    };
+
+    writeJsonFileAtomic(
+      installedTextModelsPath,
+      initialState
+    );
+
+    return initialState;
+  }
+
+  const registry = readJsonFileStrict(
+    installedTextModelsPath,
+    "Installed text model registry"
+  );
+
+  if (!Array.isArray(registry.models)) {
+    throw new Error(
+      "Installed text model registry is invalid."
+    );
+  }
+
+  return registry;
+}
+
+function writeInstalledTextModels(registry) {
+  registry.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    installedTextModelsPath,
+    registry
+  );
+}
+
+function compareSemanticVersions(
+  leftVersion,
+  rightVersion
+) {
+  const normalize = (value) =>
+    String(value || "0")
+      .replace(/^v/i, "")
+      .split(/[.+-]/)
+      .slice(0, 3)
+      .map((part) => {
+        const numeric = Number.parseInt(
+          part,
+          10
+        );
+
+        return Number.isFinite(numeric)
+          ? numeric
+          : 0;
+      });
+
+  const left = normalize(leftVersion);
+  const right = normalize(rightVersion);
+
+  for (let index = 0; index < 3; index += 1) {
+    const difference =
+      (left[index] || 0) -
+      (right[index] || 0);
+
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return 0;
+}
+
+function registerInstalledTextModel(
+  queueItem
+) {
+  const registry =
+    readInstalledTextModels();
+
+  const existingIndex =
+    registry.models.findIndex(
+      (model) =>
+        model.modelId === queueItem.modelId &&
+        model.version === queueItem.version &&
+        model.variantId === queueItem.variantId
+    );
+
+  const installedRecord = {
+    id:
+      `${queueItem.modelId}@${queueItem.version}:${queueItem.variantId}`,
+    modelId: queueItem.modelId,
+    modelName: queueItem.modelName,
+    publisher: queueItem.publisher,
+    version: queueItem.version,
+    variantId: queueItem.variantId,
+    quantization: queueItem.quantization,
+    format: queueItem.format,
+    runtime: queueItem.runtime,
+    installedPath: queueItem.installedPath,
+    checksum: queueItem.checksum,
+    installedAt:
+      queueItem.completedAt ||
+      new Date().toISOString(),
+    active: false,
+    rollbackAvailable: false,
+  };
+
+  if (existingIndex >= 0) {
+    registry.models[existingIndex] = {
+      ...registry.models[existingIndex],
+      ...installedRecord,
+    };
+  } else {
+    const olderVersions =
+      registry.models.filter(
+        (model) =>
+          model.modelId === queueItem.modelId &&
+          model.variantId === queueItem.variantId
+      );
+
+    installedRecord.rollbackAvailable =
+      olderVersions.length > 0;
+
+    registry.models.push(
+      installedRecord
+    );
+
+    for (const olderModel of olderVersions) {
+      olderModel.rollbackAvailable = true;
+    }
+  }
+
+  writeInstalledTextModels(registry);
+
+  return installedRecord;
+}
+
+function buildTextModelUpdateStatus() {
+  const catalog =
+    readTextModelCatalog();
+
+  const registry =
+    readInstalledTextModels();
+
+  const models = catalog.models.map(
+    (catalogModel) => {
+      const installedVersions =
+        registry.models
+          .filter(
+            (installedModel) =>
+              installedModel.modelId ===
+              catalogModel.id
+          )
+          .sort(
+            (left, right) =>
+              compareSemanticVersions(
+                right.version,
+                left.version
+              )
+          );
+
+      const latestInstalled =
+        installedVersions[0] || null;
+
+      const updateAvailable =
+        Boolean(latestInstalled) &&
+        compareSemanticVersions(
+          catalogModel.version,
+          latestInstalled.version
+        ) > 0;
+
+      return {
+        modelId: catalogModel.id,
+        modelName:
+          catalogModel.name?.th ||
+          catalogModel.name?.en ||
+          catalogModel.id,
+        category:
+          catalogModel.category ||
+          "official",
+        installed:
+          installedVersions.length > 0,
+        installedVersion:
+          latestInstalled?.version || null,
+        installedVariantId:
+          latestInstalled?.variantId || null,
+        latestVersion:
+          catalogModel.version,
+        recommendedVariant:
+          catalogModel.recommendedVariant,
+        updateAvailable,
+        rollbackAvailable:
+          installedVersions.length > 1 ||
+          installedVersions.some(
+            (model) =>
+              model.rollbackAvailable === true
+          ),
+        installedVersions,
+        updateChannel:
+          catalogModel.updateChannel || null,
+      };
+    }
+  );
+
+  return {
+    ok: true,
+    checkedAt:
+      new Date().toISOString(),
+    automaticCheckIntervalHours:
+      Number(
+        readTextModelPolicy()
+          .updatePolicy
+          ?.automaticCheckIntervalHours
+      ) || 24,
+    summary: {
+      catalogModels: models.length,
+      installedModels:
+        models.filter(
+          (model) => model.installed
+        ).length,
+      updatesAvailable:
+        models.filter(
+          (model) => model.updateAvailable
+        ).length,
+      rollbackAvailable:
+        models.filter(
+          (model) =>
+            model.rollbackAvailable
+        ).length,
+    },
+    models,
+  };
+}
+
+function getTextModelUpdateStatus(
+  modelId
+) {
+  return (
+    buildTextModelUpdateStatus()
+      .models
+      .find(
+        (model) =>
+          model.modelId === modelId
+      ) || null
+  );
+}
+
+
+// LUKE_AI_TEXT_MODEL_HARDWARE_COMPATIBILITY_V3
+const textModelHardwareOs = require("node:os");
+
+function getTextModelHardwareProfile() {
+  const testTotalRam =
+    Number(
+      process.env
+        .LUKE_AI_TEST_TOTAL_RAM_BYTES
+    );
+
+  const testAvailableRam =
+    Number(
+      process.env
+        .LUKE_AI_TEST_AVAILABLE_RAM_BYTES
+    );
+
+  const testFreeStorage =
+    Number(
+      process.env
+        .LUKE_AI_TEST_FREE_STORAGE_BYTES
+    );
+
+  const totalRamBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testTotalRam)
+      ? testTotalRam
+      : textModelHardwareOs.totalmem();
+
+  const availableRamBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testAvailableRam)
+      ? testAvailableRam
+      : textModelHardwareOs.freemem();
+
+  const storage =
+    typeof resolveRuntimeStorageDirectory ===
+      "function"
+      ? resolveRuntimeStorageDirectory({
+          create: true,
+          createFallback: true,
+        })
+      : null;
+
+  const selectedStorage =
+    storage?.usingFallback
+      ? storage.fallback
+      : storage?.external;
+
+  const freeStorageCandidate =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testFreeStorage)
+      ? testFreeStorage
+      : Number(
+          selectedStorage?.freeBytes
+        );
+
+  return {
+    platform: process.platform,
+    architecture: process.arch,
+    appleSilicon:
+      process.platform === "darwin" &&
+      process.arch === "arm64",
+    cpuCount:
+      textModelHardwareOs.cpus()?.length ||
+      1,
+    totalRamBytes,
+    availableRamBytes,
+    selectedStorageDirectory:
+      storage?.selectedDirectory || null,
+    usingStorageFallback:
+      storage?.usingFallback === true,
+    freeStorageBytes:
+      Number.isFinite(
+        freeStorageCandidate
+      )
+        ? freeStorageCandidate
+        : null,
+  };
+}
+
+function getTextModelQuantizationRank(
+  quantization
+) {
+  const value =
+    String(quantization || "")
+      .toUpperCase();
+
+  if (value.startsWith("Q8")) {
+    return 80;
+  }
+
+  if (value.startsWith("Q6")) {
+    return 60;
+  }
+
+  if (value.startsWith("Q5")) {
+    return 50;
+  }
+
+  if (value.startsWith("Q4")) {
+    return 40;
+  }
+
+  if (value.startsWith("Q3")) {
+    return 30;
+  }
+
+  return 10;
+}
+
+function evaluateTextModelHardwareVariant(
+  variant,
+  hardware
+) {
+  const sizeBytes =
+    Number(variant.sizeBytes) || 0;
+
+  const minimumRamBytes =
+    Number(
+      variant.minimumRamBytes
+    ) ||
+    Math.ceil(sizeBytes * 1.4);
+
+  const recommendedRamBytes =
+    Number(
+      variant.recommendedRamBytes
+    ) ||
+    Math.ceil(sizeBytes * 2);
+
+  const reserveBytes =
+    Math.max(
+      10 * 1024 ** 3,
+      Math.ceil(sizeBytes * 0.25)
+    );
+
+  const requiredStorageBytes =
+    sizeBytes + reserveBytes;
+
+  const totalRamCompatible =
+    hardware.totalRamBytes >=
+    minimumRamBytes;
+
+  const availableRamCompatible =
+    hardware.availableRamBytes >=
+    Math.min(
+      minimumRamBytes,
+      Math.floor(
+        hardware.totalRamBytes * 0.75
+      )
+    );
+
+  const storageCompatible =
+    hardware.freeStorageBytes == null ||
+    hardware.freeStorageBytes >=
+    requiredStorageBytes;
+
+  const reasons = [];
+
+  if (!totalRamCompatible) {
+    reasons.push(
+      "total-ram-below-minimum"
+    );
+  }
+
+  if (!availableRamCompatible) {
+    reasons.push(
+      "available-ram-too-low"
+    );
+  }
+
+  if (!storageCompatible) {
+    reasons.push(
+      "insufficient-storage"
+    );
+  }
+
+  let compatibility = "incompatible";
+  let score = 0;
+
+  if (
+    totalRamCompatible &&
+    availableRamCompatible &&
+    storageCompatible
+  ) {
+    const fullyRecommended =
+      hardware.totalRamBytes >=
+      recommendedRamBytes;
+
+    compatibility =
+      fullyRecommended
+        ? "recommended"
+        : "compatible";
+
+    score =
+      getTextModelQuantizationRank(
+        variant.quantization
+      ) +
+      (
+        fullyRecommended
+          ? 100
+          : 0
+      );
+  }
+
+  return {
+    id: variant.id,
+    quantization:
+      variant.quantization,
+    filename:
+      variant.filename,
+    sizeBytes,
+    minimumRamBytes,
+    recommendedRamBytes,
+    requiredStorageBytes,
+    compatibility,
+    recommended:
+      compatibility === "recommended",
+    downloadable:
+      totalRamCompatible &&
+      storageCompatible,
+    reasons,
+    score,
+  };
+}
+
+function buildTextModelHardwareCompatibility() {
+  const hardware =
+    getTextModelHardwareProfile();
+
+  const catalog =
+    readTextModelCatalog();
+
+  const models =
+    catalog.models.map((model) => {
+      const variants =
+        (model.variants || [])
+          .map(
+            (variant) =>
+              evaluateTextModelHardwareVariant(
+                variant,
+                hardware
+              )
+          )
+          .sort(
+            (left, right) =>
+              right.score - left.score
+          );
+
+      const recommendation =
+        variants.find(
+          (variant) =>
+            variant.compatibility ===
+            "recommended"
+        ) ||
+        variants.find(
+          (variant) =>
+            variant.compatibility ===
+            "compatible"
+        ) ||
+        null;
+
+      return {
+        modelId: model.id,
+        modelName:
+          model.name?.th ||
+          model.name?.en ||
+          model.id,
+        compatible:
+          Boolean(recommendation),
+        recommendedVariantId:
+          recommendation?.id || null,
+        recommendedQuantization:
+          recommendation?.quantization ||
+          null,
+        variants,
+      };
+    });
+
+  return {
+    ok: true,
+    checkedAt:
+      new Date().toISOString(),
+    hardware,
+    summary: {
+      modelCount: models.length,
+      compatibleModelCount:
+        models.filter(
+          (model) => model.compatible
+        ).length,
+      incompatibleModelCount:
+        models.filter(
+          (model) => !model.compatible
+        ).length,
+    },
+    models,
+  };
+}
+
+function getTextModelHardwareRecommendation(
+  modelId
+) {
+  return (
+    buildTextModelHardwareCompatibility()
+      .models
+      .find(
+        (model) =>
+          model.modelId === modelId
+      ) ||
+    null
+  );
+}
+
+
+// LUKE_AI_PERSISTENT_TEXT_CHAT_V1
+const textChatStorePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-chat",
+  "conversations.json"
+);
+
+function createInitialTextChatStore() {
+  return {
+    schemaVersion: 1,
+    updatedAt: null,
+    lastOpenedConversationId: null,
+    conversations: [],
+  };
+}
+
+function readTextChatStore() {
+  if (!fs.existsSync(textChatStorePath)) {
+    const initialStore =
+      createInitialTextChatStore();
+
+    writeJsonFileAtomic(
+      textChatStorePath,
+      initialStore
+    );
+
+    return initialStore;
+  }
+
+  const store = readJsonFileStrict(
+    textChatStorePath,
+    "Text chat conversation store"
+  );
+
+  if (!Array.isArray(store.conversations)) {
+    throw new Error(
+      "Text chat conversation store is invalid."
+    );
+  }
+
+  return store;
+}
+
+function writeTextChatStore(store) {
+  store.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    textChatStorePath,
+    store
+  );
+}
+
+function createTextChatId(prefix) {
+  return (
+    `${prefix}-${Date.now()}-` +
+    Math.random()
+      .toString(16)
+      .slice(2, 10)
+  );
+}
+
+function normalizeTextChatTitle(value) {
+  const title =
+    String(value || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  if (!title) {
+    return "บทสนทนาใหม่";
+  }
+
+  return title.slice(0, 80);
+}
+
+function generateConversationTitle(message) {
+  return normalizeTextChatTitle(
+    String(message || "")
+      .replace(/\n+/g, " ")
+      .slice(0, 60)
+  );
+}
+
+function findTextChatConversation(
+  store,
+  conversationId
+) {
+  return store.conversations.find(
+    (conversation) =>
+      conversation.id === conversationId
+  ) || null;
+}
+
+function createTextChatConversation({
+  title,
+  modelId = null,
+  systemPrompt = "",
+} = {}) {
+  const store =
+    readTextChatStore();
+
+  const now =
+    new Date().toISOString();
+
+  const conversation = {
+    id:
+      createTextChatId("conversation"),
+    title:
+      normalizeTextChatTitle(title),
+    createdAt: now,
+    updatedAt: now,
+    pinned: false,
+    archived: false,
+    modelId,
+    systemPrompt:
+      String(systemPrompt || ""),
+    settings: {
+      temperature: 0.7,
+      contextLength: null,
+    },
+    memory: {
+      summary: "",
+      facts: [],
+      lastCompactedAt: null,
+    },
+    messages: [],
+  };
+
+  store.conversations.unshift(
+    conversation
+  );
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  return conversation;
+}
+
+function appendTextChatMessage(
+  conversationId,
+  {
+    role,
+    content,
+    modelId = null,
+    metadata = {},
+  }
+) {
+  const allowedRoles =
+    new Set([
+      "user",
+      "assistant",
+      "system",
+      "tool",
+    ]);
+
+  if (!allowedRoles.has(role)) {
+    const error = new Error(
+      "Invalid chat message role."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedContent =
+    String(content || "").trim();
+
+  if (!normalizedContent) {
+    const error = new Error(
+      "Chat message content is required."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const now =
+    new Date().toISOString();
+
+  const message = {
+    id:
+      createTextChatId("message"),
+    role,
+    content:
+      normalizedContent,
+    modelId,
+    createdAt: now,
+    metadata:
+      metadata &&
+      typeof metadata === "object"
+        ? metadata
+        : {},
+  };
+
+  conversation.messages.push(
+    message
+  );
+
+  if (
+    conversation.title ===
+      "บทสนทนาใหม่" &&
+    role === "user"
+  ) {
+    conversation.title =
+      generateConversationTitle(
+        normalizedContent
+      );
+  }
+
+  conversation.updatedAt = now;
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  setImmediate(() => {
+    autoOptimizeTextChatConversation(
+      conversation.id
+    );
+  });
+
+  return {
+    conversation,
+    message,
+  };
+}
+
+function updateTextChatConversation(
+  conversationId,
+  updates = {}
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "title"
+    )
+  ) {
+    conversation.title =
+      normalizeTextChatTitle(
+        updates.title
+      );
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "pinned"
+    )
+  ) {
+    conversation.pinned =
+      updates.pinned === true;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "archived"
+    )
+  ) {
+    conversation.archived =
+      updates.archived === true;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "modelId"
+    )
+  ) {
+    conversation.modelId =
+      updates.modelId || null;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "systemPrompt"
+    )
+  ) {
+    conversation.systemPrompt =
+      String(
+        updates.systemPrompt || ""
+      );
+  }
+
+  if (
+    updates.settings &&
+    typeof updates.settings === "object"
+  ) {
+    conversation.settings = {
+      ...(conversation.settings || {}),
+      ...updates.settings,
+    };
+  }
+
+  conversation.updatedAt =
+    new Date().toISOString();
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  return conversation;
+}
+
+function deleteTextChatConversation(
+  conversationId
+) {
+  const store =
+    readTextChatStore();
+
+  const index =
+    store.conversations.findIndex(
+      (conversation) =>
+        conversation.id ===
+        conversationId
+    );
+
+  if (index < 0) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const [removed] =
+    store.conversations.splice(
+      index,
+      1
+    );
+
+  if (
+    store.lastOpenedConversationId ===
+    conversationId
+  ) {
+    store.lastOpenedConversationId =
+      store.conversations[0]?.id ||
+      null;
+  }
+
+  writeTextChatStore(store);
+
+  return removed;
+}
+
+
+// LUKE_AI_TEXT_CHAT_MEMORY_MANAGER_V1
+const textChatMemoryPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "memory-policy.json"
+);
+
+function readTextChatMemoryPolicy() {
+  return readJsonFileStrict(
+    textChatMemoryPolicyPath,
+    "Text chat memory policy"
+  );
+}
+
+function estimateTextChatTokens(value) {
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const charactersPerToken =
+    Number(
+      policy.context
+        ?.charactersPerEstimatedToken
+    ) || 4;
+
+  return Math.max(
+    0,
+    Math.ceil(
+      String(value || "").length /
+      charactersPerToken
+    )
+  );
+}
+
+function getConversationContextLimit(
+  conversation
+) {
+  const policy =
+    readTextChatMemoryPolicy();
+
+  return (
+    Number(
+      conversation.settings
+        ?.contextLength
+    ) ||
+    Number(
+      policy.context
+        ?.defaultContextTokens
+    ) ||
+    32768
+  );
+}
+
+function calculateConversationContextStatus(
+  conversation
+) {
+  const contextLimitTokens =
+    getConversationContextLimit(
+      conversation
+    );
+
+  const systemPromptTokens =
+    estimateTextChatTokens(
+      conversation.systemPrompt
+    );
+
+  const summaryTokens =
+    estimateTextChatTokens(
+      conversation.memory?.summary
+    );
+
+  const messageTokens =
+    (conversation.messages || [])
+      .reduce(
+        (total, message) =>
+          total +
+          estimateTextChatTokens(
+            message.content
+          ) +
+          8,
+        0
+      );
+
+  const estimatedTokens =
+    systemPromptTokens +
+    summaryTokens +
+    messageTokens;
+
+  const usagePercent =
+    contextLimitTokens > 0
+      ? Math.min(
+          999,
+          Number(
+            (
+              estimatedTokens /
+              contextLimitTokens *
+              100
+            ).toFixed(2)
+          )
+        )
+      : 0;
+
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const summaryThreshold =
+    Number(
+      policy.context
+        ?.summaryThresholdPercent
+    ) || 80;
+
+  const snapshotThreshold =
+    Number(
+      policy.context
+        ?.snapshotThresholdPercent
+    ) || 90;
+
+  const refreshThreshold =
+    Number(
+      policy.context
+        ?.sessionRefreshThresholdPercent
+    ) || 95;
+
+  let action = "none";
+
+  if (usagePercent >= refreshThreshold) {
+    action = "refresh";
+  } else if (
+    usagePercent >= snapshotThreshold
+  ) {
+    action = "snapshot";
+  } else if (
+    usagePercent >= summaryThreshold
+  ) {
+    action = "summarize";
+  }
+
+  return {
+    contextLimitTokens,
+    estimatedTokens,
+    usagePercent,
+    remainingTokens:
+      Math.max(
+        0,
+        contextLimitTokens -
+        estimatedTokens
+      ),
+    action,
+    thresholds: {
+      summary: summaryThreshold,
+      snapshot: snapshotThreshold,
+      refresh: refreshThreshold,
+    },
+  };
+}
+
+function getTextChatRamStatus() {
+  const os =
+    require("node:os");
+
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const testTotal =
+    Number(
+      process.env
+        .LUKE_AI_TEST_TOTAL_RAM_BYTES
+    );
+
+  const testFree =
+    Number(
+      process.env
+        .LUKE_AI_TEST_FREE_RAM_BYTES
+    );
+
+  const totalBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testTotal)
+      ? testTotal
+      : os.totalmem();
+
+  const freeBytes =
+    process.env.NODE_ENV === "test" &&
+    Number.isFinite(testFree)
+      ? testFree
+      : os.freemem();
+
+  const usedBytes =
+    Math.max(
+      0,
+      totalBytes - freeBytes
+    );
+
+  const usedPercent =
+    totalBytes > 0
+      ? Number(
+          (
+            usedBytes /
+            totalBytes *
+            100
+          ).toFixed(2)
+        )
+      : 0;
+
+  const prepareThreshold =
+    Number(
+      policy.ram
+        ?.prepareRefreshAtUsedPercent
+    ) || 85;
+
+  const refreshThreshold =
+    Number(
+      policy.ram
+        ?.refreshAtUsedPercent
+    ) || 92;
+
+  const emergencyThreshold =
+    Number(
+      policy.ram
+        ?.emergencyRefreshAtUsedPercent
+    ) || 95;
+
+  const minimumFreeBytes =
+    Number(
+      policy.ram
+        ?.minimumFreeBytes
+    ) ||
+    1024 ** 3;
+
+  let action = "none";
+
+  if (
+    usedPercent >= emergencyThreshold ||
+    freeBytes < minimumFreeBytes
+  ) {
+    action = "emergency-refresh";
+  } else if (
+    usedPercent >= refreshThreshold
+  ) {
+    action = "refresh";
+  } else if (
+    usedPercent >= prepareThreshold
+  ) {
+    action = "prepare";
+  }
+
+  return {
+    totalBytes,
+    freeBytes,
+    usedBytes,
+    usedPercent,
+    action,
+    thresholds: {
+      prepare: prepareThreshold,
+      refresh: refreshThreshold,
+      emergency: emergencyThreshold,
+    },
+  };
+}
+
+function uniqueMemoryValues(values) {
+  return [
+    ...new Set(
+      values
+        .map(
+          (value) =>
+            String(value || "")
+              .replace(/\s+/g, " ")
+              .trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function extractConversationMemory(
+  conversation
+) {
+  const messages =
+    conversation.messages || [];
+
+  const userMessages =
+    messages.filter(
+      (message) =>
+        message.role === "user"
+    );
+
+  const assistantMessages =
+    messages.filter(
+      (message) =>
+        message.role === "assistant"
+    );
+
+  const facts = [];
+  const decisions = [];
+  const tasks = [];
+
+  const factPatterns = [
+    /(?:จำไว้ว่า|ข้อมูลคือ|ข้อเท็จจริง|ชื่อ|ต้องการ|ใช้|เก็บไว้)[\s:：]*(.+)/i,
+  ];
+
+  const decisionPatterns = [
+    /(?:ตกลง|สรุปว่า|เลือก|ตัดสินใจ|ตามนี้|ให้ใช้)[\s:：]*(.+)/i,
+  ];
+
+  const taskPatterns = [
+    /(?:ต้องทำ|ขั้นต่อไป|ต่อไป|อย่าลืม|เพิ่ม|แก้ไข|พัฒนา)[\s:：]*(.+)/i,
+  ];
+
+  for (const message of messages) {
+    const content =
+      String(message.content || "");
+
+    for (const pattern of factPatterns) {
+      const match =
+        content.match(pattern);
+
+      if (match?.[1]) {
+        facts.push(
+          match[1].slice(0, 500)
+        );
+      }
+    }
+
+    for (const pattern of decisionPatterns) {
+      const match =
+        content.match(pattern);
+
+      if (match?.[1]) {
+        decisions.push(
+          match[1].slice(0, 500)
+        );
+      }
+    }
+
+    for (const pattern of taskPatterns) {
+      const match =
+        content.match(pattern);
+
+      if (match?.[1]) {
+        tasks.push(
+          match[1].slice(0, 500)
+        );
+      }
+    }
+  }
+
+  const latestUserMessages =
+    userMessages
+      .slice(-5)
+      .map(
+        (message) =>
+          message.content
+      );
+
+  const latestAssistantMessages =
+    assistantMessages
+      .slice(-3)
+      .map(
+        (message) =>
+          message.content
+      );
+
+  return {
+    facts:
+      uniqueMemoryValues(facts)
+        .slice(-100),
+    decisions:
+      uniqueMemoryValues(decisions)
+        .slice(-100),
+    tasks:
+      uniqueMemoryValues(tasks)
+        .slice(-100),
+    latestUserMessages,
+    latestAssistantMessages,
+  };
+}
+
+function buildConversationSummary(
+  conversation
+) {
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const extracted =
+    extractConversationMemory(
+      conversation
+    );
+
+  const parts = [
+    `หัวข้อ: ${conversation.title}`,
+  ];
+
+  if (extracted.facts.length) {
+    parts.push(
+      "ข้อเท็จจริงสำคัญ:\n" +
+      extracted.facts
+        .map(
+          (value) => `- ${value}`
+        )
+        .join("\n")
+    );
+  }
+
+  if (extracted.decisions.length) {
+    parts.push(
+      "การตัดสินใจ:\n" +
+      extracted.decisions
+        .map(
+          (value) => `- ${value}`
+        )
+        .join("\n")
+    );
+  }
+
+  if (extracted.tasks.length) {
+    parts.push(
+      "สิ่งที่ต้องทำต่อ:\n" +
+      extracted.tasks
+        .map(
+          (value) => `- ${value}`
+        )
+        .join("\n")
+    );
+  }
+
+  if (
+    extracted
+      .latestUserMessages
+      .length
+  ) {
+    parts.push(
+      "ข้อความล่าสุดของผู้ใช้:\n" +
+      extracted
+        .latestUserMessages
+        .map(
+          (value) =>
+            `- ${String(value).slice(0, 1000)}`
+        )
+        .join("\n")
+    );
+  }
+
+  const maximumCharacters =
+    Number(
+      policy.memory
+        ?.maximumSummaryCharacters
+    ) || 12000;
+
+  return {
+    summary:
+      parts
+        .join("\n\n")
+        .slice(
+          0,
+          maximumCharacters
+        ),
+    facts:
+      extracted.facts,
+    decisions:
+      extracted.decisions,
+    tasks:
+      extracted.tasks,
+  };
+}
+
+function createConversationMemorySnapshot(
+  conversation,
+  reason
+) {
+  const built =
+    buildConversationSummary(
+      conversation
+    );
+
+  const now =
+    new Date().toISOString();
+
+  const snapshot = {
+    id:
+      createTextChatId(
+        "memory-snapshot"
+      ),
+    createdAt: now,
+    reason,
+    conversationId:
+      conversation.id,
+    messageCount:
+      conversation.messages?.length ||
+      0,
+    summary:
+      built.summary,
+    facts:
+      built.facts,
+    decisions:
+      built.decisions,
+    tasks:
+      built.tasks,
+    settings: {
+      modelId:
+        conversation.modelId ||
+        null,
+      systemPrompt:
+        conversation.systemPrompt ||
+        "",
+      generationSettings: {
+        ...(conversation.settings || {}),
+      },
+    },
+  };
+
+  conversation.memory = {
+    ...(conversation.memory || {}),
+    summary:
+      built.summary,
+    facts:
+      built.facts,
+    decisions:
+      built.decisions,
+    tasks:
+      built.tasks,
+    lastCompactedAt: now,
+    latestSnapshotId:
+      snapshot.id,
+    snapshots: [
+      ...(
+        conversation.memory
+          ?.snapshots || []
+      ),
+      snapshot,
+    ].slice(-20),
+  };
+
+  return snapshot;
+}
+
+function refreshConversationSession(
+  conversation,
+  reason
+) {
+  const snapshot =
+    createConversationMemorySnapshot(
+      conversation,
+      reason
+    );
+
+  const policy =
+    readTextChatMemoryPolicy();
+
+  const recentMessageCount =
+    Number(
+      policy.context
+        ?.recentMessagesToPreserve
+    ) || 20;
+
+  const previousSessionId =
+    conversation.session?.id ||
+    null;
+
+  const nextSessionId =
+    createTextChatId(
+      "chat-session"
+    );
+
+  conversation.session = {
+    id: nextSessionId,
+    previousSessionId,
+    refreshedAt:
+      new Date().toISOString(),
+    refreshCount:
+      Number(
+        conversation.session
+          ?.refreshCount
+      ) + 1 || 1,
+    refreshReason: reason,
+    memorySnapshotId:
+      snapshot.id,
+    restoreContext: {
+      summary:
+        conversation.memory.summary,
+      facts:
+        conversation.memory.facts,
+      decisions:
+        conversation.memory.decisions,
+      tasks:
+        conversation.memory.tasks,
+      recentMessages:
+        (
+          conversation.messages || []
+        ).slice(
+          -recentMessageCount
+        ),
+    },
+  };
+
+  return {
+    snapshot,
+    session:
+      conversation.session,
+  };
+}
+
+function optimizeTextChatConversation(
+  conversationId,
+  {
+    force = false,
+    reason = "automatic",
+  } = {}
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const context =
+    calculateConversationContextStatus(
+      conversation
+    );
+
+  const ram =
+    getTextChatRamStatus();
+
+  let action =
+    force
+      ? "refresh"
+      : context.action;
+
+  if (
+    [
+      "refresh",
+      "emergency-refresh",
+    ].includes(ram.action)
+  ) {
+    action = "refresh";
+  } else if (
+    ram.action === "prepare" &&
+    action === "none"
+  ) {
+    action = "summarize";
+  }
+
+  let snapshot = null;
+  let session = null;
+
+  if (action === "summarize") {
+    const built =
+      buildConversationSummary(
+        conversation
+      );
+
+    conversation.memory = {
+      ...(conversation.memory || {}),
+      summary:
+        built.summary,
+      facts:
+        built.facts,
+      decisions:
+        built.decisions,
+      tasks:
+        built.tasks,
+      lastCompactedAt:
+        new Date().toISOString(),
+    };
+  }
+
+  if (action === "snapshot") {
+    snapshot =
+      createConversationMemorySnapshot(
+        conversation,
+        reason
+      );
+  }
+
+  if (action === "refresh") {
+    const refreshed =
+      refreshConversationSession(
+        conversation,
+        reason
+      );
+
+    snapshot =
+      refreshed.snapshot;
+
+    session =
+      refreshed.session;
+  }
+
+  conversation.updatedAt =
+    new Date().toISOString();
+
+  store.lastOpenedConversationId =
+    conversation.id;
+
+  writeTextChatStore(store);
+
+  return {
+    conversation,
+    action,
+    context:
+      calculateConversationContextStatus(
+        conversation
+      ),
+    ram,
+    snapshot,
+    session,
+  };
+}
+
+function getTextChatMemoryStatus(
+  conversationId
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return {
+    conversationId,
+    context:
+      calculateConversationContextStatus(
+        conversation
+      ),
+    ram:
+      getTextChatRamStatus(),
+    memory: {
+      hasSummary:
+        Boolean(
+          conversation.memory
+            ?.summary
+        ),
+      factCount:
+        conversation.memory
+          ?.facts?.length || 0,
+      decisionCount:
+        conversation.memory
+          ?.decisions?.length || 0,
+      taskCount:
+        conversation.memory
+          ?.tasks?.length || 0,
+      snapshotCount:
+        conversation.memory
+          ?.snapshots?.length || 0,
+      lastCompactedAt:
+        conversation.memory
+          ?.lastCompactedAt ||
+        null,
+    },
+    session: {
+      id:
+        conversation.session?.id ||
+        null,
+      refreshCount:
+        conversation.session
+          ?.refreshCount || 0,
+      refreshedAt:
+        conversation.session
+          ?.refreshedAt || null,
+      refreshReason:
+        conversation.session
+          ?.refreshReason || null,
+    },
+  };
+}
+
+function autoOptimizeTextChatConversation(
+  conversationId
+) {
+  try {
+    return optimizeTextChatConversation(
+      conversationId,
+      {
+        force: false,
+        reason:
+          "automatic-threshold",
+      }
+    );
+  } catch (error) {
+    console.error(
+      "[text-chat] Memory optimization failed:",
+      error instanceof Error
+        ? error.message
+        : String(error)
+    );
+
+    return null;
+  }
+}
+
+
+// LUKE_AI_TEXT_RUNTIME_SESSION_REFRESH_V1
+const textRuntimeSessionPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "runtime-session-policy.json"
+);
+
+const textRuntimeSessionState = new Map();
+
+function readTextRuntimeSessionPolicy() {
+  return readJsonFileStrict(
+    textRuntimeSessionPolicyPath,
+    "Text runtime session policy"
+  );
+}
+
+function getTextRuntimeBaseUrl() {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  return String(
+    process.env
+      .LUKE_AI_TEXT_RUNTIME_BASE_URL ||
+    policy.runtime?.baseUrl ||
+    "http://127.0.0.1:10086"
+  ).replace(/\/+$/, "");
+}
+
+function buildTextRuntimeUrl(pathname) {
+  const normalizedPath =
+    String(pathname || "")
+      .startsWith("/")
+      ? String(pathname)
+      : `/${String(pathname || "")}`;
+
+  return (
+    getTextRuntimeBaseUrl() +
+    normalizedPath
+  );
+}
+
+async function requestTextRuntime(
+  pathname,
+  {
+    method = "GET",
+    body = undefined,
+    timeoutMs = null,
+  } = {}
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  const controller =
+    new AbortController();
+
+  const effectiveTimeout =
+    Number(timeoutMs) ||
+    Number(
+      policy.runtime
+        ?.requestTimeoutMs
+    ) ||
+    15000;
+
+  const timer =
+    setTimeout(
+      () => controller.abort(),
+      effectiveTimeout
+    );
+
+  try {
+    const response =
+      await fetch(
+        buildTextRuntimeUrl(pathname),
+        {
+          method,
+          headers: {
+            "content-type":
+              "application/json",
+          },
+          body:
+            body === undefined
+              ? undefined
+              : JSON.stringify(body),
+          signal:
+            controller.signal,
+        }
+      );
+
+    const responseText =
+      await response.text();
+
+    let data = null;
+
+    if (responseText) {
+      try {
+        data =
+          JSON.parse(responseText);
+      } catch {
+        data = {
+          raw: responseText,
+        };
+      }
+    }
+
+    if (!response.ok) {
+      const error = new Error(
+        data?.error ||
+        data?.message ||
+        `Text runtime HTTP ${response.status}`
+      );
+
+      error.statusCode =
+        response.status;
+
+      error.runtimeData = data;
+      throw error;
+    }
+
+    return {
+      ok: true,
+      status:
+        response.status,
+      data,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getTextRuntimeHealth() {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  try {
+    const result =
+      await requestTextRuntime(
+        policy.runtime
+          ?.healthPath ||
+        "/health"
+      );
+
+    return {
+      reachable: true,
+      healthy: true,
+      response:
+        result.data,
+    };
+  } catch (error) {
+    return {
+      reachable: false,
+      healthy: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : String(error),
+    };
+  }
+}
+
+function formatRestorePromptSection(
+  heading,
+  values
+) {
+  const items =
+    Array.isArray(values)
+      ? values
+          .map(
+            (value) =>
+              String(value || "")
+                .trim()
+          )
+          .filter(Boolean)
+      : [];
+
+  if (!items.length) {
+    return "";
+  }
+
+  return (
+    `${heading}:\n` +
+    items
+      .map(
+        (value) =>
+          `- ${value}`
+      )
+      .join("\n")
+  );
+}
+
+function buildConversationRestorePrompt(
+  conversation
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  const restorePolicy =
+    policy.restorePrompt || {};
+
+  const memory =
+    conversation.memory || {};
+
+  const restoreContext =
+    conversation.session
+      ?.restoreContext || {};
+
+  const sections = [];
+
+  sections.push(
+    "คุณกำลังดำเนินบทสนทนาเดิมต่อจากเซสชันก่อนหน้า"
+  );
+
+  sections.push(
+    `Conversation ID: ${conversation.id}`
+  );
+
+  sections.push(
+    `ชื่อบทสนทนา: ${conversation.title}`
+  );
+
+  if (
+    restorePolicy
+      .includeSystemPrompt !== false &&
+    conversation.systemPrompt
+  ) {
+    sections.push(
+      "System Prompt เดิม:\n" +
+      conversation.systemPrompt
+    );
+  }
+
+  if (
+    restorePolicy
+      .includeSummary !== false &&
+    (
+      restoreContext.summary ||
+      memory.summary
+    )
+  ) {
+    sections.push(
+      "สรุปบริบทก่อนหน้า:\n" +
+      (
+        restoreContext.summary ||
+        memory.summary
+      )
+    );
+  }
+
+  if (
+    restorePolicy
+      .includeFacts !== false
+  ) {
+    const section =
+      formatRestorePromptSection(
+        "ข้อเท็จจริงที่ต้องจำ",
+        restoreContext.facts ||
+        memory.facts
+      );
+
+    if (section) {
+      sections.push(section);
+    }
+  }
+
+  if (
+    restorePolicy
+      .includeDecisions !== false
+  ) {
+    const section =
+      formatRestorePromptSection(
+        "การตัดสินใจที่ตกลงแล้ว",
+        restoreContext.decisions ||
+        memory.decisions
+      );
+
+    if (section) {
+      sections.push(section);
+    }
+  }
+
+  if (
+    restorePolicy
+      .includeTasks !== false
+  ) {
+    const section =
+      formatRestorePromptSection(
+        "งานที่ต้องดำเนินการต่อ",
+        restoreContext.tasks ||
+        memory.tasks
+      );
+
+    if (section) {
+      sections.push(section);
+    }
+  }
+
+  if (
+    restorePolicy
+      .includeRecentMessages !== false
+  ) {
+    const maximumRecentMessages =
+      Number(
+        restorePolicy
+          .maximumRecentMessages
+      ) || 20;
+
+    const recentMessages =
+      (
+        restoreContext.recentMessages ||
+        conversation.messages ||
+        []
+      ).slice(
+        -maximumRecentMessages
+      );
+
+    if (recentMessages.length) {
+      sections.push(
+        "ข้อความล่าสุด:\n" +
+        recentMessages
+          .map(
+            (message) =>
+              `[${message.role}] ${message.content}`
+          )
+          .join("\n")
+      );
+    }
+  }
+
+  sections.push(
+    "ตอบต่อเนื่องจากบริบทนี้ โดยไม่เริ่มบทสนทนาใหม่และไม่ถามข้อมูลที่มีอยู่แล้วซ้ำ"
+  );
+
+  const maximumCharacters =
+    Number(
+      restorePolicy
+        .maximumPromptCharacters
+    ) || 32000;
+
+  return sections
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(
+      0,
+      maximumCharacters
+    );
+}
+
+function getTextRuntimeModelLoadPayload(
+  conversation,
+  restorePrompt
+) {
+  const activeModelId =
+    conversation.modelId ||
+    readInstalledTextModels()
+      .activeModelId ||
+    null;
+
+  const installedRegistry =
+    readInstalledTextModels();
+
+  const installedModel =
+    installedRegistry.models
+      .filter(
+        (model) =>
+          !activeModelId ||
+          model.modelId ===
+          activeModelId
+      )
+      .sort(
+        (left, right) =>
+          new Date(
+            right.installedAt || 0
+          ).getTime() -
+          new Date(
+            left.installedAt || 0
+          ).getTime()
+      )[0] ||
+    null;
+
+  return {
+    modelId:
+      activeModelId ||
+      installedModel?.modelId ||
+      null,
+    modelPath:
+      installedModel
+        ?.installedPath ||
+      null,
+    runtime:
+      installedModel?.runtime ||
+      "llama.cpp",
+    variantId:
+      installedModel
+        ?.variantId ||
+      null,
+    quantization:
+      installedModel
+        ?.quantization ||
+      null,
+    contextLength:
+      getConversationContextLimit(
+        conversation
+      ),
+    systemPrompt:
+      restorePrompt,
+    conversationId:
+      conversation.id,
+    sessionId:
+      conversation.session?.id ||
+      null,
+  };
+}
+
+async function unloadTextRuntimeModel(
+  conversation
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  return requestTextRuntime(
+    policy.runtime
+      ?.unloadPath ||
+    "/v1/models/unload",
+    {
+      method: "POST",
+      body: {
+        conversationId:
+          conversation.id,
+        modelId:
+          conversation.modelId ||
+          null,
+      },
+    }
+  );
+}
+
+// LUKE_AI_JSON_OUTPUT_CORE_COMMANDS_V1
+function normalizeLlmJsonSchemaName(value) {
+  const name = String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+
+  return name || "luke_json_output";
+}
+
+function isLlmResponseFormatObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasLlmResponseFormatSchemaField(value) {
+  return isLlmResponseFormatObject(value) &&
+    Object.prototype.hasOwnProperty.call(value, "schema");
+}
+
+function normalizeLlmResponseFormatType(value) {
+  const type =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  return type === "json" ? "json_object" : type;
+}
+
+function normalizeLlmResponseFormat(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    const mode = normalizeLlmResponseFormatType(value);
+    return mode ? { type: mode } : undefined;
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const type = normalizeLlmResponseFormatType(value.type);
+  if (!type) {
+    return undefined;
+  }
+
+  if (type === "json_schema") {
+    const jsonSchema = isLlmResponseFormatObject(value.json_schema)
+      ? value.json_schema
+      : isLlmResponseFormatObject(value.jsonSchema)
+        ? value.jsonSchema
+        : {};
+    const schema = isLlmResponseFormatObject(jsonSchema.schema)
+      ? jsonSchema.schema
+      : isLlmResponseFormatObject(value.schema)
+        ? value.schema
+        : isLlmResponseFormatObject(value.jsonSchema) &&
+            !hasLlmResponseFormatSchemaField(value.jsonSchema)
+          ? value.jsonSchema
+          : null;
+    if (!schema) {
+      return undefined;
+    }
+
+    const schemaName =
+      jsonSchema.name ||
+      value.name ||
+      value.schema_name ||
+      value.schemaName ||
+      value.json_schema_name ||
+      value.jsonSchemaName ||
+      jsonSchema.title ||
+      value.title ||
+      schema.name ||
+      schema.title;
+
+    return {
+      type,
+      json_schema: {
+        name: normalizeLlmJsonSchemaName(schemaName),
+        schema,
+        strict: jsonSchema.strict !== false &&
+          value.strict !== false &&
+          value.schema_strict !== false &&
+          value.schemaStrict !== false &&
+          value.json_schema_strict !== false &&
+          value.jsonSchemaStrict !== false,
+      },
+    };
+  }
+
+  return {
+    ...value,
+    type,
+  };
+}
+
+function normalizeLlmResponseFormatCandidate(primary, fallback) {
+  return normalizeLlmResponseFormat(primary) ||
+    normalizeLlmResponseFormat(fallback);
+}
+
+async function loadTextRuntimeModel(
+  conversation,
+  restorePrompt
+) {
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  return requestTextRuntime(
+    policy.runtime
+      ?.loadPath ||
+    "/v1/models/load",
+    {
+      method: "POST",
+      timeoutMs:
+        Number(
+          policy.runtime
+            ?.loadTimeoutMs
+        ) ||
+        120000,
+      body:
+        getTextRuntimeModelLoadPayload(
+          conversation,
+          restorePrompt
+        ),
+    }
+  );
+}
+
+async function refreshTextRuntimeSession(
+  conversationId,
+  {
+    forceMemoryRefresh = true,
+    reason =
+      "context-or-ram-threshold",
+  } = {}
+) {
+  const store =
+    readTextChatStore();
+
+  let conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (forceMemoryRefresh) {
+    optimizeTextChatConversation(
+      conversationId,
+      {
+        force: true,
+        reason,
+      }
+    );
+
+    const refreshedStore =
+      readTextChatStore();
+
+    conversation =
+      findTextChatConversation(
+        refreshedStore,
+        conversationId
+      );
+  }
+
+  const restorePrompt =
+    buildConversationRestorePrompt(
+      conversation
+    );
+
+  const policy =
+    readTextRuntimeSessionPolicy();
+
+  const beforeHealth =
+    policy.refresh
+      ?.healthCheckBeforeRefresh ===
+      false
+      ? null
+      : await getTextRuntimeHealth();
+
+  const state = {
+    conversationId,
+    status: "preparing",
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    reason,
+    beforeHealth,
+    unload: null,
+    load: null,
+    afterHealth: null,
+    restorePromptCharacters:
+      restorePrompt.length,
+    runtimeOffline: false,
+    error: null,
+  };
+
+  textRuntimeSessionState.set(
+    conversationId,
+    state
+  );
+
+  const runtimeReachable =
+    beforeHealth?.reachable !==
+    false;
+
+  if (
+    !runtimeReachable &&
+    policy.runtime
+      ?.allowOfflinePreparation ===
+      true
+  ) {
+    state.status =
+      "prepared-offline";
+
+    state.runtimeOffline = true;
+
+    state.completedAt =
+      new Date().toISOString();
+
+    textRuntimeSessionState.set(
+      conversationId,
+      state
+    );
+
+    return {
+      ...state,
+      restorePrompt,
+      conversation,
+    };
+  }
+
+  try {
+    if (
+      policy.refresh
+        ?.unloadBeforeReload !==
+        false
+    ) {
+      state.status =
+        "unloading";
+
+      state.unload =
+        await unloadTextRuntimeModel(
+          conversation
+        );
+    }
+
+    state.status = "loading";
+
+    state.load =
+      await loadTextRuntimeModel(
+        conversation,
+        restorePrompt
+      );
+
+    if (
+      policy.refresh
+        ?.healthCheckAfterReload !==
+        false
+    ) {
+      state.status =
+        "verifying";
+
+      state.afterHealth =
+        await getTextRuntimeHealth();
+
+      if (
+        state.afterHealth
+          ?.healthy !== true
+      ) {
+        throw new Error(
+          "Text runtime did not become healthy after reload."
+        );
+      }
+    }
+
+    state.status = "ready";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    textRuntimeSessionState.set(
+      conversationId,
+      state
+    );
+
+    return {
+      ...state,
+      restorePrompt,
+      conversation,
+    };
+  } catch (error) {
+    state.status = "failed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    state.error =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    textRuntimeSessionState.set(
+      conversationId,
+      state
+    );
+
+    throw error;
+  }
+}
+
+function getTextRuntimeSessionStatus(
+  conversationId
+) {
+  return (
+    textRuntimeSessionState.get(
+      conversationId
+    ) || {
+      conversationId,
+      status: "idle",
+      startedAt: null,
+      completedAt: null,
+      runtimeOffline: false,
+      error: null,
+    }
+  );
+}
+
+
+// LUKE_AI_TEXT_GENERATION_STREAMING_V1
+const textGenerationPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "generation-policy.json"
+);
+
+const activeTextGenerations = new Map();
+
+function readTextGenerationPolicy() {
+  return readJsonFileStrict(
+    textGenerationPolicyPath,
+    "Text generation policy"
+  );
+}
+
+function writeTextGenerationEvent(
+  response,
+  event,
+  data
+) {
+  if (
+    response.destroyed ||
+    response.writableEnded
+  ) {
+    return;
+  }
+
+  response.write(
+    `event: ${event}\n`
+  );
+
+  response.write(
+    `data: ${JSON.stringify(data)}\n\n`
+  );
+}
+
+function getTextGenerationMessages(
+  conversation
+) {
+  const policy =
+    readTextGenerationPolicy();
+
+  const messages = [];
+
+  if (
+    policy.conversation
+      ?.includeRestorePrompt !== false
+  ) {
+    const restorePrompt =
+      buildConversationRestorePrompt(
+        conversation
+      );
+
+    if (restorePrompt) {
+      messages.push({
+        role: "system",
+        content: restorePrompt,
+      });
+    }
+  } else if (
+    conversation.systemPrompt
+  ) {
+    messages.push({
+      role: "system",
+      content:
+        conversation.systemPrompt,
+    });
+  }
+
+  if (
+    policy.conversation
+      ?.includeRecentMessages !== false
+  ) {
+    const maximumRecentMessages =
+      Number(
+        policy.conversation
+          ?.maximumRecentMessages
+      ) || 20;
+
+    const recentMessages =
+      (
+        conversation.messages || []
+      )
+        .filter(
+          (message) =>
+            [
+              "user",
+              "assistant",
+              "system",
+            ].includes(message.role)
+        )
+        .slice(
+          -maximumRecentMessages
+        );
+
+    for (const message of recentMessages) {
+      messages.push({
+        role: message.role,
+        content: message.content,
+      });
+    }
+  }
+
+  return messages;
+}
+
+function getTextGenerationModelId(
+  conversation
+) {
+  if (conversation.modelId) {
+    return conversation.modelId;
+  }
+
+  try {
+    const registry =
+      readInstalledTextModels();
+
+    if (registry.activeModelId) {
+      return registry.activeModelId;
+    }
+
+    const latest =
+      [...(registry.models || [])]
+        .sort(
+          (left, right) =>
+            new Date(
+              right.installedAt || 0
+            ).getTime() -
+            new Date(
+              left.installedAt || 0
+            ).getTime()
+        )[0];
+
+    return (
+      latest?.modelId ||
+      "local-model"
+    );
+  } catch {
+    return "local-model";
+  }
+}
+
+function createTextGenerationPayload(
+  conversation,
+  overrides = {}
+) {
+  const policy =
+    readTextGenerationPolicy();
+  const responseFormat =
+    normalizeLlmResponseFormatCandidate(
+      overrides.response_format,
+      overrides.responseFormat
+    );
+
+  const payload = {
+    model:
+      overrides.modelId ||
+      (
+        overrides.autoRoute ===
+          false
+          ? getTextGenerationModelId(
+              conversation
+            )
+          : (
+              routeTextModel({
+                prompt:
+                  [...(
+                    conversation.messages ||
+                    []
+                  )]
+                    .reverse()
+                    .find(
+                      (message) =>
+                        message.role ===
+                        "user"
+                    )
+                    ?.content ||
+                  "",
+                conversationId:
+                  conversation.id,
+              })
+                .selectedModel
+                .modelId
+            )
+      ),
+    messages:
+      getTextGenerationMessages(
+        conversation
+      ),
+    stream: true,
+    temperature:
+      Number(
+        overrides.temperature ??
+        conversation.settings
+          ?.temperature ??
+        policy.generation
+          ?.temperature
+      ) || 0.7,
+    top_p:
+      Number(
+        overrides.topP ??
+        policy.generation?.topP
+      ) || 0.9,
+    max_tokens:
+      Number(
+        overrides.maxTokens ??
+        policy.generation
+          ?.maxTokens
+      ) || 2048,
+    stop:
+      Array.isArray(
+        overrides.stop
+      )
+        ? overrides.stop
+        : (
+            policy.generation
+              ?.stopSequences || []
+          ),
+  };
+
+  if (responseFormat) {
+    payload.response_format =
+      responseFormat;
+  }
+
+  return payload;
+}
+
+function extractTextGenerationDelta(
+  payload
+) {
+  if (!payload) {
+    return "";
+  }
+
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  const openAiDelta =
+    payload.choices?.[0]
+      ?.delta?.content;
+
+  if (
+    typeof openAiDelta ===
+    "string"
+  ) {
+    return openAiDelta;
+  }
+
+  const openAiText =
+    payload.choices?.[0]
+      ?.text;
+
+  if (
+    typeof openAiText ===
+    "string"
+  ) {
+    return openAiText;
+  }
+
+  if (
+    typeof payload.content ===
+    "string"
+  ) {
+    return payload.content;
+  }
+
+  if (
+    typeof payload.token ===
+    "string"
+  ) {
+    return payload.token;
+  }
+
+  if (
+    typeof payload.response ===
+    "string"
+  ) {
+    return payload.response;
+  }
+
+  return "";
+}
+
+function appendAssistantGenerationMessage(
+  conversationId,
+  content,
+  {
+    modelId = null,
+    stopped = false,
+    generationId = null,
+  } = {}
+) {
+  const normalized =
+    String(content || "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return appendTextChatMessage(
+    conversationId,
+    {
+      role: "assistant",
+      content: normalized,
+      modelId,
+      metadata: {
+        source:
+          "text-runtime-stream",
+        stopped,
+        partial: stopped,
+        generationId,
+        autosaved: true,
+      },
+    }
+  );
+}
+
+async function streamTextRuntimeGeneration(
+  conversationId,
+  response,
+  options = {}
+) {
+  const policy =
+    readTextGenerationPolicy();
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (
+    policy.conversation
+      ?.preventConcurrentGeneration !==
+      false &&
+    activeTextGenerations.has(
+      conversationId
+    )
+  ) {
+    const error = new Error(
+      "A response is already being generated for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const controller =
+    new AbortController();
+
+  const generationId =
+    createTextChatId(
+      "generation"
+    );
+
+  const runtimePolicy =
+    readTextRuntimeSessionPolicy();
+
+  const generationPath =
+    policy.runtime
+      ?.generationPath ||
+    "/v1/chat/completions";
+
+  const timeoutMs =
+    Number(
+      policy.runtime
+        ?.requestTimeoutMs
+    ) || 300000;
+
+  const timer =
+    setTimeout(
+      () => controller.abort(),
+      timeoutMs
+    );
+
+  const state = {
+    generationId,
+    conversationId,
+    controller,
+    status: "starting",
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    accumulatedText: "",
+    modelId:
+      getTextGenerationModelId(
+        conversation
+      ),
+    stopped: false,
+    error: null,
+  };
+
+  activeTextGenerations.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "start",
+    {
+      generationId,
+      conversationId,
+      modelId:
+        state.modelId,
+    }
+  );
+
+  try {
+    state.status = "streaming";
+
+    const runtimeResponse =
+      await fetch(
+        buildTextRuntimeUrl(
+          generationPath
+        ),
+        {
+          method: "POST",
+          headers: {
+            "content-type":
+              "application/json",
+            accept:
+              "text/event-stream, application/json",
+          },
+          body: JSON.stringify(
+            createTextGenerationPayload(
+              conversation,
+              options
+            )
+          ),
+          signal:
+            controller.signal,
+        }
+      );
+
+    if (!runtimeResponse.ok) {
+      const errorText =
+        await runtimeResponse.text();
+
+      throw new Error(
+        errorText ||
+        `Text runtime HTTP ${runtimeResponse.status}`
+      );
+    }
+
+    if (!runtimeResponse.body) {
+      throw new Error(
+        "Text runtime returned no response body."
+      );
+    }
+
+    const contentType =
+      String(
+        runtimeResponse.headers.get(
+          "content-type"
+        ) || ""
+      ).toLowerCase();
+
+    if (
+      contentType.includes(
+        "application/json"
+      )
+    ) {
+      const payload =
+        await runtimeResponse.json();
+
+      const content =
+        extractTextGenerationDelta(
+          payload
+        );
+
+      if (content) {
+        state.accumulatedText +=
+          content;
+
+        writeTextGenerationEvent(
+          response,
+          "delta",
+          {
+            generationId,
+            content,
+          }
+        );
+      }
+    } else {
+      const reader =
+        runtimeResponse.body
+          .getReader();
+
+      const decoder =
+        new TextDecoder();
+
+      let buffer = "";
+
+      while (true) {
+        const result =
+          await reader.read();
+
+        if (result.done) {
+          break;
+        }
+
+        buffer += decoder.decode(
+          result.value,
+          {
+            stream: true,
+          }
+        );
+
+        const lines =
+          buffer.split(/\r?\n/);
+
+        buffer =
+          lines.pop() || "";
+
+        for (const rawLine of lines) {
+          const line =
+            rawLine.trim();
+
+          if (
+            !line ||
+            line.startsWith(":")
+          ) {
+            continue;
+          }
+
+          let serialized = line;
+
+          if (
+            serialized.startsWith(
+              "data:"
+            )
+          ) {
+            serialized =
+              serialized
+                .slice(5)
+                .trim();
+          }
+
+          if (
+            serialized === "[DONE]"
+          ) {
+            continue;
+          }
+
+          let payload = null;
+
+          try {
+            payload =
+              JSON.parse(serialized);
+          } catch {
+            payload = serialized;
+          }
+
+          const content =
+            extractTextGenerationDelta(
+              payload
+            );
+
+          if (!content) {
+            continue;
+          }
+
+          state.accumulatedText +=
+            content;
+
+          writeTextGenerationEvent(
+            response,
+            "delta",
+            {
+              generationId,
+              content,
+            }
+          );
+        }
+      }
+
+      const remaining =
+        buffer.trim();
+
+      if (
+        remaining &&
+        remaining !== "[DONE]"
+      ) {
+        const serialized =
+          remaining.startsWith(
+            "data:"
+          )
+            ? remaining
+                .slice(5)
+                .trim()
+            : remaining;
+
+        let payload = null;
+
+        try {
+          payload =
+            JSON.parse(serialized);
+        } catch {
+          payload = serialized;
+        }
+
+        const content =
+          extractTextGenerationDelta(
+            payload
+          );
+
+        if (content) {
+          state.accumulatedText +=
+            content;
+
+          writeTextGenerationEvent(
+            response,
+            "delta",
+            {
+              generationId,
+              content,
+            }
+          );
+        }
+      }
+    }
+
+    state.status = "completed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    let savedMessage = null;
+
+    if (
+      policy.generation
+        ?.autosaveAssistantResponse !==
+        false
+    ) {
+      const saved =
+        appendAssistantGenerationMessage(
+          conversationId,
+          state.accumulatedText,
+          {
+            modelId:
+              state.modelId,
+            stopped: false,
+            generationId,
+          }
+        );
+
+      savedMessage =
+        saved?.message || null;
+    }
+
+    writeTextGenerationEvent(
+      response,
+      "complete",
+      {
+        generationId,
+        conversationId,
+        content:
+          state.accumulatedText,
+        message:
+          savedMessage,
+        autosaved:
+          Boolean(savedMessage),
+      }
+    );
+  } catch (error) {
+    const stopped =
+      error?.name ===
+        "AbortError" ||
+      state.stopped === true;
+
+    state.stopped = stopped;
+
+    state.status =
+      stopped
+        ? "stopped"
+        : "failed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    state.error =
+      stopped
+        ? null
+        : (
+            error instanceof Error
+              ? error.message
+              : String(error)
+          );
+
+    let savedMessage = null;
+
+    const minimumPartialCharacters =
+      Number(
+        policy.generation
+          ?.minimumPartialResponseCharacters
+      ) || 1;
+
+    if (
+      stopped &&
+      policy.generation
+        ?.savePartialResponseWhenStopped !==
+        false &&
+      state.accumulatedText
+        .trim().length >=
+        minimumPartialCharacters
+    ) {
+      const saved =
+        appendAssistantGenerationMessage(
+          conversationId,
+          state.accumulatedText,
+          {
+            modelId:
+              state.modelId,
+            stopped: true,
+            generationId,
+          }
+        );
+
+      savedMessage =
+        saved?.message || null;
+    }
+
+    if (stopped) {
+      writeTextGenerationEvent(
+        response,
+        "stopped",
+        {
+          generationId,
+          conversationId,
+          content:
+            state.accumulatedText,
+          message:
+            savedMessage,
+          autosaved:
+            Boolean(savedMessage),
+        }
+      );
+    } else {
+      writeTextGenerationEvent(
+        response,
+        "error",
+        {
+          generationId,
+          conversationId,
+          error:
+            state.error,
+        }
+      );
+    }
+  } finally {
+    clearTimeout(timer);
+
+    activeTextGenerations.delete(
+      conversationId
+    );
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopTextRuntimeGeneration(
+  conversationId
+) {
+  const state =
+    activeTextGenerations.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active generation.",
+    };
+  }
+
+  state.stopped = true;
+  state.status = "stopping";
+  state.controller.abort();
+
+  return {
+    stopped: true,
+    generationId:
+      state.generationId,
+  };
+}
+
+function getTextRuntimeGenerationStatus(
+  conversationId
+) {
+  const state =
+    activeTextGenerations.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      conversationId,
+      active: false,
+      status: "idle",
+      generationId: null,
+    };
+  }
+
+  return {
+    conversationId,
+    active: true,
+    status:
+      state.status,
+    generationId:
+      state.generationId,
+    startedAt:
+      state.startedAt,
+    accumulatedCharacters:
+      state.accumulatedText.length,
+    modelId:
+      state.modelId,
+  };
+}
+
+
+// LUKE_AI_MULTI_MODEL_PARALLEL_GENERATION_V1
+const multiModelPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "multi-model-policy.json"
+);
+
+const activeMultiModelGenerations =
+  new Map();
+
+function readMultiModelPolicy() {
+  return readJsonFileStrict(
+    multiModelPolicyPath,
+    "Multi-model generation policy"
+  );
+}
+
+function normalizeSelectedModelIds(
+  modelIds
+) {
+  const policy =
+    readMultiModelPolicy();
+
+  const maximumModels =
+    Number(
+      policy.selection
+        ?.maximumModels
+    ) || 3;
+
+  const normalized = [
+    ...new Set(
+      (
+        Array.isArray(modelIds)
+          ? modelIds
+          : []
+      )
+        .map(
+          (modelId) =>
+            String(modelId || "")
+              .trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+
+  if (!normalized.length) {
+    const error = new Error(
+      "Select at least one text model."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    normalized.length >
+    maximumModels
+  ) {
+    const error = new Error(
+      `Select no more than ${maximumModels} models.`
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalized;
+}
+
+function tokenizeForSimilarity(
+  value
+) {
+  return new Set(
+    String(value || "")
+      .toLowerCase()
+      .replace(
+        /[^\p{L}\p{N}\s]/gu,
+        " "
+      )
+      .split(/\s+/)
+      .map(
+        (token) =>
+          token.trim()
+      )
+      .filter(
+        (token) =>
+          token.length > 1
+      )
+  );
+}
+
+function calculateJaccardSimilarity(
+  left,
+  right
+) {
+  const leftTokens =
+    tokenizeForSimilarity(left);
+
+  const rightTokens =
+    tokenizeForSimilarity(right);
+
+  if (
+    !leftTokens.size &&
+    !rightTokens.size
+  ) {
+    return 1;
+  }
+
+  const intersection =
+    [...leftTokens]
+      .filter(
+        (token) =>
+          rightTokens.has(token)
+      )
+      .length;
+
+  const union =
+    new Set([
+      ...leftTokens,
+      ...rightTokens,
+    ]).size;
+
+  return union > 0
+    ? intersection / union
+    : 0;
+}
+
+function calculateResponseMetrics(
+  response,
+  prompt,
+  allResponses
+) {
+  const content =
+    String(response.content || "")
+      .trim();
+
+  const promptTokens =
+    tokenizeForSimilarity(prompt);
+
+  const responseTokens =
+    tokenizeForSimilarity(content);
+
+  const overlappingPromptTokens =
+    [...promptTokens]
+      .filter(
+        (token) =>
+          responseTokens.has(token)
+      )
+      .length;
+
+  const relevance =
+    promptTokens.size > 0
+      ? Math.min(
+          1,
+          overlappingPromptTokens /
+          Math.max(
+            1,
+            promptTokens.size
+          )
+        )
+      : 0.5;
+
+  const characterCount =
+    content.length;
+
+  const sentenceCount =
+    content
+      .split(/[.!?。！？\n]+/)
+      .map(
+        (value) =>
+          value.trim()
+      )
+      .filter(Boolean)
+      .length;
+
+  const completeness =
+    Math.min(
+      1,
+      characterCount / 700
+    );
+
+  const clarity =
+    sentenceCount > 0
+      ? Math.min(
+          1,
+          1 -
+          Math.abs(
+            characterCount /
+            sentenceCount -
+            110
+          ) /
+          300
+        )
+      : 0;
+
+  const detail =
+    Math.min(
+      1,
+      responseTokens.size / 120
+    );
+
+  const similarities =
+    allResponses
+      .filter(
+        (candidate) =>
+          candidate.modelId !==
+          response.modelId
+      )
+      .map(
+        (candidate) =>
+          calculateJaccardSimilarity(
+            content,
+            candidate.content
+          )
+      );
+
+  const maximumSimilarity =
+    similarities.length
+      ? Math.max(
+          ...similarities
+        )
+      : 0;
+
+  const uniqueness =
+    Math.max(
+      0,
+      1 - maximumSimilarity
+    );
+
+  return {
+    relevance:
+      Number(
+        relevance.toFixed(4)
+      ),
+    completeness:
+      Number(
+        completeness.toFixed(4)
+      ),
+    clarity:
+      Number(
+        Math.max(
+          0,
+          clarity
+        ).toFixed(4)
+      ),
+    detail:
+      Number(
+        detail.toFixed(4)
+      ),
+    uniqueness:
+      Number(
+        uniqueness.toFixed(4)
+      ),
+    characterCount,
+    sentenceCount,
+    maximumSimilarity:
+      Number(
+        maximumSimilarity.toFixed(4)
+      ),
+  };
+}
+
+function evaluateMultiModelResponses(
+  responses,
+  prompt
+) {
+  const policy =
+    readMultiModelPolicy();
+
+  const weights =
+    policy.evaluation
+      ?.weights || {};
+
+  const evaluated =
+    responses.map(
+      (response) => {
+        const metrics =
+          calculateResponseMetrics(
+            response,
+            prompt,
+            responses
+          );
+
+        const score =
+          metrics.relevance *
+            Number(
+              weights.relevance ??
+              0.35
+            ) +
+          metrics.completeness *
+            Number(
+              weights.completeness ??
+              0.3
+            ) +
+          metrics.clarity *
+            Number(
+              weights.clarity ??
+              0.2
+            ) +
+          metrics.detail *
+            Number(
+              weights.detail ??
+              0.1
+            ) +
+          metrics.uniqueness *
+            Number(
+              weights.uniqueness ??
+              0.05
+            );
+
+        return {
+          ...response,
+          metrics,
+          score:
+            Number(
+              score.toFixed(4)
+            ),
+        };
+      }
+    )
+      .sort(
+        (left, right) =>
+          right.score -
+          left.score
+      )
+      .map(
+        (response, index) => ({
+          ...response,
+          rank:
+            index + 1,
+          best:
+            index === 0,
+        })
+      );
+
+  return {
+    winner:
+      evaluated[0] || null,
+    responses:
+      evaluated,
+  };
+}
+
+function getInstalledTextModelsForSelection() {
+  try {
+    const registry =
+      readInstalledTextModels();
+
+    return (
+      registry.models || []
+    )
+      .filter(
+        (model) =>
+          model.installedPath
+      )
+      .map(
+        (model) => ({
+          modelId:
+            model.modelId,
+          modelName:
+            model.modelName ||
+            model.modelId,
+          version:
+            model.version,
+          variantId:
+            model.variantId,
+          quantization:
+            model.quantization,
+          runtime:
+            model.runtime,
+          installedPath:
+            model.installedPath,
+          active:
+            registry.activeModelId ===
+            model.modelId,
+        })
+      );
+  } catch {
+    return [];
+  }
+}
+
+async function requestSingleModelGeneration(
+  conversation,
+  modelId,
+  prompt,
+  controller,
+  onDelta,
+  options = {}
+) {
+  const policy =
+    readTextGenerationPolicy();
+
+  const generationPath =
+    policy.runtime
+      ?.generationPath ||
+    "/v1/chat/completions";
+
+  const payload =
+    createTextGenerationPayload(
+      conversation,
+      {
+        modelId,
+        response_format:
+          options.response_format,
+        responseFormat:
+          options.responseFormat,
+      }
+    );
+
+  const runtimeResponse =
+    await fetch(
+      buildTextRuntimeUrl(
+        generationPath
+      ),
+      {
+        method: "POST",
+        headers: {
+          "content-type":
+            "application/json",
+          accept:
+            "text/event-stream, application/json",
+          "x-luke-model-id":
+            modelId,
+        },
+        body:
+          JSON.stringify(payload),
+        signal:
+          controller.signal,
+      }
+    );
+
+  if (!runtimeResponse.ok) {
+    const errorText =
+      await runtimeResponse.text();
+
+    throw new Error(
+      errorText ||
+      `Model ${modelId} returned HTTP ${runtimeResponse.status}`
+    );
+  }
+
+  if (!runtimeResponse.body) {
+    throw new Error(
+      `Model ${modelId} returned no response body.`
+    );
+  }
+
+  const contentType =
+    String(
+      runtimeResponse.headers.get(
+        "content-type"
+      ) || ""
+    ).toLowerCase();
+
+  let accumulatedText = "";
+
+  if (
+    contentType.includes(
+      "application/json"
+    )
+  ) {
+    const body =
+      await runtimeResponse.json();
+
+    const delta =
+      extractTextGenerationDelta(
+        body
+      );
+
+    if (delta) {
+      accumulatedText += delta;
+
+      onDelta(delta);
+    }
+  } else {
+    const reader =
+      runtimeResponse.body
+        .getReader();
+
+    const decoder =
+      new TextDecoder();
+
+    let buffer = "";
+
+    while (true) {
+      const result =
+        await reader.read();
+
+      if (result.done) {
+        break;
+      }
+
+      buffer += decoder.decode(
+        result.value,
+        {
+          stream: true,
+        }
+      );
+
+      const lines =
+        buffer.split(/\r?\n/);
+
+      buffer =
+        lines.pop() || "";
+
+      for (const rawLine of lines) {
+        let line =
+          rawLine.trim();
+
+        if (
+          !line ||
+          line.startsWith(":")
+        ) {
+          continue;
+        }
+
+        if (
+          line.startsWith("data:")
+        ) {
+          line =
+            line
+              .slice(5)
+              .trim();
+        }
+
+        if (
+          line === "[DONE]"
+        ) {
+          continue;
+        }
+
+        let eventPayload = null;
+
+        try {
+          eventPayload =
+            JSON.parse(line);
+        } catch {
+          eventPayload = line;
+        }
+
+        const delta =
+          extractTextGenerationDelta(
+            eventPayload
+          );
+
+        if (!delta) {
+          continue;
+        }
+
+        accumulatedText += delta;
+
+        onDelta(delta);
+      }
+    }
+  }
+
+  return {
+    modelId,
+    content:
+      accumulatedText.trim(),
+    status:
+      "completed",
+    error:
+      null,
+  };
+}
+
+async function streamMultiModelGeneration(
+  conversationId,
+  modelIds,
+  response,
+  options = {}
+) {
+  const selectedModelIds =
+    normalizeSelectedModelIds(
+      modelIds
+    );
+
+  if (
+    activeMultiModelGenerations
+      .has(conversationId)
+  ) {
+    const error = new Error(
+      "Multi-model generation is already running for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const lastUserMessage =
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      );
+
+  const prompt =
+    lastUserMessage?.content || "";
+
+  const generationId =
+    createTextChatId(
+      "multi-generation"
+    );
+
+  const controllers =
+    new Map();
+
+  const state = {
+    generationId,
+    conversationId,
+    modelIds:
+      selectedModelIds,
+    status:
+      "running",
+    startedAt:
+      new Date().toISOString(),
+    stopped:
+      false,
+    controllers,
+  };
+
+  activeMultiModelGenerations.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "multi-start",
+    {
+      generationId,
+      conversationId,
+      modelIds:
+        selectedModelIds,
+      modelCount:
+        selectedModelIds.length,
+    }
+  );
+
+  try {
+    const tasks =
+      selectedModelIds.map(
+        async (modelId) => {
+          const controller =
+            new AbortController();
+
+          controllers.set(
+            modelId,
+            controller
+          );
+
+          try {
+            const result =
+              await requestSingleModelGeneration(
+                conversation,
+                modelId,
+                prompt,
+                controller,
+                (delta) => {
+                  writeTextGenerationEvent(
+                    response,
+                    "model-delta",
+                    {
+                      generationId,
+                      modelId,
+                      content:
+                        delta,
+                    }
+                  );
+                },
+                {
+                  response_format:
+                    options.response_format,
+                  responseFormat:
+                    options.responseFormat,
+                }
+              );
+
+            writeTextGenerationEvent(
+              response,
+              "model-complete",
+              {
+                generationId,
+                modelId,
+                content:
+                  result.content,
+              }
+            );
+
+            return result;
+          } catch (error) {
+            const stopped =
+              state.stopped ||
+              error?.name ===
+                "AbortError";
+
+            const result = {
+              modelId,
+              content: "",
+              status:
+                stopped
+                  ? "stopped"
+                  : "failed",
+              error:
+                stopped
+                  ? null
+                  : (
+                      error instanceof Error
+                        ? error.message
+                        : String(error)
+                    ),
+            };
+
+            writeTextGenerationEvent(
+              response,
+              stopped
+                ? "model-stopped"
+                : "model-error",
+              {
+                generationId,
+                ...result,
+              }
+            );
+
+            return result;
+          }
+        }
+      );
+
+    const rawResults =
+      await Promise.all(tasks);
+
+    const completedResponses =
+      rawResults.filter(
+        (result) =>
+          result.status ===
+            "completed" &&
+          result.content.trim()
+      );
+
+    const baseEvaluation =
+      evaluateMultiModelResponses(
+        completedResponses,
+        prompt
+      );
+
+    const adaptiveResponses =
+      applyAdaptiveFeedbackScores(
+        baseEvaluation.responses
+      );
+
+    const evaluation = {
+      winner:
+        adaptiveResponses[0] || null,
+      responses:
+        adaptiveResponses,
+    };
+
+    const savedMessages = [];
+
+    for (
+      const evaluated
+      of evaluation.responses
+    ) {
+      const saved =
+        appendTextChatMessage(
+          conversationId,
+          {
+            role:
+              "assistant",
+            content:
+              evaluated.content,
+            modelId:
+              evaluated.modelId,
+            metadata: {
+              source:
+                "multi-model-generation",
+              generationId,
+              multiModel: true,
+              score:
+                evaluated.score,
+              rank:
+                evaluated.rank,
+              best:
+                evaluated.best,
+              metrics:
+                evaluated.metrics,
+              autosaved:
+                true,
+            },
+          }
+        );
+
+      if (saved?.message) {
+        savedMessages.push(
+          saved.message
+        );
+      }
+    }
+
+    state.status =
+      state.stopped
+        ? "stopped"
+        : "completed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    writeTextGenerationEvent(
+      response,
+      "multi-complete",
+      {
+        generationId,
+        conversationId,
+        stopped:
+          state.stopped,
+        winnerModelId:
+          evaluation.winner
+            ?.modelId ||
+          null,
+        winnerScore:
+          evaluation.winner
+            ?.score ||
+          null,
+        responses:
+          evaluation.responses,
+        savedMessages,
+      }
+    );
+  } finally {
+    activeMultiModelGenerations
+      .delete(conversationId);
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopMultiModelGeneration(
+  conversationId
+) {
+  const state =
+    activeMultiModelGenerations
+      .get(conversationId);
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active multi-model generation.",
+    };
+  }
+
+  state.stopped = true;
+  state.status =
+    "stopping";
+
+  for (
+    const controller
+    of state.controllers.values()
+  ) {
+    controller.abort();
+  }
+
+  return {
+    stopped: true,
+    generationId:
+      state.generationId,
+    modelIds:
+      state.modelIds,
+  };
+}
+
+
+// LUKE_AI_JUDGE_SYNTHESIS_V1
+const aiJudgePolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "judge-synthesis-policy.json"
+);
+
+const activeJudgeSyntheses =
+  new Map();
+
+function readAiJudgePolicy() {
+  return readJsonFileStrict(
+    aiJudgePolicyPath,
+    "AI Judge synthesis policy"
+  );
+}
+
+function getLatestMultiModelResponses(
+  conversation
+) {
+  const messages =
+    conversation.messages || [];
+
+  const candidates =
+    messages
+      .filter(
+        (message) =>
+          message.role === "assistant" &&
+          message.metadata?.multiModel === true
+      )
+      .slice(-3)
+      .map(
+        (message) => ({
+          messageId: message.id,
+          modelId:
+            message.modelId ||
+            "unknown-model",
+          content:
+            message.content,
+          score:
+            Number(
+              message.metadata?.score
+            ) || 0,
+          rank:
+            Number(
+              message.metadata?.rank
+            ) || 999,
+          best:
+            message.metadata?.best === true,
+          metrics:
+            message.metadata?.metrics || {},
+        })
+      )
+      .sort(
+        (left, right) =>
+          left.rank - right.rank
+      );
+
+  return candidates;
+}
+
+function buildAiJudgePrompt(
+  conversation,
+  responses
+) {
+  const lastUserMessage =
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      );
+
+  const responseSections =
+    responses.map(
+      (response, index) => (
+        `คำตอบที่ ${index + 1}\n` +
+        `Model ID: ${response.modelId}\n` +
+        `Rank: ${response.rank}\n` +
+        `เนื้อหา:\n${response.content}`
+      )
+    );
+
+  return [
+    "คุณคือ AI Judge และ Final Answer Synthesizer",
+    "หน้าที่คือรวมคำตอบจากหลายโมเดลให้เป็นคำตอบสุดท้ายเพียงคำตอบเดียว",
+    "",
+    "ข้อกำหนด:",
+    "- ตอบด้วยภาษาเดียวกับผู้ใช้",
+    "- รักษาข้อมูลที่ถูกต้องและมีประโยชน์",
+    "- รวมจุดแข็งของแต่ละคำตอบ",
+    "- ลบข้อความซ้ำ",
+    "- แก้ความขัดแย้งโดยเลือกข้อมูลที่สมเหตุสมผลและสอดคล้องที่สุด",
+    "- ไม่กล่าวถึงคะแนน อันดับ หรือขั้นตอนประเมินภายใน",
+    "- ไม่กล่าวว่าเป็นการรวมจากหลายโมเดล",
+    "- ไม่ถามข้อมูลเดิมที่มีอยู่แล้วซ้ำ",
+    "",
+    `คำถามของผู้ใช้:\n${lastUserMessage?.content || ""}`,
+    "",
+    ...responseSections,
+    "",
+    "สร้าง Final Answer ที่สมบูรณ์ ชัดเจน และพร้อมส่งให้ผู้ใช้:",
+  ].join("\n\n");
+}
+
+function selectJudgeModelId(
+  conversation,
+  responses,
+  requestedJudgeModelId
+) {
+  if (
+    typeof requestedJudgeModelId ===
+      "string" &&
+    requestedJudgeModelId.trim()
+  ) {
+    return requestedJudgeModelId.trim();
+  }
+
+  const policy =
+    readAiJudgePolicy();
+
+  if (
+    policy.judge
+      ?.preferBestResponseModel !== false
+  ) {
+    const best =
+      responses.find(
+        (response) =>
+          response.best === true
+      ) ||
+      responses[0];
+
+    if (best?.modelId) {
+      return best.modelId;
+    }
+  }
+
+  return getTextGenerationModelId(
+    conversation
+  );
+}
+
+function saveAiJudgeFinalAnswer(
+  conversationId,
+  content,
+  {
+    judgeModelId,
+    sourceResponses,
+    synthesisId,
+    fallback = false,
+  }
+) {
+  const normalized =
+    String(content || "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const saved =
+    appendTextChatMessage(
+      conversationId,
+      {
+        role: "assistant",
+        content: normalized,
+        modelId:
+          judgeModelId || null,
+        metadata: {
+          source:
+            fallback
+              ? "ai-judge-fallback"
+              : "ai-judge-synthesis",
+          synthesisId,
+          finalAnswer: true,
+          best: true,
+          fallback,
+          judgeModelId:
+            judgeModelId || null,
+          sourceModelIds:
+            sourceResponses.map(
+              (response) =>
+                response.modelId
+            ),
+          sourceMessageIds:
+            sourceResponses.map(
+              (response) =>
+                response.messageId
+            ),
+          autosaved: true,
+        },
+      }
+    );
+
+  return saved?.message || null;
+}
+
+async function streamAiJudgeSynthesis(
+  conversationId,
+  response,
+  {
+    judgeModelId = null,
+    response_format = null,
+    responseFormat = null,
+  } = {}
+) {
+  if (
+    activeJudgeSyntheses.has(
+      conversationId
+    )
+  ) {
+    const error = new Error(
+      "AI Judge synthesis is already running for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const sourceResponses =
+    getLatestMultiModelResponses(
+      conversation
+    );
+
+  if (!sourceResponses.length) {
+    const error = new Error(
+      "No multi-model responses are available for synthesis."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const selectedJudgeModelId =
+    selectJudgeModelId(
+      conversation,
+      sourceResponses,
+      judgeModelId
+    );
+
+  const policy =
+    readAiJudgePolicy();
+
+  const generationPolicy =
+    readTextGenerationPolicy();
+  const normalizedResponseFormat =
+    normalizeLlmResponseFormatCandidate(
+      response_format,
+      responseFormat
+    );
+
+  const synthesisId =
+    createTextChatId(
+      "judge-synthesis"
+    );
+
+  const controller =
+    new AbortController();
+
+  const state = {
+    synthesisId,
+    conversationId,
+    judgeModelId:
+      selectedJudgeModelId,
+    controller,
+    status: "starting",
+    accumulatedText: "",
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    fallback: false,
+    error: null,
+  };
+
+  activeJudgeSyntheses.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "judge-start",
+    {
+      synthesisId,
+      conversationId,
+      judgeModelId:
+        selectedJudgeModelId,
+      sourceModelIds:
+        sourceResponses.map(
+          (item) =>
+            item.modelId
+        ),
+    }
+  );
+
+  try {
+    state.status = "streaming";
+
+    const runtimeResponse =
+      await fetch(
+        buildTextRuntimeUrl(
+          generationPolicy.runtime
+            ?.generationPath ||
+          "/v1/chat/completions"
+        ),
+        {
+          method: "POST",
+          headers: {
+            "content-type":
+              "application/json",
+            accept:
+              "text/event-stream, application/json",
+            "x-luke-model-id":
+              selectedJudgeModelId,
+            "x-luke-generation-mode":
+              "judge-synthesis",
+          },
+          body: JSON.stringify({
+            model:
+              selectedJudgeModelId,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are an expert AI judge and response synthesizer.",
+              },
+              {
+                role: "user",
+                content:
+                  buildAiJudgePrompt(
+                    conversation,
+                    sourceResponses
+                  ),
+              },
+            ],
+            stream: true,
+            temperature:
+              Number(
+                policy.judge
+                  ?.temperature
+              ) || 0.3,
+            top_p:
+              Number(
+                policy.judge
+                  ?.topP
+              ) || 0.85,
+            max_tokens:
+              Number(
+                policy.judge
+                  ?.maxTokens
+              ) || 3072,
+            ...(normalizedResponseFormat
+              ? {
+                  response_format:
+                    normalizedResponseFormat,
+                }
+              : {}),
+          }),
+          signal:
+            controller.signal,
+        }
+      );
+
+    if (!runtimeResponse.ok) {
+      throw new Error(
+        await runtimeResponse.text() ||
+        `Judge runtime HTTP ${runtimeResponse.status}`
+      );
+    }
+
+    if (!runtimeResponse.body) {
+      throw new Error(
+        "Judge runtime returned no response body."
+      );
+    }
+
+    const contentType =
+      String(
+        runtimeResponse.headers.get(
+          "content-type"
+        ) || ""
+      ).toLowerCase();
+
+    if (
+      contentType.includes(
+        "application/json"
+      )
+    ) {
+      const payload =
+        await runtimeResponse.json();
+
+      const delta =
+        extractTextGenerationDelta(
+          payload
+        );
+
+      if (delta) {
+        state.accumulatedText +=
+          delta;
+
+        writeTextGenerationEvent(
+          response,
+          "judge-delta",
+          {
+            synthesisId,
+            content: delta,
+          }
+        );
+      }
+    } else {
+      const reader =
+        runtimeResponse.body
+          .getReader();
+
+      const decoder =
+        new TextDecoder();
+
+      let buffer = "";
+
+      while (true) {
+        const result =
+          await reader.read();
+
+        if (result.done) {
+          break;
+        }
+
+        buffer += decoder.decode(
+          result.value,
+          {
+            stream: true,
+          }
+        );
+
+        const lines =
+          buffer.split(/\r?\n/);
+
+        buffer =
+          lines.pop() || "";
+
+        for (const rawLine of lines) {
+          let line =
+            rawLine.trim();
+
+          if (
+            !line ||
+            line.startsWith(":")
+          ) {
+            continue;
+          }
+
+          if (
+            line.startsWith("data:")
+          ) {
+            line =
+              line
+                .slice(5)
+                .trim();
+          }
+
+          if (
+            line === "[DONE]"
+          ) {
+            continue;
+          }
+
+          let payload = null;
+
+          try {
+            payload =
+              JSON.parse(line);
+          } catch {
+            payload = line;
+          }
+
+          const delta =
+            extractTextGenerationDelta(
+              payload
+            );
+
+          if (!delta) {
+            continue;
+          }
+
+          state.accumulatedText +=
+            delta;
+
+          writeTextGenerationEvent(
+            response,
+            "judge-delta",
+            {
+              synthesisId,
+              content: delta,
+            }
+          );
+        }
+      }
+    }
+
+    if (!state.accumulatedText.trim()) {
+      throw new Error(
+        "AI Judge returned an empty response."
+      );
+    }
+
+    const savedMessage =
+      saveAiJudgeFinalAnswer(
+        conversationId,
+        state.accumulatedText,
+        {
+          judgeModelId:
+            selectedJudgeModelId,
+          sourceResponses,
+          synthesisId,
+          fallback: false,
+        }
+      );
+
+    state.status = "completed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    writeTextGenerationEvent(
+      response,
+      "judge-complete",
+      {
+        synthesisId,
+        conversationId,
+        judgeModelId:
+          selectedJudgeModelId,
+        content:
+          state.accumulatedText,
+        message:
+          savedMessage,
+        fallback: false,
+        autosaved:
+          Boolean(savedMessage),
+      }
+    );
+  } catch (error) {
+    const fallbackEnabled =
+      policy.fallback?.enabled !==
+        false;
+
+    const fallbackResponse =
+      sourceResponses.find(
+        (item) =>
+          item.best === true
+      ) ||
+      sourceResponses[0];
+
+    if (
+      fallbackEnabled &&
+      fallbackResponse?.content
+    ) {
+      state.fallback = true;
+
+      state.status =
+        "completed-with-fallback";
+
+      state.accumulatedText =
+        fallbackResponse.content;
+
+      state.completedAt =
+        new Date().toISOString();
+
+      const savedMessage =
+        saveAiJudgeFinalAnswer(
+          conversationId,
+          fallbackResponse.content,
+          {
+            judgeModelId:
+              fallbackResponse.modelId,
+            sourceResponses,
+            synthesisId,
+            fallback: true,
+          }
+        );
+
+      writeTextGenerationEvent(
+        response,
+        "judge-fallback",
+        {
+          synthesisId,
+          conversationId,
+          judgeModelId:
+            fallbackResponse.modelId,
+          content:
+            fallbackResponse.content,
+          message:
+            savedMessage,
+          fallback: true,
+          autosaved:
+            Boolean(savedMessage),
+          reason:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    } else {
+      state.status = "failed";
+
+      state.error =
+        error instanceof Error
+          ? error.message
+          : String(error);
+
+      state.completedAt =
+        new Date().toISOString();
+
+      writeTextGenerationEvent(
+        response,
+        "error",
+        {
+          synthesisId,
+          error:
+            state.error,
+        }
+      );
+    }
+  } finally {
+    activeJudgeSyntheses.delete(
+      conversationId
+    );
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopAiJudgeSynthesis(
+  conversationId
+) {
+  const state =
+    activeJudgeSyntheses.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active AI Judge synthesis.",
+    };
+  }
+
+  state.status = "stopping";
+  state.controller.abort();
+
+  return {
+    stopped: true,
+    synthesisId:
+      state.synthesisId,
+  };
+}
+
+
+// LUKE_AI_TEXT_MODEL_FEEDBACK_V1
+const textModelFeedbackPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "feedback-policy.json"
+);
+
+const textModelFeedbackStorePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-chat",
+  "model-feedback.json"
+);
+
+function readTextModelFeedbackPolicy() {
+  return readJsonFileStrict(
+    textModelFeedbackPolicyPath,
+    "Text model feedback policy"
+  );
+}
+
+function createInitialTextModelFeedbackStore() {
+  return {
+    schemaVersion: 1,
+    updatedAt: null,
+    modelScores: {},
+    messageFeedback: {},
+    events: [],
+  };
+}
+
+function readTextModelFeedbackStore() {
+  if (!fs.existsSync(textModelFeedbackStorePath)) {
+    const initial =
+      createInitialTextModelFeedbackStore();
+
+    writeJsonFileAtomic(
+      textModelFeedbackStorePath,
+      initial
+    );
+
+    return initial;
+  }
+
+  return readJsonFileStrict(
+    textModelFeedbackStorePath,
+    "Text model feedback store"
+  );
+}
+
+function writeTextModelFeedbackStore(store) {
+  store.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    textModelFeedbackStorePath,
+    store
+  );
+}
+
+function findConversationMessage(
+  conversation,
+  messageId
+) {
+  return (
+    conversation.messages?.find(
+      (message) =>
+        message.id === messageId
+    ) || null
+  );
+}
+
+function getFeedbackPoints(
+  feedbackType
+) {
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  if (feedbackType === "like") {
+    return Number(
+      policy.scoring?.likePoints
+    ) || 1;
+  }
+
+  if (feedbackType === "dislike") {
+    return Number(
+      policy.scoring?.dislikePoints
+    ) || -1;
+  }
+
+  if (feedbackType === "preferred") {
+    return Number(
+      policy.scoring?.preferredPoints
+    ) || 3;
+  }
+
+  if (feedbackType === "regenerate") {
+    return Number(
+      policy.scoring?.regeneratePenalty
+    ) || -0.25;
+  }
+
+  return 0;
+}
+
+function clampFeedbackScore(value) {
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  const minimum =
+    Number(
+      policy.scoring
+        ?.minimumFeedbackScore
+    );
+
+  const maximum =
+    Number(
+      policy.scoring
+        ?.maximumFeedbackScore
+    );
+
+  return Math.max(
+    Number.isFinite(minimum)
+      ? minimum
+      : -10,
+    Math.min(
+      Number.isFinite(maximum)
+        ? maximum
+        : 10,
+      value
+    )
+  );
+}
+
+function calculateModelFeedbackSummary(
+  modelEntry
+) {
+  const likes =
+    Number(modelEntry.likes) || 0;
+
+  const dislikes =
+    Number(modelEntry.dislikes) || 0;
+
+  const preferred =
+    Number(modelEntry.preferred) || 0;
+
+  const regenerations =
+    Number(modelEntry.regenerations) || 0;
+
+  const total =
+    likes +
+    dislikes +
+    preferred +
+    regenerations;
+
+  const rawScore =
+    Number(modelEntry.rawScore) || 0;
+
+  const normalizedScore =
+    total > 0
+      ? Math.max(
+          -1,
+          Math.min(
+            1,
+            rawScore /
+            Math.max(1, total * 3)
+          )
+        )
+      : 0;
+
+  return {
+    ...modelEntry,
+    total,
+    normalizedScore:
+      Number(
+        normalizedScore.toFixed(4)
+      ),
+  };
+}
+
+function recordTextModelFeedback({
+  conversationId,
+  messageId,
+  feedbackType,
+}) {
+  const allowed =
+    new Set([
+      "like",
+      "dislike",
+      "preferred",
+      "regenerate",
+      "clear",
+    ]);
+
+  if (!allowed.has(feedbackType)) {
+    const error = new Error(
+      "Invalid feedback type."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const chatStore =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      chatStore,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const message =
+    findConversationMessage(
+      conversation,
+      messageId
+    );
+
+  if (
+    !message ||
+    message.role !== "assistant"
+  ) {
+    const error = new Error(
+      "Assistant message was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const modelId =
+    message.modelId ||
+    message.metadata?.judgeModelId ||
+    "unknown-model";
+
+  const feedbackStore =
+    readTextModelFeedbackStore();
+
+  const previous =
+    feedbackStore.messageFeedback[
+      messageId
+    ] || null;
+
+  const modelEntry =
+    feedbackStore.modelScores[
+      modelId
+    ] || {
+      modelId,
+      likes: 0,
+      dislikes: 0,
+      preferred: 0,
+      regenerations: 0,
+      rawScore: 0,
+    };
+
+  if (
+    previous &&
+    previous.feedbackType !== "clear"
+  ) {
+    const previousPoints =
+      getFeedbackPoints(
+        previous.feedbackType
+      );
+
+    modelEntry.rawScore =
+      Number(modelEntry.rawScore) -
+      previousPoints;
+
+    if (previous.feedbackType === "like") {
+      modelEntry.likes =
+        Math.max(
+          0,
+          Number(modelEntry.likes) - 1
+        );
+    }
+
+    if (previous.feedbackType === "dislike") {
+      modelEntry.dislikes =
+        Math.max(
+          0,
+          Number(modelEntry.dislikes) - 1
+        );
+    }
+
+    if (previous.feedbackType === "preferred") {
+      modelEntry.preferred =
+        Math.max(
+          0,
+          Number(modelEntry.preferred) - 1
+        );
+    }
+
+    if (previous.feedbackType === "regenerate") {
+      modelEntry.regenerations =
+        Math.max(
+          0,
+          Number(modelEntry.regenerations) - 1
+        );
+    }
+  }
+
+  if (feedbackType !== "clear") {
+    const points =
+      getFeedbackPoints(
+        feedbackType
+      );
+
+    modelEntry.rawScore =
+      clampFeedbackScore(
+        Number(modelEntry.rawScore) +
+        points
+      );
+
+    if (feedbackType === "like") {
+      modelEntry.likes =
+        Number(modelEntry.likes) + 1;
+    }
+
+    if (feedbackType === "dislike") {
+      modelEntry.dislikes =
+        Number(modelEntry.dislikes) + 1;
+    }
+
+    if (feedbackType === "preferred") {
+      modelEntry.preferred =
+        Number(modelEntry.preferred) + 1;
+    }
+
+    if (feedbackType === "regenerate") {
+      modelEntry.regenerations =
+        Number(modelEntry.regenerations) + 1;
+    }
+  }
+
+  const now =
+    new Date().toISOString();
+
+  feedbackStore.modelScores[
+    modelId
+  ] = calculateModelFeedbackSummary(
+    modelEntry
+  );
+
+  feedbackStore.messageFeedback[
+    messageId
+  ] = {
+    conversationId,
+    messageId,
+    modelId,
+    feedbackType,
+    updatedAt: now,
+  };
+
+  feedbackStore.events.push({
+    id:
+      createTextChatId(
+        "feedback"
+      ),
+    conversationId,
+    messageId,
+    modelId,
+    feedbackType,
+    previousFeedbackType:
+      previous?.feedbackType || null,
+    createdAt: now,
+  });
+
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  const maximumEvents =
+    Number(
+      policy.history
+        ?.maximumEvents
+    ) || 10000;
+
+  feedbackStore.events =
+    feedbackStore.events.slice(
+      -maximumEvents
+    );
+
+  message.metadata = {
+    ...(message.metadata || {}),
+    userFeedback:
+      feedbackType,
+    feedbackUpdatedAt:
+      now,
+  };
+
+  if (feedbackType === "preferred") {
+    for (
+      const candidate
+      of conversation.messages || []
+    ) {
+      if (
+        candidate.role === "assistant"
+      ) {
+        candidate.metadata = {
+          ...(candidate.metadata || {}),
+          userPreferred:
+            candidate.id === messageId,
+        };
+      }
+    }
+  }
+
+  conversation.updatedAt = now;
+
+  writeTextChatStore(chatStore);
+  writeTextModelFeedbackStore(
+    feedbackStore
+  );
+
+  return {
+    message,
+    feedback:
+      feedbackStore.messageFeedback[
+        messageId
+      ],
+    modelScore:
+      feedbackStore.modelScores[
+        modelId
+      ],
+  };
+}
+
+function getAdaptiveModelScore(
+  modelId
+) {
+  const store =
+    readTextModelFeedbackStore();
+
+  return (
+    store.modelScores?.[
+      modelId
+    ]?.normalizedScore || 0
+  );
+}
+
+function applyAdaptiveFeedbackScores(
+  responses
+) {
+  const policy =
+    readTextModelFeedbackPolicy();
+
+  const baseWeight =
+    Number(
+      policy.scoring?.baseWeight
+    ) || 0.85;
+
+  const feedbackWeight =
+    Number(
+      policy.scoring
+        ?.feedbackWeight
+    ) || 0.15;
+
+  return responses
+    .map(
+      (response) => {
+        const feedbackScore =
+          getAdaptiveModelScore(
+            response.modelId
+          );
+
+        const adjustedScore =
+          response.score *
+            baseWeight +
+          (
+            (feedbackScore + 1) /
+            2
+          ) *
+            feedbackWeight;
+
+        return {
+          ...response,
+          originalScore:
+            response.score,
+          feedbackScore,
+          score:
+            Number(
+              adjustedScore.toFixed(4)
+            ),
+        };
+      }
+    )
+    .sort(
+      (left, right) =>
+        right.score -
+        left.score
+    )
+    .map(
+      (response, index) => ({
+        ...response,
+        rank: index + 1,
+        best: index === 0,
+      })
+    );
+}
+
+function getTextModelFeedbackSummary() {
+  const store =
+    readTextModelFeedbackStore();
+
+  return {
+    updatedAt:
+      store.updatedAt,
+    modelScores:
+      Object.values(
+        store.modelScores || {}
+      )
+        .map(
+          calculateModelFeedbackSummary
+        )
+        .sort(
+          (left, right) =>
+            right.normalizedScore -
+            left.normalizedScore
+        ),
+    feedbackCount:
+      Object.keys(
+        store.messageFeedback || {}
+      ).length,
+    eventCount:
+      store.events?.length || 0,
+  };
+}
+
+
+// LUKE_AI_AUTOMATIC_MODEL_ROUTER_V1
+const automaticModelRouterPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "model-router-policy.json"
+);
+
+function readAutomaticModelRouterPolicy() {
+  return readJsonFileStrict(
+    automaticModelRouterPolicyPath,
+    "Automatic model router policy"
+  );
+}
+
+function normalizeRouterText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectModelRouterTaskType(prompt) {
+  const policy =
+    readAutomaticModelRouterPolicy();
+
+  const normalizedPrompt =
+    normalizeRouterText(prompt);
+
+  let selectedType = "general";
+  let selectedScore = 0;
+  const matches = {};
+
+  for (
+    const [
+      taskType,
+      taskConfig,
+    ]
+    of Object.entries(
+      policy.taskTypes || {}
+    )
+  ) {
+    const keywords =
+      Array.isArray(taskConfig.keywords)
+        ? taskConfig.keywords
+        : [];
+
+    let score = 0;
+    const matchedKeywords = [];
+
+    for (const keyword of keywords) {
+      const normalizedKeyword =
+        normalizeRouterText(keyword);
+
+      if (
+        normalizedKeyword &&
+        normalizedPrompt.includes(
+          normalizedKeyword
+        )
+      ) {
+        score +=
+          normalizedKeyword.length > 8
+            ? 2
+            : 1;
+
+        matchedKeywords.push(keyword);
+      }
+    }
+
+    matches[taskType] = {
+      score,
+      matchedKeywords,
+    };
+
+    if (score > selectedScore) {
+      selectedType = taskType;
+      selectedScore = score;
+    }
+  }
+
+  const thaiCharacterCount =
+    (
+      String(prompt || "")
+        .match(/[\u0E00-\u0E7F]/g)
+      || []
+    ).length;
+
+  const totalCharacters =
+    Math.max(
+      1,
+      String(prompt || "").length
+    );
+
+  const thaiRatio =
+    thaiCharacterCount /
+    totalCharacters;
+
+  if (
+    thaiRatio >= 0.35 &&
+    selectedScore === 0
+  ) {
+    selectedType = "thai";
+  }
+
+  return {
+    taskType: selectedType,
+    confidence:
+      selectedScore > 0
+        ? Math.min(
+            1,
+            0.45 +
+            selectedScore * 0.12
+          )
+        : 0.35,
+    thaiRatio:
+      Number(thaiRatio.toFixed(4)),
+    matches,
+  };
+}
+
+function getRouterInstalledModels() {
+  try {
+    const registry =
+      readInstalledTextModels();
+
+    return (
+      registry.models || []
+    )
+      .filter(
+        (model) =>
+          model.installedPath
+      )
+      .map(
+        (model) => ({
+          modelId:
+            model.modelId,
+          modelName:
+            model.modelName ||
+            model.modelId,
+          version:
+            model.version || null,
+          variantId:
+            model.variantId || null,
+          quantization:
+            model.quantization || null,
+          runtime:
+            model.runtime || null,
+          installedPath:
+            model.installedPath,
+          contextLength:
+            Number(
+              model.contextLength
+            ) || null,
+          capabilities:
+            Array.isArray(
+              model.capabilities
+            )
+              ? model.capabilities
+              : [],
+          active:
+            registry.activeModelId ===
+            model.modelId,
+        })
+      );
+  } catch {
+    return [];
+  }
+}
+
+function getRouterCapabilityText(model) {
+  return normalizeRouterText([
+    model.modelId,
+    model.modelName,
+    model.variantId,
+    model.quantization,
+    model.runtime,
+    ...(model.capabilities || []),
+  ].join(" "));
+}
+
+function calculateRouterTaskCapability(
+  model,
+  taskType
+) {
+  const policy =
+    readAutomaticModelRouterPolicy();
+
+  const hints =
+    policy.capabilityHints?.[
+      taskType
+    ] ||
+    policy.capabilityHints?.general ||
+    [];
+
+  const capabilityText =
+    getRouterCapabilityText(model);
+
+  if (!hints.length) {
+    return 0.5;
+  }
+
+  const matched =
+    hints.filter(
+      (hint) =>
+        capabilityText.includes(
+          normalizeRouterText(hint)
+        )
+    );
+
+  return Math.min(
+    1,
+    0.3 +
+    matched.length /
+      Math.max(1, hints.length) *
+      0.7
+  );
+}
+
+function getRouterFeedbackScore(
+  modelId
+) {
+  try {
+    return Math.max(
+      0,
+      Math.min(
+        1,
+        (
+          getAdaptiveModelScore(
+            modelId
+          ) +
+          1
+        ) / 2
+      )
+    );
+  } catch {
+    return 0.5;
+  }
+}
+
+function getRouterHardwareScore(
+  modelId
+) {
+  try {
+    const hardware =
+      getTextModelHardwareRecommendation(
+        modelId
+      );
+
+    if (!hardware) {
+      return 0.5;
+    }
+
+    const selected =
+      hardware.variants?.find(
+        (variant) =>
+          variant.id ===
+          hardware.recommendedVariantId
+      );
+
+    if (!selected) {
+      return hardware.compatible
+        ? 0.65
+        : 0;
+    }
+
+    if (
+      selected.compatibility ===
+      "recommended"
+    ) {
+      return 1;
+    }
+
+    if (
+      selected.compatibility ===
+      "compatible"
+    ) {
+      return 0.72;
+    }
+
+    return 0;
+  } catch {
+    return 0.5;
+  }
+}
+
+function getRouterContextScore(
+  model,
+  estimatedPromptTokens
+) {
+  const contextLength =
+    Number(model.contextLength) ||
+    32768;
+
+  if (
+    estimatedPromptTokens >
+    contextLength
+  ) {
+    return 0;
+  }
+
+  const usage =
+    estimatedPromptTokens /
+    contextLength;
+
+  if (usage <= 0.25) {
+    return 1;
+  }
+
+  if (usage <= 0.5) {
+    return 0.85;
+  }
+
+  if (usage <= 0.75) {
+    return 0.65;
+  }
+
+  return 0.4;
+}
+
+function getRouterLanguageScore(
+  model,
+  taskDetection
+) {
+  const capabilityText =
+    getRouterCapabilityText(model);
+
+  if (
+    taskDetection.thaiRatio <
+    0.2
+  ) {
+    return 0.7;
+  }
+
+  if (
+    capabilityText.includes("thai") ||
+    capabilityText.includes(
+      "multilingual"
+    ) ||
+    capabilityText.includes("qwen") ||
+    capabilityText.includes("llama")
+  ) {
+    return 1;
+  }
+
+  return 0.55;
+}
+
+function routeTextModel({
+  prompt,
+  conversationId = null,
+  excludedModelIds = [],
+} = {}) {
+  const normalizedPrompt =
+    String(prompt || "").trim();
+
+  if (!normalizedPrompt) {
+    const error = new Error(
+      "Prompt is required for model routing."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const policy =
+    readAutomaticModelRouterPolicy();
+
+  const taskDetection =
+    detectModelRouterTaskType(
+      normalizedPrompt
+    );
+
+  const installedModels =
+    getRouterInstalledModels();
+
+  if (!installedModels.length) {
+    const error = new Error(
+      "No installed text models are available."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const excluded =
+    new Set(
+      (
+        Array.isArray(excludedModelIds)
+          ? excludedModelIds
+          : []
+      )
+        .map(
+          (modelId) =>
+            String(modelId || "")
+              .trim()
+        )
+        .filter(Boolean)
+    );
+
+  const estimatedPromptTokens =
+    estimateTextChatTokens(
+      normalizedPrompt
+    );
+
+  const weights =
+    policy.weights || {};
+
+  const scoredModels =
+    installedModels
+      .filter(
+        (model) =>
+          !excluded.has(
+            model.modelId
+          )
+      )
+      .filter(
+        (model) => {
+          const health =
+            isModelCircuitAvailable(
+              model.modelId
+            );
+
+          return (
+            health.available === true
+          );
+        }
+      )
+      .map(
+        (model) => {
+          const components = {
+            taskCapability:
+              calculateRouterTaskCapability(
+                model,
+                taskDetection.taskType
+              ),
+            userFeedback:
+              getRouterFeedbackScore(
+                model.modelId
+              ),
+            hardwareCompatibility:
+              getRouterHardwareScore(
+                model.modelId
+              ),
+            contextFit:
+              getRouterContextScore(
+                model,
+                estimatedPromptTokens
+              ),
+            languageFit:
+              getRouterLanguageScore(
+                model,
+                taskDetection
+              ),
+            availability:
+              model.installedPath
+                ? 1
+                : 0,
+          };
+
+          const score =
+            components.taskCapability *
+              Number(
+                weights.taskCapability ??
+                0.38
+              ) +
+            components.userFeedback *
+              Number(
+                weights.userFeedback ??
+                0.22
+              ) +
+            components.hardwareCompatibility *
+              Number(
+                weights.hardwareCompatibility ??
+                0.15
+              ) +
+            components.contextFit *
+              Number(
+                weights.contextFit ??
+                0.1
+              ) +
+            components.languageFit *
+              Number(
+                weights.languageFit ??
+                0.08
+              ) +
+            components.availability *
+              Number(
+                weights.availability ??
+                0.07
+              );
+
+          return {
+            ...model,
+            routeScore:
+              Number(
+                score.toFixed(4)
+              ),
+            components: {
+              taskCapability:
+                Number(
+                  components
+                    .taskCapability
+                    .toFixed(4)
+                ),
+              userFeedback:
+                Number(
+                  components
+                    .userFeedback
+                    .toFixed(4)
+                ),
+              hardwareCompatibility:
+                Number(
+                  components
+                    .hardwareCompatibility
+                    .toFixed(4)
+                ),
+              contextFit:
+                Number(
+                  components
+                    .contextFit
+                    .toFixed(4)
+                ),
+              languageFit:
+                Number(
+                  components
+                    .languageFit
+                    .toFixed(4)
+                ),
+              availability:
+                components.availability,
+            },
+          };
+        }
+      )
+      .filter(
+        (model) =>
+          model.routeScore >=
+          Number(
+            policy.routing
+              ?.minimumScore ??
+            0.1
+          )
+      )
+      .sort(
+        (left, right) =>
+          right.routeScore -
+          left.routeScore
+      );
+
+  const selectedModel =
+    scoredModels[0] || null;
+
+  if (!selectedModel) {
+    const error = new Error(
+      "No compatible model was found for this prompt."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const maximumFallbackModels =
+    Number(
+      policy.routing
+        ?.maximumFallbackModels
+    ) || 2;
+
+  const fallbackModels =
+    scoredModels
+      .slice(
+        1,
+        1 + maximumFallbackModels
+      );
+
+  const reasons = [];
+
+  reasons.push(
+    `เหมาะกับงานประเภท ${taskDetection.taskType}`
+  );
+
+  if (
+    selectedModel.components
+      .userFeedback >= 0.6
+  ) {
+    reasons.push(
+      "มีคะแนนความพึงพอใจจากผู้ใช้ในระดับดี"
+    );
+  }
+
+  if (
+    selectedModel.components
+      .hardwareCompatibility >=
+    0.7
+  ) {
+    reasons.push(
+      "เหมาะกับ Hardware ปัจจุบัน"
+    );
+  }
+
+  if (
+    selectedModel.components
+      .languageFit >= 0.8
+  ) {
+    reasons.push(
+      "รองรับภาษาของคำถามได้ดี"
+    );
+  }
+
+  return {
+    conversationId,
+    prompt:
+      normalizedPrompt,
+    taskDetection,
+    estimatedPromptTokens,
+    selectedModel,
+    fallbackModels,
+    reasons,
+    evaluatedModels:
+      scoredModels,
+    routedAt:
+      new Date().toISOString(),
+  };
+}
+
+function getConversationLatestUserPrompt(
+  conversationId
+) {
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    return null;
+  }
+
+  return (
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      )
+      ?.content ||
+    null
+  );
+}
+
+
+// LUKE_AI_RUNTIME_FAILURE_RECOVERY_V1
+const runtimeRecoveryPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "runtime-recovery-policy.json"
+);
+
+const activeRecoveryGenerations = new Map();
+
+function readRuntimeRecoveryPolicy() {
+  return readJsonFileStrict(
+    runtimeRecoveryPolicyPath,
+    "Runtime recovery policy"
+  );
+}
+
+function delayRuntimeRecovery(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function classifyRuntimeRecoveryError(error) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error);
+
+  if (
+    error?.name === "AbortError" ||
+    /timeout|timed out|aborted/i.test(message)
+  ) {
+    return "timeout";
+  }
+
+  if (
+    /fetch failed|ECONNREFUSED|ECONNRESET|socket|network|connection/i.test(
+      message
+    )
+  ) {
+    return "connection";
+  }
+
+  if (
+    /HTTP\s+[45]\d\d|runtime HTTP|returned HTTP/i.test(
+      message
+    )
+  ) {
+    return "http";
+  }
+
+  if (
+    /empty response|no response body|returned no response/i.test(
+      message
+    )
+  ) {
+    return "empty-response";
+  }
+
+  return "runtime-error";
+}
+
+function shouldContinueRuntimeRecovery(
+  errorType
+) {
+  const policy =
+    readRuntimeRecoveryPolicy();
+
+  if (errorType === "timeout") {
+    return (
+      policy.recovery
+        ?.continueOnTimeout !== false
+    );
+  }
+
+  if (errorType === "connection") {
+    return (
+      policy.recovery
+        ?.continueOnConnectionError !== false
+    );
+  }
+
+  if (errorType === "http") {
+    return (
+      policy.recovery
+        ?.continueOnHttpError !== false
+    );
+  }
+
+  if (errorType === "empty-response") {
+    return (
+      policy.recovery
+        ?.continueOnEmptyResponse !== false
+    );
+  }
+
+  return true;
+}
+
+function buildRuntimeRecoveryModelOrder({
+  conversation,
+  requestedModelId = null,
+} = {}) {
+  const policy =
+    readRuntimeRecoveryPolicy();
+
+  const latestPrompt =
+    [...(
+      conversation.messages || []
+    )]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "user"
+      )
+      ?.content || "";
+
+  let routing = null;
+
+  try {
+    routing =
+      routeTextModel({
+        prompt:
+          latestPrompt,
+        conversationId:
+          conversation.id,
+      });
+  } catch {}
+
+  const candidates = [];
+
+  if (
+    policy.routing
+      ?.respectManualModelFirst !== false &&
+    requestedModelId
+  ) {
+    candidates.push({
+      modelId:
+        requestedModelId,
+      source:
+        "manual",
+      routeScore:
+        null,
+    });
+  }
+
+  if (
+    routing?.selectedModel?.modelId
+  ) {
+    candidates.push({
+      modelId:
+        routing.selectedModel.modelId,
+      source:
+        "router-primary",
+      routeScore:
+        routing.selectedModel.routeScore,
+    });
+  }
+
+  if (
+    policy.routing
+      ?.useRouterFallbackOrder !== false
+  ) {
+    for (
+      const fallback
+      of routing?.fallbackModels || []
+    ) {
+      candidates.push({
+        modelId:
+          fallback.modelId,
+        source:
+          "router-fallback",
+        routeScore:
+          fallback.routeScore,
+      });
+    }
+  }
+
+  if (!candidates.length) {
+    candidates.push({
+      modelId:
+        getTextGenerationModelId(
+          conversation
+        ),
+      source:
+        "active-model",
+      routeScore:
+        null,
+    });
+  }
+
+  const unique = [];
+  const seen = new Set();
+
+  for (const candidate of candidates) {
+    const modelId =
+      String(
+        candidate.modelId || ""
+      ).trim();
+
+    if (
+      !modelId ||
+      seen.has(modelId)
+    ) {
+      continue;
+    }
+
+    seen.add(modelId);
+
+    unique.push({
+      ...candidate,
+      modelId,
+    });
+  }
+
+  const maximumAttempts =
+    Number(
+      policy.recovery
+        ?.maximumAttempts
+    ) || 3;
+
+  return {
+    routing,
+    models:
+      unique.slice(
+        0,
+        maximumAttempts
+      ),
+  };
+}
+
+async function readRuntimeRecoveryStream(
+  runtimeResponse,
+  {
+    modelId,
+    generationId,
+    response,
+    state,
+  }
+) {
+  if (!runtimeResponse.body) {
+    throw new Error(
+      `Model ${modelId} returned no response body.`
+    );
+  }
+
+  const contentType =
+    String(
+      runtimeResponse.headers.get(
+        "content-type"
+      ) || ""
+    ).toLowerCase();
+
+  let accumulatedText = "";
+
+  if (
+    contentType.includes(
+      "application/json"
+    )
+  ) {
+    const body =
+      await runtimeResponse.json();
+
+    const content =
+      extractTextGenerationDelta(
+        body
+      );
+
+    if (content) {
+      accumulatedText += content;
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-delta",
+        {
+          generationId,
+          modelId,
+          content,
+        }
+      );
+    }
+
+    return accumulatedText;
+  }
+
+  const reader =
+    runtimeResponse.body
+      .getReader();
+
+  const decoder =
+    new TextDecoder();
+
+  let buffer = "";
+
+  while (true) {
+    const result =
+      await reader.read();
+
+    if (result.done) {
+      break;
+    }
+
+    if (state.stopped) {
+      throw new DOMException(
+        "Generation stopped.",
+        "AbortError"
+      );
+    }
+
+    buffer += decoder.decode(
+      result.value,
+      {
+        stream: true,
+      }
+    );
+
+    const lines =
+      buffer.split(/\r?\n/);
+
+    buffer =
+      lines.pop() || "";
+
+    for (const rawLine of lines) {
+      let line =
+        rawLine.trim();
+
+      if (
+        !line ||
+        line.startsWith(":")
+      ) {
+        continue;
+      }
+
+      if (
+        line.startsWith("data:")
+      ) {
+        line =
+          line
+            .slice(5)
+            .trim();
+      }
+
+      if (
+        line === "[DONE]"
+      ) {
+        continue;
+      }
+
+      let payload = null;
+
+      try {
+        payload =
+          JSON.parse(line);
+      } catch {
+        payload = line;
+      }
+
+      const content =
+        extractTextGenerationDelta(
+          payload
+        );
+
+      if (!content) {
+        continue;
+      }
+
+      accumulatedText += content;
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-delta",
+        {
+          generationId,
+          modelId,
+          content,
+        }
+      );
+    }
+  }
+
+  return accumulatedText;
+}
+
+async function generateWithRuntimeRecovery(
+  conversationId,
+  response,
+  {
+    requestedModelId = null,
+    temperature = undefined,
+    topP = undefined,
+    maxTokens = undefined,
+    response_format = null,
+    responseFormat = null,
+  } = {}
+) {
+  if (
+    activeRecoveryGenerations.has(
+      conversationId
+    )
+  ) {
+    const error = new Error(
+      "A recovery generation is already active for this conversation."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const store =
+    readTextChatStore();
+
+  const conversation =
+    findTextChatConversation(
+      store,
+      conversationId
+    );
+
+  if (!conversation) {
+    const error = new Error(
+      "Conversation was not found."
+    );
+
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const policy =
+    readRuntimeRecoveryPolicy();
+
+  const generationPolicy =
+    readTextGenerationPolicy();
+
+  const generationId =
+    createTextChatId(
+      "recovery-generation"
+    );
+
+  const modelOrder =
+    buildRuntimeRecoveryModelOrder({
+      conversation,
+      requestedModelId,
+    });
+
+  if (!modelOrder.models.length) {
+    const error = new Error(
+      "No model is available for generation recovery."
+    );
+
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const state = {
+    generationId,
+    conversationId,
+    status: "starting",
+    stopped: false,
+    activeController: null,
+    attempts: [],
+    startedAt:
+      new Date().toISOString(),
+    completedAt: null,
+    successfulModelId: null,
+  };
+
+  activeRecoveryGenerations.set(
+    conversationId,
+    state
+  );
+
+  response.writeHead(
+    200,
+    {
+      "content-type":
+        "text/event-stream; charset=utf-8",
+      "cache-control":
+        "no-cache, no-transform",
+      connection:
+        "keep-alive",
+      "x-accel-buffering":
+        "no",
+    }
+  );
+
+  response.flushHeaders?.();
+
+  writeTextGenerationEvent(
+    response,
+    "recovery-start",
+    {
+      generationId,
+      conversationId,
+      modelOrder:
+        modelOrder.models,
+      taskDetection:
+        modelOrder.routing
+          ?.taskDetection ||
+        null,
+    }
+  );
+
+  try {
+    for (
+      let index = 0;
+      index < modelOrder.models.length;
+      index += 1
+    ) {
+      if (state.stopped) {
+        break;
+      }
+
+      const candidate =
+        modelOrder.models[index];
+
+      const controller =
+        new AbortController();
+
+      state.activeController =
+        controller;
+
+      const attempt = {
+        attempt:
+          index + 1,
+        modelId:
+          candidate.modelId,
+        source:
+          candidate.source,
+        routeScore:
+          candidate.routeScore,
+        status:
+          "starting",
+        startedAt:
+          new Date().toISOString(),
+        completedAt: null,
+        errorType: null,
+        error: null,
+        responseCharacters: 0,
+      };
+
+      state.attempts.push(
+        attempt
+      );
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-attempt",
+        {
+          generationId,
+          ...attempt,
+        }
+      );
+
+      const timeoutMs =
+        Number(
+          policy.recovery
+            ?.attemptTimeoutMs
+        ) || 120000;
+
+      const timeout =
+        setTimeout(
+          () => controller.abort(),
+          timeoutMs
+        );
+
+      try {
+        attempt.status =
+          "generating";
+
+        const runtimeResponse =
+          await fetch(
+            buildTextRuntimeUrl(
+              generationPolicy.runtime
+                ?.generationPath ||
+              "/v1/chat/completions"
+            ),
+            {
+              method: "POST",
+              headers: {
+                "content-type":
+                  "application/json",
+                accept:
+                  "text/event-stream, application/json",
+                "x-luke-model-id":
+                  candidate.modelId,
+                "x-luke-recovery-attempt":
+                  String(index + 1),
+              },
+              body:
+                JSON.stringify(
+                  createTextGenerationPayload(
+                    conversation,
+                    {
+                      modelId:
+                        candidate.modelId,
+                      autoRoute:
+                        false,
+                      temperature,
+                      topP,
+                      maxTokens,
+                      response_format,
+                      responseFormat,
+                    }
+                  )
+                ),
+              signal:
+                controller.signal,
+            }
+          );
+
+        if (!runtimeResponse.ok) {
+          const errorText =
+            await runtimeResponse.text();
+
+          throw new Error(
+            errorText ||
+            `Model ${candidate.modelId} returned HTTP ${runtimeResponse.status}`
+          );
+        }
+
+        const content =
+          await readRuntimeRecoveryStream(
+            runtimeResponse,
+            {
+              modelId:
+                candidate.modelId,
+              generationId,
+              response,
+              state,
+            }
+          );
+
+        const normalizedContent =
+          String(content || "")
+            .trim();
+
+        const minimumCharacters =
+          Number(
+            policy.response
+              ?.minimumResponseCharacters
+          ) || 1;
+
+        if (
+          normalizedContent.length <
+          minimumCharacters
+        ) {
+          throw new Error(
+            `Model ${candidate.modelId} returned an empty response.`
+          );
+        }
+
+        attempt.status =
+          "completed";
+
+        attempt.completedAt =
+          new Date().toISOString();
+
+        recordModelHealthResult({
+          modelId:
+            candidate.modelId,
+          success: true,
+          source:
+            "runtime-recovery",
+        });
+
+        attempt.responseCharacters =
+          normalizedContent.length;
+
+        state.status =
+          "completed";
+
+        state.completedAt =
+          new Date().toISOString();
+
+        state.successfulModelId =
+          candidate.modelId;
+
+        const saved =
+          appendTextChatMessage(
+            conversationId,
+            {
+              role:
+                "assistant",
+              content:
+                normalizedContent,
+              modelId:
+                candidate.modelId,
+              metadata: {
+                source:
+                  "runtime-failure-recovery",
+                generationId,
+                autosaved: true,
+                recoveryUsed:
+                  index > 0,
+                successfulAttempt:
+                  index + 1,
+                primaryModelId:
+                  modelOrder.models[0]
+                    ?.modelId ||
+                  candidate.modelId,
+                successfulModelId:
+                  candidate.modelId,
+                attemptHistory:
+                  state.attempts.map(
+                    (item) => ({
+                      attempt:
+                        item.attempt,
+                      modelId:
+                        item.modelId,
+                      source:
+                        item.source,
+                      status:
+                        item.status,
+                      errorType:
+                        item.errorType,
+                      error:
+                        item.error,
+                      responseCharacters:
+                        item.responseCharacters,
+                    })
+                  ),
+              },
+            }
+          );
+
+        writeTextGenerationEvent(
+          response,
+          "recovery-complete",
+          {
+            generationId,
+            conversationId,
+            content:
+              normalizedContent,
+            successfulModelId:
+              candidate.modelId,
+            successfulAttempt:
+              index + 1,
+            fallbackUsed:
+              index > 0,
+            attempts:
+              state.attempts,
+            message:
+              saved?.message ||
+              null,
+          }
+        );
+
+        return;
+      } catch (error) {
+        const stopped =
+          state.stopped ||
+          error?.name ===
+            "AbortError" &&
+          state.stopped;
+
+        if (stopped) {
+          attempt.status =
+            "stopped";
+
+          attempt.completedAt =
+            new Date().toISOString();
+
+          break;
+        }
+
+        const errorType =
+          classifyRuntimeRecoveryError(
+            error
+          );
+
+        attempt.status =
+          "failed";
+
+        attempt.completedAt =
+          new Date().toISOString();
+
+        attempt.errorType =
+          errorType;
+
+        attempt.error =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        recordModelHealthResult({
+          modelId:
+            candidate.modelId,
+          success: false,
+          errorType,
+          error:
+            attempt.error,
+          source:
+            "runtime-recovery",
+        });
+
+        writeTextGenerationEvent(
+          response,
+          "recovery-failed-attempt",
+          {
+            generationId,
+            attempt:
+              attempt.attempt,
+            modelId:
+              attempt.modelId,
+            errorType:
+              attempt.errorType,
+            error:
+              attempt.error,
+            hasNextModel:
+              index + 1 <
+              modelOrder.models.length,
+          }
+        );
+
+        if (
+          !shouldContinueRuntimeRecovery(
+            errorType
+          )
+        ) {
+          break;
+        }
+
+        if (
+          index + 1 <
+          modelOrder.models.length
+        ) {
+          const retryDelayMs =
+            Number(
+              policy.recovery
+                ?.retryDelayMs
+            ) || 350;
+
+          if (retryDelayMs > 0) {
+            await delayRuntimeRecovery(
+              retryDelayMs
+            );
+          }
+        }
+      } finally {
+        clearTimeout(timeout);
+
+        state.activeController =
+          null;
+      }
+    }
+
+    if (state.stopped) {
+      state.status =
+        "stopped";
+
+      state.completedAt =
+        new Date().toISOString();
+
+      writeTextGenerationEvent(
+        response,
+        "recovery-stopped",
+        {
+          generationId,
+          conversationId,
+          attempts:
+            state.attempts,
+        }
+      );
+
+      return;
+    }
+
+    state.status =
+      "failed";
+
+    state.completedAt =
+      new Date().toISOString();
+
+    writeTextGenerationEvent(
+      response,
+      "recovery-exhausted",
+      {
+        generationId,
+        conversationId,
+        error:
+          "All routed models failed.",
+        attempts:
+          state.attempts,
+      }
+    );
+  } finally {
+    activeRecoveryGenerations.delete(
+      conversationId
+    );
+
+    if (!response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+function stopRuntimeRecoveryGeneration(
+  conversationId
+) {
+  const state =
+    activeRecoveryGenerations.get(
+      conversationId
+    );
+
+  if (!state) {
+    return {
+      stopped: false,
+      reason:
+        "No active recovery generation.",
+    };
+  }
+
+  state.stopped = true;
+  state.status =
+    "stopping";
+
+  state.activeController
+    ?.abort();
+
+  return {
+    stopped: true,
+    generationId:
+      state.generationId,
+    attempts:
+      state.attempts.length,
+  };
+}
+
+
+// LUKE_AI_MODEL_HEALTH_CIRCUIT_BREAKER_V1
+const modelHealthPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "model-health-policy.json"
+);
+
+const modelHealthStorePath = path.join(
+  ROOT,
+  "app",
+  "runtime-state",
+  "text-chat",
+  "model-health.json"
+);
+
+function readModelHealthPolicy() {
+  return readJsonFileStrict(
+    modelHealthPolicyPath,
+    "Model health policy"
+  );
+}
+
+function createInitialModelHealthStore() {
+  return {
+    schemaVersion: 1,
+    updatedAt: null,
+    models: {},
+    events: [],
+  };
+}
+
+function readModelHealthStore() {
+  if (!fs.existsSync(modelHealthStorePath)) {
+    const initial =
+      createInitialModelHealthStore();
+
+    writeJsonFileAtomic(
+      modelHealthStorePath,
+      initial
+    );
+
+    return initial;
+  }
+
+  return readJsonFileStrict(
+    modelHealthStorePath,
+    "Model health store"
+  );
+}
+
+function writeModelHealthStore(store) {
+  store.updatedAt =
+    new Date().toISOString();
+
+  writeJsonFileAtomic(
+    modelHealthStorePath,
+    store
+  );
+}
+
+function createInitialModelHealthEntry(
+  modelId
+) {
+  return {
+    modelId,
+    circuitState: "closed",
+    consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
+    totalAttempts: 0,
+    totalSuccesses: 0,
+    totalFailures: 0,
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    lastFailureAt: null,
+    lastErrorType: null,
+    lastError: null,
+    openedAt: null,
+    nextProbeAt: null,
+    halfOpenAttempts: 0,
+    recentResults: [],
+  };
+}
+
+function normalizeModelHealthEntry(
+  modelId,
+  entry
+) {
+  return {
+    ...createInitialModelHealthEntry(
+      modelId
+    ),
+    ...(entry || {}),
+    modelId,
+  };
+}
+
+function calculateModelHealthMetrics(
+  entry
+) {
+  const recentResults =
+    Array.isArray(entry.recentResults)
+      ? entry.recentResults
+      : [];
+
+  const successes =
+    recentResults.filter(
+      (result) =>
+        result.success === true
+    ).length;
+
+  const failures =
+    recentResults.length -
+    successes;
+
+  const successRate =
+    recentResults.length > 0
+      ? successes /
+        recentResults.length
+      : 1;
+
+  return {
+    sampleCount:
+      recentResults.length,
+    recentSuccesses:
+      successes,
+    recentFailures:
+      failures,
+    successRate:
+      Number(
+        successRate.toFixed(4)
+      ),
+  };
+}
+
+function refreshCircuitStateByTime(
+  entry
+) {
+  if (
+    entry.circuitState !== "open" ||
+    !entry.nextProbeAt
+  ) {
+    return entry;
+  }
+
+  const nextProbeTime =
+    new Date(
+      entry.nextProbeAt
+    ).getTime();
+
+  if (
+    Number.isFinite(nextProbeTime) &&
+    Date.now() >= nextProbeTime
+  ) {
+    entry.circuitState =
+      "half-open";
+
+    entry.halfOpenAttempts = 0;
+  }
+
+  return entry;
+}
+
+function getModelHealthEntry(
+  modelId
+) {
+  const store =
+    readModelHealthStore();
+
+  const entry =
+    normalizeModelHealthEntry(
+      modelId,
+      store.models?.[modelId]
+    );
+
+  refreshCircuitStateByTime(
+    entry
+  );
+
+  store.models[modelId] =
+    entry;
+
+  writeModelHealthStore(store);
+
+  return {
+    store,
+    entry,
+  };
+}
+
+function recordModelHealthResult({
+  modelId,
+  success,
+  errorType = null,
+  error = null,
+  source = "runtime-generation",
+}) {
+  const policy =
+    readModelHealthPolicy();
+
+  const store =
+    readModelHealthStore();
+
+  const entry =
+    normalizeModelHealthEntry(
+      modelId,
+      store.models?.[modelId]
+    );
+
+  refreshCircuitStateByTime(
+    entry
+  );
+
+  const now =
+    new Date().toISOString();
+
+  entry.totalAttempts += 1;
+  entry.lastAttemptAt = now;
+
+  if (success) {
+    entry.totalSuccesses += 1;
+    entry.consecutiveSuccesses += 1;
+    entry.consecutiveFailures = 0;
+    entry.lastSuccessAt = now;
+    entry.lastErrorType = null;
+    entry.lastError = null;
+
+    if (
+      entry.circuitState ===
+        "half-open" ||
+      entry.circuitState ===
+        "open"
+    ) {
+      const successThreshold =
+        Number(
+          policy.circuitBreaker
+            ?.successThresholdToClose
+        ) || 1;
+
+      if (
+        entry.consecutiveSuccesses >=
+        successThreshold
+      ) {
+        entry.circuitState =
+          "closed";
+
+        entry.openedAt = null;
+        entry.nextProbeAt = null;
+        entry.halfOpenAttempts = 0;
+      }
+    }
+  } else {
+    entry.totalFailures += 1;
+    entry.consecutiveFailures += 1;
+    entry.consecutiveSuccesses = 0;
+    entry.lastFailureAt = now;
+    entry.lastErrorType =
+      errorType;
+    entry.lastError =
+      error;
+
+    const failureThreshold =
+      Number(
+        policy.circuitBreaker
+          ?.failureThreshold
+      ) || 3;
+
+    if (
+      entry.circuitState ===
+        "half-open" ||
+      entry.consecutiveFailures >=
+        failureThreshold
+    ) {
+      const cooldownMs =
+        Number(
+          policy.circuitBreaker
+            ?.cooldownMs
+        ) || 300000;
+
+      entry.circuitState =
+        "open";
+
+      entry.openedAt = now;
+
+      entry.nextProbeAt =
+        new Date(
+          Date.now() +
+          cooldownMs
+        ).toISOString();
+
+      entry.halfOpenAttempts = 0;
+    }
+  }
+
+  const rollingWindowSize =
+    Number(
+      policy.health
+        ?.rollingWindowSize
+    ) || 50;
+
+  entry.recentResults = [
+    ...(entry.recentResults || []),
+    {
+      success:
+        success === true,
+      errorType,
+      createdAt: now,
+    },
+  ].slice(
+    -rollingWindowSize
+  );
+
+  const event = {
+    id:
+      createTextChatId(
+        "model-health"
+      ),
+    modelId,
+    success:
+      success === true,
+    errorType,
+    error,
+    source,
+    circuitState:
+      entry.circuitState,
+    createdAt: now,
+  };
+
+  store.models[modelId] =
+    entry;
+
+  store.events.push(event);
+
+  const maximumEvents =
+    Number(
+      policy.health
+        ?.maximumEvents
+    ) || 10000;
+
+  store.events =
+    store.events.slice(
+      -maximumEvents
+    );
+
+  writeModelHealthStore(store);
+
+  return {
+    entry: {
+      ...entry,
+      metrics:
+        calculateModelHealthMetrics(
+          entry
+        ),
+    },
+    event,
+  };
+}
+
+function isModelCircuitAvailable(
+  modelId
+) {
+  const policy =
+    readModelHealthPolicy();
+
+  const {
+    store,
+    entry,
+  } = getModelHealthEntry(
+    modelId
+  );
+
+  if (
+    entry.circuitState ===
+    "closed"
+  ) {
+    return {
+      available: true,
+      probe: false,
+      entry,
+    };
+  }
+
+  if (
+    entry.circuitState ===
+      "half-open" &&
+    policy.routing
+      ?.allowHalfOpenProbe !==
+      false
+  ) {
+    const maximumAttempts =
+      Number(
+        policy.circuitBreaker
+          ?.halfOpenMaximumAttempts
+      ) || 1;
+
+    if (
+      Number(
+        entry.halfOpenAttempts
+      ) < maximumAttempts
+    ) {
+      entry.halfOpenAttempts =
+        Number(
+          entry.halfOpenAttempts
+        ) + 1;
+
+      store.models[modelId] =
+        entry;
+
+      writeModelHealthStore(
+        store
+      );
+
+      return {
+        available: true,
+        probe: true,
+        entry,
+      };
+    }
+  }
+
+  return {
+    available: false,
+    probe: false,
+    entry,
+  };
+}
+
+function resetModelCircuit(
+  modelId
+) {
+  const store =
+    readModelHealthStore();
+
+  const previous =
+    normalizeModelHealthEntry(
+      modelId,
+      store.models?.[modelId]
+    );
+
+  const reset = {
+    ...previous,
+    circuitState: "closed",
+    consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
+    openedAt: null,
+    nextProbeAt: null,
+    halfOpenAttempts: 0,
+    lastErrorType: null,
+    lastError: null,
+  };
+
+  store.models[modelId] =
+    reset;
+
+  store.events.push({
+    id:
+      createTextChatId(
+        "model-health-reset"
+      ),
+    modelId,
+    success: true,
+    errorType: null,
+    error: null,
+    source:
+      "manual-circuit-reset",
+    circuitState:
+      "closed",
+    createdAt:
+      new Date().toISOString(),
+  });
+
+  writeModelHealthStore(
+    store
+  );
+
+  return {
+    ...reset,
+    metrics:
+      calculateModelHealthMetrics(
+        reset
+      ),
+  };
+}
+
+function getModelHealthSummary() {
+  const store =
+    readModelHealthStore();
+
+  let changed = false;
+
+  const models =
+    Object.entries(
+      store.models || {}
+    )
+      .map(
+        ([
+          modelId,
+          rawEntry,
+        ]) => {
+          const entry =
+            normalizeModelHealthEntry(
+              modelId,
+              rawEntry
+            );
+
+          const previousState =
+            entry.circuitState;
+
+          refreshCircuitStateByTime(
+            entry
+          );
+
+          if (
+            previousState !==
+            entry.circuitState
+          ) {
+            changed = true;
+          }
+
+          store.models[modelId] =
+            entry;
+
+          return {
+            ...entry,
+            metrics:
+              calculateModelHealthMetrics(
+                entry
+              ),
+          };
+        }
+      )
+      .sort(
+        (left, right) => {
+          const stateOrder = {
+            open: 0,
+            "half-open": 1,
+            closed: 2,
+          };
+
+          return (
+            stateOrder[
+              left.circuitState
+            ] -
+              stateOrder[
+                right.circuitState
+              ] ||
+            right.totalFailures -
+              left.totalFailures
+          );
+        }
+      );
+
+  if (changed) {
+    writeModelHealthStore(
+      store
+    );
+  }
+
+  return {
+    updatedAt:
+      store.updatedAt,
+    models,
+    eventCount:
+      store.events?.length || 0,
+    openCircuitCount:
+      models.filter(
+        (model) =>
+          model.circuitState ===
+          "open"
+      ).length,
+    halfOpenCircuitCount:
+      models.filter(
+        (model) =>
+          model.circuitState ===
+          "half-open"
+      ).length,
+  };
+}
+
+// LUKE_AI_RUNTIME_SUPERVISOR_BOOTSTRAP_V3
+const textRuntimeSupervisor =
+  new TextRuntimeSupervisor({
+    root: ROOT,
+    policyPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "text-chat",
+      "runtime-supervisor-policy.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "text-chat",
+      "runtime-supervisor.json"
+    ),
+  });
+
+textRuntimeSupervisor.startMonitoring();
+
+
+// LUKE_AI_RUNTIME_SUPERVISOR_SETTINGS_API_V1
+const runtimeSupervisorPolicyPath = path.join(
+  ROOT,
+  "app",
+  "config",
+  "text-chat",
+  "runtime-supervisor-policy.json"
+);
+
+function normalizeRuntimeSupervisorPolicy(
+  input
+) {
+  const current =
+    readJsonFileStrict(
+      runtimeSupervisorPolicyPath,
+      "Runtime supervisor policy"
+    );
+
+  const source =
+    input &&
+    typeof input === "object"
+      ? input
+      : {};
+
+  const runtime =
+    source.runtime &&
+    typeof source.runtime === "object"
+      ? source.runtime
+      : {};
+
+  const supervision =
+    source.supervision &&
+    typeof source.supervision === "object"
+      ? source.supervision
+      : {};
+
+  const restart =
+    source.restart &&
+    typeof source.restart === "object"
+      ? source.restart
+      : {};
+
+  const command =
+    String(
+      runtime.command ??
+      current.runtime?.command ??
+      ""
+    ).trim();
+
+  const workingDirectory =
+    String(
+      runtime.workingDirectory ??
+      current.runtime
+        ?.workingDirectory ??
+      "."
+    ).trim() || ".";
+
+  const healthUrl =
+    String(
+      runtime.healthUrl ??
+      current.runtime?.healthUrl ??
+      ""
+    ).trim();
+
+  const argumentsValue =
+    Array.isArray(runtime.arguments)
+      ? runtime.arguments
+          .map(
+            (value) =>
+              String(value)
+          )
+      : (
+          current.runtime
+            ?.arguments || []
+        );
+
+  if (
+    command.includes("\n") ||
+    command.includes("\r") ||
+    command.includes("\0")
+  ) {
+    const error = new Error(
+      "Runtime command contains invalid characters."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    healthUrl &&
+    !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/.*)?$/i
+      .test(healthUrl)
+  ) {
+    const error = new Error(
+      "Health URL must use localhost or 127.0.0.1."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const clampNumber = (
+    value,
+    fallback,
+    minimum,
+    maximum
+  ) => {
+    const parsed =
+      Number(value);
+
+    if (!Number.isFinite(parsed)) {
+      return fallback;
+    }
+
+    return Math.max(
+      minimum,
+      Math.min(
+        maximum,
+        Math.round(parsed)
+      )
+    );
+  };
+
+  return {
+    ...current,
+    enabled:
+      source.enabled !==
+      undefined
+        ? Boolean(source.enabled)
+        : current.enabled !== false,
+    supervision: {
+      ...(current.supervision || {}),
+      autoStart:
+        supervision.autoStart !==
+        undefined
+          ? Boolean(
+              supervision.autoStart
+            )
+          : Boolean(
+              current.supervision
+                ?.autoStart
+            ),
+      autoRestart:
+        supervision.autoRestart !==
+        undefined
+          ? Boolean(
+              supervision.autoRestart
+            )
+          : current.supervision
+              ?.autoRestart !== false,
+      healthCheckIntervalMs:
+        clampNumber(
+          supervision
+            .healthCheckIntervalMs,
+          Number(
+            current.supervision
+              ?.healthCheckIntervalMs
+          ) || 5000,
+          1000,
+          300000
+        ),
+      healthCheckTimeoutMs:
+        clampNumber(
+          supervision
+            .healthCheckTimeoutMs,
+          Number(
+            current.supervision
+              ?.healthCheckTimeoutMs
+          ) || 3000,
+          500,
+          60000
+        ),
+      maximumConsecutiveFailures:
+        clampNumber(
+          supervision
+            .maximumConsecutiveFailures,
+          Number(
+            current.supervision
+              ?.maximumConsecutiveFailures
+          ) || 5,
+          1,
+          50
+        ),
+      suspendDurationMs:
+        clampNumber(
+          supervision
+            .suspendDurationMs,
+          Number(
+            current.supervision
+              ?.suspendDurationMs
+          ) || 600000,
+          1000,
+          86400000
+        ),
+    },
+    restart: {
+      ...(current.restart || {}),
+      initialDelayMs:
+        clampNumber(
+          restart.initialDelayMs,
+          Number(
+            current.restart
+              ?.initialDelayMs
+          ) || 1000,
+          100,
+          60000
+        ),
+      maximumDelayMs:
+        clampNumber(
+          restart.maximumDelayMs,
+          Number(
+            current.restart
+              ?.maximumDelayMs
+          ) || 30000,
+          1000,
+          600000
+        ),
+      backoffMultiplier:
+        Math.max(
+          1,
+          Math.min(
+            10,
+            Number(
+              restart
+                .backoffMultiplier ??
+              current.restart
+                ?.backoffMultiplier ??
+              2
+            )
+          )
+        ),
+    },
+    runtime: {
+      ...(current.runtime || {}),
+      healthUrl,
+      workingDirectory,
+      command,
+      arguments:
+        argumentsValue,
+      environment:
+        current.runtime
+          ?.environment || {},
+      inheritEnvironment:
+        runtime.inheritEnvironment !==
+        undefined
+          ? Boolean(
+              runtime.inheritEnvironment
+            )
+          : current.runtime
+              ?.inheritEnvironment !==
+              false,
+    },
+    security: {
+      ...(current.security || {}),
+      terminateOnlyOwnedProcess:
+        true,
+      allowShellCommand:
+        false,
+      writePidToState:
+        true,
+    },
+  };
+}
+
+function writeRuntimeSupervisorPolicy(
+  policy
+) {
+  writeJsonFileAtomic(
+    runtimeSupervisorPolicyPath,
+    policy
+  );
+
+  return policy;
+}
+
+// LUKE_AI_RUNTIME_INSTALL_QUEUE_BOOTSTRAP_V2
+const runtimeInstallQueue =
+  new RuntimeInstallQueue({
+    root: ROOT,
+    policyPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "text-chat",
+      "runtime-install-policy.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "text-chat",
+      "runtime-install-queue.json"
+    ),
+  });
+
+// LUKE_AI_STORAGE_DESTINATION_BOOTSTRAP_V2
+const storageDestinationManager =
+  new StorageDestinationManager({
+    root: ROOT,
+    policyPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-destination-policy.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-destination-state.json"
+    ),
+  });
+
+// LUKE_AI_UNIFIED_STORAGE_PROVIDER_BOOTSTRAP_V1
+const unifiedStorageProviderCore =
+  new UnifiedStorageProviderCore({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-providers.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-provider-state.json"
+    ),
+  });
+
+// LUKE_AI_STORAGE_KEYCHAIN_BOOTSTRAP_V1
+const storageCredentialVault =
+  new MacOSKeychainCredentialVault();
+
+// LUKE_AI_S3_COMPATIBLE_STORAGE_BOOTSTRAP_V2
+const s3CompatibleStorageAdapter =
+  new S3CompatibleStorageAdapter({
+    providerCore:
+      unifiedStorageProviderCore,
+    credentialVault:
+      storageCredentialVault,
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "s3-transfer-state.json"
+    ),
+  });
+
+// LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_BOOTSTRAP_V2
+// LUKE_AI_STORAGE_HEALTH_SCORER_BOOTSTRAP_V2
+const storageHealthScorer =
+  new StorageHealthScorer({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-health-score.json"
+    ),
+    providerCore:
+      unifiedStorageProviderCore,
+  });
+
+// LUKE_AI_STORAGE_POLICY_BOOTSTRAP_V2
+const storagePolicyManager =
+  new StoragePolicyManager({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-policy-profiles.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-policy-state.json"
+    ),
+    healthScorer:
+      storageHealthScorer,
+  });
+
+// LUKE_AI_STORAGE_WORKLOAD_DETECTOR_BOOTSTRAP_V2
+const storageWorkloadDetector =
+  new StorageWorkloadDetector({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-workload-detection.json"
+    ),
+  });
+
+// LUKE_AI_STORAGE_CAPACITY_BOOTSTRAP_V1
+const storageCapacityManager =
+  new StorageCapacityManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-capacity-state.json"
+    ),
+    healthScorer:
+      storageHealthScorer,
+    policyManager:
+      storagePolicyManager,
+  });
+
+// LUKE_AI_STORAGE_LIFECYCLE_BOOTSTRAP_V2
+const storageLifecycleManager =
+  new StorageLifecycleManager({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-lifecycle-rules.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-lifecycle-state.json"
+    ),
+    workloadDetector:
+      storageWorkloadDetector,
+  });
+
+const unifiedStorageTransferQueue =
+  new UnifiedStorageTransferQueue({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "unified-transfer-queue.json"
+    ),
+    providerCore:
+      unifiedStorageProviderCore,
+    s3Adapter:
+      s3CompatibleStorageAdapter,
+    healthScorer:
+      storageHealthScorer,
+    policyManager:
+      storagePolicyManager,
+    workloadDetector:
+      storageWorkloadDetector,
+    capacityManager:
+      storageCapacityManager,
+    maxConcurrent: 1,
+  });
+
+// LUKE_AI_STORAGE_SAFE_ARCHIVE_BOOTSTRAP_V2
+const storageSafeArchiveManager =
+  new StorageSafeArchiveManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-safe-archive-state.json"
+    ),
+    transferQueue:
+      unifiedStorageTransferQueue,
+  });
+
+// LUKE_AI_STORAGE_ARCHIVE_RESTORE_BOOTSTRAP_V2
+const storageArchiveRestoreManager =
+  new StorageArchiveRestoreManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-archive-restore-state.json"
+    ),
+    safeArchiveManager:
+      storageSafeArchiveManager,
+    transferQueue:
+      unifiedStorageTransferQueue,
+  });
+
+// LUKE_AI_STORAGE_INTEGRITY_BOOTSTRAP_V2
+const storageIntegrityScanner =
+  new StorageIntegrityScanner({
+    configPath: path.join(
+      ROOT,
+      "app",
+      "config",
+      "storage",
+      "storage-integrity-settings.json"
+    ),
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-integrity-state.json"
+    ),
+    safeArchiveManager:
+      storageSafeArchiveManager,
+    restoreManager:
+      storageArchiveRestoreManager,
+  });
+
+// LUKE_AI_DEEP_CLOUD_INTEGRITY_BOOTSTRAP_V1
+const storageDeepCloudIntegrityManager =
+  new StorageDeepCloudIntegrityManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-deep-cloud-integrity-state.json"
+    ),
+    safeArchiveManager:
+      storageSafeArchiveManager,
+    s3Adapter:
+      s3CompatibleStorageAdapter,
+  });
+
+// LUKE_AI_STORAGE_AVAILABILITY_WATCHER_BOOTSTRAP_V2
+const storageAvailabilityWatcher =
+  new StorageAvailabilityWatcher({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-availability-watcher.json"
+    ),
+    providerCore:
+      unifiedStorageProviderCore,
+    transferQueue:
+      unifiedStorageTransferQueue,
+  });
+
+
+
+// LUKE_AI_STORAGE_DISASTER_RECOVERY_BOOTSTRAP_V1
+const storageDisasterRecoveryDashboard =
+  new StorageDisasterRecoveryDashboard({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-disaster-recovery-state.json"
+    ),
+
+    healthScorer:
+      storageHealthScorer,
+
+    capacityManager:
+      storageCapacityManager,
+
+    lifecycleManager:
+      storageLifecycleManager,
+
+    safeArchiveManager:
+      storageSafeArchiveManager,
+
+    restoreManager:
+      storageArchiveRestoreManager,
+
+    integrityScanner:
+      storageIntegrityScanner,
+
+    deepCloudIntegrityManager:
+      storageDeepCloudIntegrityManager,
+
+    availabilityWatcher:
+      storageAvailabilityWatcher,
+
+    providerCore:
+      unifiedStorageProviderCore,
+  });
+
+// LUKE_AI_STORAGE_RECOVERY_RUNBOOK_BOOTSTRAP_V1
+const storageRecoveryRunbookManager =
+  new StorageRecoveryRunbookManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-recovery-runbook-state.json"
+    ),
+    disasterRecoveryDashboard:
+      storageDisasterRecoveryDashboard,
+  });
+
+// LUKE_AI_STORAGE_RECOVERY_SIMULATION_BOOTSTRAP_V1
+const storageRecoverySimulationManager =
+  new StorageRecoverySimulationManager({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-recovery-simulation-state.json"
+    ),
+  });
+
+// LUKE_AI_STORAGE_RECOVERY_READINESS_CERTIFIER_BOOTSTRAP_V1
+const storageRecoveryReadinessCertifier =
+  new StorageRecoveryReadinessCertifier({
+    statePath: path.join(
+      ROOT,
+      "app",
+      "runtime-state",
+      "storage",
+      "storage-recovery-readiness-certification.json"
+    ),
+
+    disasterRecoveryDashboard:
+      storageDisasterRecoveryDashboard,
+
+    recoveryRunbookManager:
+      storageRecoveryRunbookManager,
+
+    recoverySimulationManager:
+      storageRecoverySimulationManager,
+  });
+
+
+
+
+
+
+
+storageAvailabilityWatcher.start();
+
 const server = http.createServer(async (req, res) => {
+  // LUKE_AI_RUNTIME_SUPERVISOR_ROUTES_V3
+
+  // LUKE_AI_RUNTIME_AUTO_DETECTION_API_V3
+  // LUKE_AI_RUNTIME_ONE_CLICK_INSTALL_API_V2
+
+  // LUKE_AI_RUNTIME_INSTALL_PREFLIGHT_API_V2
+  // LUKE_AI_STORAGE_DESTINATION_MANAGER_API_V2
+
+  // LUKE_AI_STORAGE_SETTINGS_API_V2
+
+  // LUKE_AI_UNIFIED_STORAGE_PROVIDER_API_V1
+
+  // LUKE_AI_STORAGE_KEYCHAIN_API_V1
+
+  // POST /api/storage/credentials
+  // LUKE_AI_STORAGE_INTEGRITY_API_V2
+
+  // LUKE_AI_DEEP_CLOUD_INTEGRITY_API_V1
+
+  // LUKE_AI_STORAGE_DISASTER_RECOVERY_API_V1
+
+  // LUKE_AI_STORAGE_RECOVERY_RUNBOOK_API_V1
+
+  // LUKE_AI_STORAGE_RECOVERY_SIMULATION_API_V1
+
+  // LUKE_AI_STORAGE_RECOVERY_READINESS_CERTIFIER_API_V1
+
+  if (
+    req.url === "/api/storage/recovery-certification" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      certification:
+        storageRecoveryReadinessCertifier
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/recovery-certification/run" &&
+    req.method === "POST"
+  ) {
+    try {
+      const certification =
+        storageRecoveryReadinessCertifier
+          .certify();
+
+      return json(res, 200, {
+        ok: true,
+        certification,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/recovery-simulation" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      simulation:
+        storageRecoverySimulationManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/recovery-simulation/run" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storageRecoverySimulationManager
+          .runScenario(
+            body.scenarioId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/recovery-simulation/run-all" &&
+    req.method === "POST"
+  ) {
+    try {
+      const result =
+        storageRecoverySimulationManager
+          .runAll();
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/recovery-runbook" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        recoveryRunbook:
+          storageRecoveryRunbookManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/recovery-runbook/refresh" &&
+    req.method === "POST"
+  ) {
+    try {
+      const runbook =
+        storageRecoveryRunbookManager
+          .createRunbook();
+
+      return json(res, 200, {
+        ok: true,
+        runbook,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/disaster-recovery" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        disasterRecovery:
+          storageDisasterRecoveryDashboard
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/disaster-recovery/refresh" &&
+    req.method === "POST"
+  ) {
+    try {
+      const summary =
+        storageDisasterRecoveryDashboard
+          .generateSummary();
+
+      return json(res, 200, {
+        ok: true,
+        summary,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity/cloud" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      cloudIntegrity:
+        storageDeepCloudIntegrityManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/integrity/cloud/verify" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const storage =
+        storageDestinationManager
+          .resolveActiveDestination();
+
+      const verification =
+        await storageDeepCloudIntegrityManager
+          .verifyArchive({
+            archiveId:
+              body.archiveId,
+            approvedRoot:
+              storage.destination.path,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        verification,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity/cloud/alerts/acknowledge" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const alert =
+        storageDeepCloudIntegrityManager
+          .acknowledgeAlert(
+            body.alertId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        alert,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      integrity:
+        storageIntegrityScanner
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/integrity/scan" &&
+    req.method === "POST"
+  ) {
+    try {
+      const scan =
+        await storageIntegrityScanner
+          .runScan();
+
+      return json(res, 200, {
+        ok: true,
+        scan,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity/scheduler/start" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const scheduler =
+        storageIntegrityScanner
+          .startScheduler(
+            body.intervalMinutes ||
+            null
+          );
+
+      return json(res, 200, {
+        ok: true,
+        scheduler,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/integrity/scheduler/stop" &&
+    req.method === "POST"
+  ) {
+    const scheduler =
+      storageIntegrityScanner
+        .stopScheduler();
+
+    return json(res, 200, {
+      ok: true,
+      scheduler,
+    });
+  }
+
+  if (
+    req.url === "/api/storage/credentials" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const providerId =
+        String(
+          body.providerId || ""
+        ).trim();
+
+      if (!providerId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "providerId is required",
+        });
+      }
+
+      const saved =
+        await storageCredentialVault
+          .save({
+            reference:
+              body.credentialReference ||
+              null,
+            providerId,
+            credential:
+              body.credential,
+          });
+
+      const provider =
+        unifiedStorageProviderCore
+          .setCredentialReference({
+            providerId,
+            credentialReference:
+              saved.reference,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        credential: saved,
+        provider,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/credentials/status
+  if (
+    req.url === "/api/storage/credentials/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const reference =
+        String(
+          body.credentialReference || ""
+        ).trim();
+
+      if (!reference) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "credentialReference is required",
+        });
+      }
+
+      const credential =
+        await storageCredentialVault
+          .getSummary(
+            reference
+          );
+
+      return json(res, 200, {
+        ok: true,
+        credential,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/credentials/delete
+  if (
+    req.url === "/api/storage/credentials/delete" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const providerId =
+        String(
+          body.providerId || ""
+        ).trim();
+
+      const reference =
+        String(
+          body.credentialReference || ""
+        ).trim();
+
+      if (
+        !providerId ||
+        !reference
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "providerId and credentialReference are required",
+        });
+      }
+
+      const deleted =
+        await storageCredentialVault
+          .delete(reference);
+
+      const provider =
+        unifiedStorageProviderCore
+          .clearCredentialReference(
+            providerId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        deleted,
+        provider,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_S3_COMPATIBLE_STORAGE_API_V2
+
+  if (
+    req.url === "/api/storage/s3/test" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .testConnection(
+            String(
+              body.providerId || ""
+            ).trim()
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/upload" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .uploadFile({
+            providerId:
+              body.providerId,
+            sourcePath:
+              body.sourcePath,
+            objectKey:
+              body.objectKey ||
+              null,
+            contentType:
+              body.contentType ||
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/download" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const storage =
+        storageDestinationManager
+          .resolveActiveDestination();
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .downloadFile({
+            providerId:
+              body.providerId,
+            objectKey:
+              body.objectKey,
+            destinationPath:
+              body.destinationPath,
+            approvedRoot:
+              storage.destination.path,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/delete-request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const confirmation =
+        s3CompatibleStorageAdapter
+          .requestDelete({
+            providerId:
+              body.providerId,
+            objectKey:
+              body.objectKey,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        confirmation,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/delete-confirm" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await s3CompatibleStorageAdapter
+          .confirmDelete({
+            confirmationId:
+              body.confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/delete-cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        s3CompatibleStorageAdapter
+          .cancelDelete({
+            confirmationId:
+              body.confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/s3/status" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      storage:
+        s3CompatibleStorageAdapter
+          .getStatus(),
+    });
+  }
+
+  // LUKE_AI_UNIFIED_STORAGE_TRANSFER_QUEUE_API_V2
+
+  // LUKE_AI_STORAGE_AVAILABILITY_WATCHER_API_V2
+
+  if (
+    req.url === "/api/storage/watcher" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      watcher:
+        storageAvailabilityWatcher
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/watcher/scan" &&
+    req.method === "POST"
+  ) {
+    try {
+      const result =
+        await storageAvailabilityWatcher
+          .scan();
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/watcher/start" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      watcher:
+        storageAvailabilityWatcher
+          .setEnabled(true),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/watcher/stop" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      watcher:
+        storageAvailabilityWatcher
+          .setEnabled(false),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/watcher/interval" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      return json(res, 200, {
+        ok: true,
+        watcher:
+          storageAvailabilityWatcher
+            .setIntervalMs(
+              body.intervalMs
+            ),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_HEALTH_SCORER_API_V2
+
+  if (
+    req.url === "/api/storage/health" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      health:
+        storageHealthScorer
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/health/evaluate" &&
+    req.method === "POST"
+  ) {
+    try {
+      const providers =
+        storageHealthScorer
+          .evaluateAll();
+
+      return json(res, 200, {
+        ok: true,
+        providers,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/health/select" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const selected =
+        storageHealthScorer
+          .selectBestProvider({
+            capability:
+              body.capability ||
+              "write",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        selected,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_POLICY_API_V2
+
+  if (
+    req.url === "/api/storage/policies" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      policies:
+        storagePolicyManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/policies/select" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storagePolicyManager
+          .selectForWorkload({
+            workloadType:
+              body.workloadType ||
+              "models",
+            capability:
+              body.capability ||
+              "write",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_WORKLOAD_DETECTOR_API_V2
+
+  if (
+    req.url === "/api/storage/workload" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      workload:
+        storageWorkloadDetector
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/workload/detect" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const detection =
+        storageWorkloadDetector
+          .detect({
+            sourcePath:
+              body.sourcePath,
+            workloadType:
+              body.workloadType ||
+              null,
+            manualOverride:
+              Boolean(
+                body.manualOverride
+              ),
+          });
+
+      return json(res, 200, {
+        ok: true,
+        detection,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_CAPACITY_API_V1
+
+  if (
+    req.url === "/api/storage/capacity" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      capacity:
+        storageCapacityManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/capacity/forecast" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const forecast =
+        storageCapacityManager
+          .forecast({
+            workloadType:
+              body.workloadType ||
+              "temporary",
+            sourcePath:
+              body.sourcePath ||
+              null,
+            requiredBytes:
+              body.requiredBytes ??
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        forecast,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_LIFECYCLE_API_V2
+
+  if (
+    req.url === "/api/storage/lifecycle" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      lifecycle:
+        storageLifecycleManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/lifecycle/plan" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const plan =
+        storageLifecycleManager
+          .createPlan({
+            rootPath:
+              body.rootPath,
+            maxFiles:
+              body.maxFiles ||
+              5000,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        plan,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/lifecycle/protect" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storageLifecycleManager
+          .protectPath(
+            body.path
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/lifecycle/unprotect" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        storageLifecycleManager
+          .unprotectPath(
+            body.path
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_STORAGE_SAFE_ARCHIVE_API_V2
+
+  // LUKE_AI_STORAGE_ARCHIVE_RESTORE_API_V2
+
+  if (
+    req.url === "/api/storage/restore" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      restore:
+        storageArchiveRestoreManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/restore/request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const restore =
+        storageArchiveRestoreManager
+          .requestRestore({
+            archiveId:
+              body.archiveId,
+            destinationPath:
+              body.destinationPath,
+            restoreAsNew:
+              Boolean(
+                body.restoreAsNew
+              ),
+          });
+
+      return json(res, 200, {
+        ok: true,
+        restore,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/restore/local" &&
+    req.method === "POST"
+  ) {
+    let body = null;
+
+    try {
+      body =
+        await readJsonRequestBody(req);
+
+      const restore =
+        await storageArchiveRestoreManager
+          .restoreLocalArchive({
+            restoreId:
+              body.restoreId,
+            sourceArchivePath:
+              body.sourceArchivePath,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        restore,
+      });
+    } catch (error) {
+      if (
+        body &&
+        body.restoreId
+      ) {
+        storageArchiveRestoreManager
+          .markFailed(
+            body.restoreId,
+            error
+          );
+      }
+
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      archive:
+        storageSafeArchiveManager
+          .getStatus(),
+    });
+  }
+
+  if (
+    req.url === "/api/storage/archive/request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const archive =
+        await storageSafeArchiveManager
+          .requestArchive({
+            sourcePath:
+              body.sourcePath,
+            destinationProviderId:
+              body.destinationProviderId ||
+              null,
+            destinationPath:
+              body.destinationPath ||
+              null,
+            objectKey:
+              body.objectKey ||
+              null,
+            workloadType:
+              body.workloadType ||
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        archive,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/sync" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const archive =
+        storageSafeArchiveManager
+          .syncArchive(
+            body.archiveId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        archive,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/cleanup/request" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const request =
+        storageSafeArchiveManager
+          .requestCleanup(
+            body.archiveId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        request,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/cleanup/confirm" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await storageSafeArchiveManager
+          .confirmCleanup(
+            body.requestId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/storage/archive/cleanup/cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const request =
+        storageSafeArchiveManager
+          .cancelCleanup(
+            body.requestId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        request,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/storage/queue
+  if (
+    req.url === "/api/storage/queue" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      queue:
+        unifiedStorageTransferQueue
+          .getStatus(),
+    });
+  }
+
+  // POST /api/storage/queue/enqueue
+  if (
+    req.url === "/api/storage/queue/enqueue" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const job =
+        unifiedStorageTransferQueue
+          .enqueue(
+            body.job
+          );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/queue/pause
+  if (
+    req.url === "/api/storage/queue/pause" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      result:
+        unifiedStorageTransferQueue
+          .pause(),
+    });
+  }
+
+  // POST /api/storage/queue/resume
+  if (
+    req.url === "/api/storage/queue/resume" &&
+    req.method === "POST"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      result:
+        unifiedStorageTransferQueue
+          .resume(),
+    });
+  }
+
+  // POST /api/storage/queue/cancel
+  if (
+    req.url === "/api/storage/queue/cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const job =
+        unifiedStorageTransferQueue
+          .cancel(
+            body.jobId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/queue/retry
+  if (
+    req.url === "/api/storage/queue/retry" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const job =
+        unifiedStorageTransferQueue
+          .retry(
+            body.jobId
+          );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/storage/providers
+  if (
+    req.url === "/api/storage/providers" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        storage:
+          unifiedStorageProviderCore
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/providers
+  if (
+    req.url === "/api/storage/providers" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const provider =
+        unifiedStorageProviderCore
+          .upsertProvider(
+            body.provider
+          );
+
+      return json(res, 200, {
+        ok: true,
+        provider,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/providers/check
+  if (
+    req.url === "/api/storage/providers/check" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const providerId =
+        String(
+          body.providerId || ""
+        ).trim();
+
+      const result =
+        providerId
+          ? unifiedStorageProviderCore
+              .checkProvider(
+                providerId
+              )
+          : unifiedStorageProviderCore
+              .checkAllProviders();
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/providers/select
+  if (
+    req.url === "/api/storage/providers/select" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        unifiedStorageProviderCore
+          .selectProvider({
+            capability:
+              body.capability ||
+              "write",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+          providers:
+            error.providers || null,
+        }
+      );
+    }
+  }
+
+  // GET /api/storage/settings
+  if (
+    req.url === "/api/storage/settings" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        policy:
+          storageDestinationManager
+            .getPolicy(),
+        storage:
+          storageDestinationManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // PUT /api/storage/settings
+  if (
+    req.url === "/api/storage/settings" &&
+    req.method === "PUT"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const policy =
+        storageDestinationManager
+          .updatePolicy(
+            body.policy
+          );
+
+      return json(res, 200, {
+        ok: true,
+        policy,
+        storage:
+          storageDestinationManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/choose-folder
+  if (
+    req.url === "/api/storage/choose-folder" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        await chooseStorageFolder({
+          prompt:
+            body.prompt ||
+            "Choose a storage folder for LUKE AI STUDIO",
+          defaultLocation:
+            body.defaultLocation ||
+            null,
+        });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          cancelled:
+            error.cancelled ===
+            true,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/storage/status
+  if (
+    req.url === "/api/storage/status" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        storage:
+          storageDestinationManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/resolve
+  if (
+    req.url === "/api/storage/resolve" &&
+    req.method === "POST"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        storage:
+          storageDestinationManager
+            .resolveActiveDestination(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/transfer
+  if (
+    req.url === "/api/storage/transfer" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const sourcePath =
+        String(
+          body.sourcePath || ""
+        ).trim();
+
+      if (!sourcePath) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "sourcePath is required",
+        });
+      }
+
+      const result =
+        await storageDestinationManager
+          .transferLocalFile({
+            sourcePath,
+            relativePath:
+              body.relativePath ||
+              null,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/confirm-local-deletion
+  if (
+    req.url === "/api/storage/confirm-local-deletion" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const confirmationId =
+        String(
+          body.confirmationId || ""
+        ).trim();
+
+      if (!confirmationId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "confirmationId is required",
+        });
+      }
+
+      const result =
+        await storageDestinationManager
+          .confirmLocalDeletion({
+            confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/storage/cancel-local-deletion
+  if (
+    req.url === "/api/storage/cancel-local-deletion" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const confirmationId =
+        String(
+          body.confirmationId || ""
+        ).trim();
+
+      if (!confirmationId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "confirmationId is required",
+        });
+      }
+
+      const result =
+        storageDestinationManager
+          .cancelLocalDeletion({
+            confirmationId,
+          });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-runtime/install-preflight
+  if (
+    req.url === "/api/text-runtime/install-preflight" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const runtimeType =
+        String(
+          body.runtimeType || ""
+        ).trim();
+
+      if (!runtimeType) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "runtimeType is required",
+        });
+      }
+
+      const preflight =
+        runtimeInstallQueue
+          .getDiskPreflight(
+            runtimeType
+          );
+
+      return json(
+        res,
+        preflight.allowed
+          ? 200
+          : 409,
+        {
+          ok:
+            preflight.allowed,
+          preflight,
+          error:
+            preflight.allowed
+              ? null
+              : "Insufficient disk space.",
+        }
+      );
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+          preflight:
+            error.preflight || null,
+        }
+      );
+    }
+  }
+
+  // GET /api/text-runtime/install-queue
+  if (
+    req.url === "/api/text-runtime/install-queue" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        queue:
+          runtimeInstallQueue.getSnapshot(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/install
+  if (
+    req.url === "/api/text-runtime/install" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const runtimeType =
+        String(
+          body.runtimeType || ""
+        ).trim();
+
+      if (!runtimeType) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "runtimeType is required",
+        });
+      }
+
+      const detection =
+        await detectTextRuntimes();
+
+      const selected =
+        detection.detections.find(
+          (runtime) =>
+            runtime.runtimeType ===
+            runtimeType
+        );
+
+      if (selected?.installed === true) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            `${runtimeType} is already installed.`,
+        });
+      }
+
+      const job =
+        runtimeInstallQueue.enqueue(
+          runtimeType
+        );
+
+      return json(res, 202, {
+        ok: true,
+        job,
+        queue:
+          runtimeInstallQueue.getSnapshot(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-runtime/install-cancel
+  if (
+    req.url === "/api/text-runtime/install-cancel" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const jobId =
+        String(
+          body.jobId || ""
+        ).trim();
+
+      if (!jobId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "jobId is required",
+        });
+      }
+
+      const job =
+        runtimeInstallQueue.cancel(
+          jobId
+        );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+        queue:
+          runtimeInstallQueue.getSnapshot(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-runtime/install-clear
+  if (
+    req.url === "/api/text-runtime/install-clear" &&
+    req.method === "POST"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        queue:
+          runtimeInstallQueue.clearCompleted(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-runtime/detect
+  if (
+    req.url === "/api/text-runtime/detect" &&
+    req.method === "GET"
+  ) {
+    try {
+      const detection =
+        await detectTextRuntimes();
+
+      return json(res, 200, {
+        ok: true,
+        ...detection,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/configure-detected
+  if (
+    req.url === "/api/text-runtime/configure-detected" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const runtimeType =
+        String(
+          body.runtimeType || ""
+        ).trim();
+
+      const supportedTypes =
+        new Set([
+          "ollama",
+          "llama.cpp",
+          "mlx",
+        ]);
+
+      if (
+        !supportedTypes.has(
+          runtimeType
+        )
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "Unsupported runtime type.",
+        });
+      }
+
+      const detection =
+        await detectTextRuntimes();
+
+      const selected =
+        detection.detections.find(
+          (runtime) =>
+            runtime.runtimeType ===
+            runtimeType
+        );
+
+      if (
+        !selected ||
+        selected.installed !== true
+      ) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            `${runtimeType} was not detected on this computer.`,
+        });
+      }
+
+      const preset =
+        createTextRuntimePreset(
+          runtimeType,
+          selected.executable
+        );
+
+      const currentPolicy =
+        readJsonFileStrict(
+          runtimeSupervisorPolicyPath,
+          "Runtime supervisor policy"
+        );
+
+      const nextPolicy =
+        normalizeRuntimeSupervisorPolicy({
+          ...currentPolicy,
+          runtime: {
+            ...(currentPolicy.runtime || {}),
+            command:
+              preset.command,
+            arguments:
+              preset.arguments,
+            workingDirectory:
+              preset.workingDirectory,
+            healthUrl:
+              preset.healthUrl,
+            environment:
+              preset.environment || {},
+          },
+        });
+
+      writeRuntimeSupervisorPolicy(
+        nextPolicy
+      );
+
+      textRuntimeSupervisor
+        .reloadPolicy?.();
+
+      return json(res, 200, {
+        ok: true,
+        runtimeType,
+        detection:
+          selected,
+        preset,
+        policy:
+          nextPolicy,
+        supervisor:
+          textRuntimeSupervisor
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-runtime/supervisor/settings
+  if (
+    req.url === "/api/text-runtime/supervisor/settings" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        policy:
+          readJsonFileStrict(
+            runtimeSupervisorPolicyPath,
+            "Runtime supervisor policy"
+          ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // PUT /api/text-runtime/supervisor/settings
+  if (
+    req.url === "/api/text-runtime/supervisor/settings" &&
+    req.method === "PUT"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const policy =
+        normalizeRuntimeSupervisorPolicy(
+          body.policy
+        );
+
+      writeRuntimeSupervisorPolicy(
+        policy
+      );
+
+      textRuntimeSupervisor
+        .reloadPolicy?.();
+
+      return json(res, 200, {
+        ok: true,
+        policy,
+        supervisor:
+          textRuntimeSupervisor.getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/status" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        supervisor:
+          textRuntimeSupervisor.getStatus(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/start" &&
+    req.method === "POST"
+  ) {
+    try {
+      const supervisor =
+        await textRuntimeSupervisor
+          .startRuntime({
+            reason: "api-request",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        supervisor,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const supervisor =
+        await textRuntimeSupervisor
+          .stopRuntime({
+            reason: "api-request",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        supervisor,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/restart" &&
+    req.method === "POST"
+  ) {
+    try {
+      const supervisor =
+        await textRuntimeSupervisor
+          .restartRuntime({
+            reason: "api-request",
+          });
+
+      return json(res, 200, {
+        ok: true,
+        supervisor,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    req.url === "/api/text-runtime/supervisor/reset" &&
+    req.method === "POST"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        supervisor:
+          textRuntimeSupervisor.resetSupervisor(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+
   // CORS preflight
   if (req.method === "OPTIONS") {
     res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST" });
@@ -5844,6 +20824,2004 @@ const server = http.createServer(async (req, res) => {
   }
   // ── Management API ────────────────────────────────────────────────────────
   // GET /api/health
+  // POST /api/runtime/install/jobs/:jobId/start
+  const runtimeInstallStartMatch =
+    req.url.match(
+      /^\/api\/runtime\/install\/jobs\/([^/?]+)\/start$/
+    );
+
+  if (
+    runtimeInstallStartMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const jobId = decodeURIComponent(
+        runtimeInstallStartMatch[1]
+      );
+
+      const job = getRuntimeInstallJob(jobId);
+
+      if (!job) {
+        return json(res, 404, {
+          ok: false,
+          error: "Runtime install job not found",
+        });
+      }
+
+      if (job.state !== "queued") {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Only queued runtime jobs can start",
+        });
+      }
+
+      const body = await readJsonRequestBody(req);
+
+      startRuntimeInstallJob(
+        jobId,
+        {
+          url:
+            typeof body.url === "string"
+              ? body.url
+              : undefined,
+          sha256:
+            typeof body.sha256 === "string"
+              ? body.sha256
+              : undefined,
+          filename:
+            typeof body.filename === "string"
+              ? body.filename
+              : undefined,
+        }
+      );
+
+      return json(res, 202, {
+        ok: true,
+        jobId,
+        state: "queued",
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/runtime/install/jobs
+  if (
+    req.url === "/api/runtime/install/jobs" &&
+    req.method === "GET"
+  ) {
+    return json(res, 200, {
+      ok: true,
+      jobs: listRuntimeInstallJobs(),
+    });
+  }
+
+  // POST /api/runtime/install/jobs
+  if (
+    req.url === "/api/runtime/install/jobs" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body = await readJsonRequestBody(req);
+
+      if (
+        typeof body.dependencyId !== "string" ||
+        !body.dependencyId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "dependencyId is required",
+        });
+      }
+
+      const job = createRuntimeInstallJob(
+        body.dependencyId.trim(),
+        typeof body.downloadDirectory === "string"
+          ? body.downloadDirectory.trim()
+          : undefined
+      );
+
+      return json(res, 201, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const runtimeInstallJobMatch =
+    req.url.match(
+      /^\/api\/runtime\/install\/jobs\/([^/?]+)$/
+    );
+
+  // GET /api/runtime/install/jobs/:jobId
+  if (
+    runtimeInstallJobMatch &&
+    req.method === "GET"
+  ) {
+    const job = getRuntimeInstallJob(
+      decodeURIComponent(
+        runtimeInstallJobMatch[1]
+      )
+    );
+
+    if (!job) {
+      return json(res, 404, {
+        ok: false,
+        error: "Runtime install job not found",
+      });
+    }
+
+    return json(res, 200, {
+      ok: true,
+      job,
+    });
+  }
+
+  // PATCH /api/runtime/install/jobs/:jobId
+  if (
+    runtimeInstallJobMatch &&
+    req.method === "PATCH"
+  ) {
+    try {
+      const body = await readJsonRequestBody(req);
+
+      const job = updateRuntimeInstallJob(
+        decodeURIComponent(
+          runtimeInstallJobMatch[1]
+        ),
+        typeof body.state === "string"
+          ? body.state
+          : undefined,
+        body.progress
+      );
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/runtime/install/jobs/:jobId/cancel
+  const runtimeInstallCancelMatch =
+    req.url.match(
+      /^\/api\/runtime\/install\/jobs\/([^/?]+)\/cancel$/
+    );
+
+  if (
+    runtimeInstallCancelMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const jobId = decodeURIComponent(
+        runtimeInstallCancelMatch[1]
+      );
+
+      const activeWorkerCancelled =
+        cancelRuntimeInstallWorker(jobId);
+
+      const currentJob =
+        getRuntimeInstallJob(jobId);
+
+      if (!currentJob) {
+        return json(res, 404, {
+          ok: false,
+          error: "Runtime install job not found",
+        });
+      }
+
+      const job =
+        currentJob.state === "queued"
+          ? updateRuntimeInstallJob(
+              jobId,
+              "cancelled"
+            )
+          : currentJob;
+
+      if (
+        !activeWorkerCancelled &&
+        job.state !== "cancelled"
+      ) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Runtime install job is not cancellable",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        job,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/runtime/storage/usage
+  if (
+    req.url === "/api/runtime/storage/usage" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildRuntimeStorageUsage()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/runtime/storage/cleanup
+  if (
+    req.url === "/api/runtime/storage/cleanup" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.categoryId !== "string" ||
+        !body.categoryId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "categoryId is required",
+        });
+      }
+
+      const result =
+        cleanupRuntimeStorageCategory(
+          body.categoryId.trim(),
+          {
+            dryRun: body.dryRun !== false,
+          }
+        );
+
+      return json(
+        res,
+        result.ok ? 200 : 500,
+        result
+      );
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/runtime/storage
+  if (
+    req.url === "/api/runtime/storage" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        resolveRuntimeStorageDirectory({
+          create: false,
+          createFallback: true,
+        })
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/runtime/storage/resolve
+  if (
+    req.url === "/api/runtime/storage/resolve" &&
+    req.method === "POST"
+  ) {
+    try {
+      const storage =
+        resolveRuntimeStorageDirectory({
+          create: true,
+          createFallback: true,
+        });
+
+      return json(
+        res,
+        storage.ok ? 200 : 503,
+        storage
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-models/download-queue/start
+  if (
+    req.url === "/api/text-models/download-queue/start" &&
+    req.method === "POST"
+  ) {
+    startTextModelQueueWorker();
+
+    return json(res, 202, {
+      ok: true,
+      message:
+        "เริ่มประมวลผลคิวดาวน์โหลดแล้ว",
+    });
+  }
+
+  const textModelQueueActionMatch =
+    req.url.match(
+      /^\/api\/text-models\/download-queue\/([^/?]+)\/(pause|resume|cancel|skip|move)$/
+    );
+
+  if (
+    textModelQueueActionMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const itemId =
+        decodeURIComponent(
+          textModelQueueActionMatch[1]
+        );
+
+      const action =
+        textModelQueueActionMatch[2];
+
+      const body =
+        action === "move"
+          ? await readJsonRequestBody(req)
+          : {};
+
+      let item;
+
+      if (action === "pause") {
+        item =
+          pauseTextModelQueueItem(itemId);
+      } else if (action === "resume") {
+        item =
+          resumeTextModelQueueItem(itemId);
+      } else if (action === "cancel") {
+        item =
+          cancelTextModelQueueItem(itemId);
+      } else if (action === "skip") {
+        item =
+          skipTextModelQueueItem(itemId);
+      } else {
+        item =
+          moveTextModelQueueItem(
+            itemId,
+            body.direction
+          );
+      }
+
+      return json(res, 200, {
+        ok: true,
+        item,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-models/installed
+  if (
+    req.url === "/api/text-models/installed" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        registry:
+          readInstalledTextModels(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-models/updates
+  if (
+    req.url === "/api/text-models/updates" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildTextModelUpdateStatus()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // LUKE_AI_TEXT_MODEL_STATIC_UPDATE_ENDPOINT_V1
+  // POST /api/text-models/update
+  if (
+    req.url === "/api/text-models/update" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.modelId !== "string" ||
+        !body.modelId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "modelId is required",
+        });
+      }
+
+      const modelId =
+        body.modelId.trim();
+
+      const updateStatus =
+        getTextModelUpdateStatus(
+          modelId
+        );
+
+      if (!updateStatus) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Text model was not found.",
+        });
+      }
+
+      if (!updateStatus.installed) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Model is not installed. Use Download instead.",
+        });
+      }
+
+      if (!updateStatus.updateAvailable) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "This model is already up to date.",
+        });
+      }
+
+      const item =
+        await enqueueTextModel(
+          modelId,
+          updateStatus.recommendedVariant
+        );
+
+      updateTextModelQueueItem(
+        item.id,
+        {
+          operation: "update",
+          previousVersion:
+            updateStatus.installedVersion,
+        }
+      );
+
+      return json(res, 202, {
+        ok: true,
+        item:
+          getTextModelQueueItem(item.id),
+        message:
+          "เพิ่มการอัปเดตโมเดลลงคิวแล้ว",
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const textModelUpdateMatch =
+    req.url.match(
+      /^\/api\/text-models\/([^/?]+)\/update$/
+    );
+
+  if (
+    textModelUpdateMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const modelId =
+        decodeURIComponent(
+          textModelUpdateMatch[1]
+        );
+
+      const updateStatus =
+        getTextModelUpdateStatus(
+          modelId
+        );
+
+      if (!updateStatus) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Text model was not found.",
+        });
+      }
+
+      if (!updateStatus.installed) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "Model is not installed. Use Download instead.",
+        });
+      }
+
+      if (!updateStatus.updateAvailable) {
+        return json(res, 409, {
+          ok: false,
+          error:
+            "This model is already up to date.",
+        });
+      }
+
+      const item =
+        await enqueueTextModel(
+          modelId,
+          updateStatus.recommendedVariant
+        );
+
+      item.operation = "update";
+      item.previousVersion =
+        updateStatus.installedVersion;
+
+      updateTextModelQueueItem(
+        item.id,
+        {
+          operation: "update",
+          previousVersion:
+            updateStatus.installedVersion,
+        }
+      );
+
+      return json(res, 202, {
+        ok: true,
+        item:
+          getTextModelQueueItem(item.id),
+        message:
+          "เพิ่มการอัปเดตโมเดลลงคิวแล้ว",
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-models/hardware
+  if (
+    req.url === "/api/text-models/hardware" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildTextModelHardwareCompatibility()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/model-router/route
+  if (
+    req.url === "/api/text-runtime/model-router/route" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const conversationId =
+        String(
+          body.conversationId || ""
+        ).trim() ||
+        null;
+
+      const prompt =
+        String(
+          body.prompt ||
+          (
+            conversationId
+              ? getConversationLatestUserPrompt(
+                  conversationId
+                )
+              : ""
+          ) ||
+          ""
+        ).trim();
+
+      const result =
+        routeTextModel({
+          prompt,
+          conversationId,
+          excludedModelIds:
+            body.excludedModelIds,
+        });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-runtime/model-router/policy
+  if (
+    req.url === "/api/text-runtime/model-router/policy" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        policy:
+          readAutomaticModelRouterPolicy(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-chat/feedback
+  if (
+    req.url === "/api/text-chat/feedback" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        recordTextModelFeedback({
+          conversationId:
+            String(
+              body.conversationId || ""
+            ).trim(),
+          messageId:
+            String(
+              body.messageId || ""
+            ).trim(),
+          feedbackType:
+            String(
+              body.feedbackType || ""
+            ).trim(),
+        });
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-chat/feedback/summary
+  if (
+    req.url === "/api/text-chat/feedback/summary" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        ...getTextModelFeedbackSummary(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/judge-synthesis
+  if (
+    req.url === "/api/text-runtime/judge-synthesis" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      await streamAiJudgeSynthesis(
+        body.conversationId.trim(),
+        res,
+        {
+          judgeModelId:
+            body.judgeModelId ||
+            null,
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
+        }
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/judge-synthesis/stop
+  if (
+    req.url === "/api/text-runtime/judge-synthesis/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopAiJudgeSynthesis(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-runtime/models/available
+  if (
+    req.url === "/api/text-runtime/models/available" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        maximumSelection:
+          Number(
+            readMultiModelPolicy()
+              .selection
+              ?.maximumModels
+          ) || 3,
+        models:
+          getInstalledTextModelsForSelection(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/multi-generate-stream
+  if (
+    req.url === "/api/text-runtime/multi-generate-stream" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      await streamMultiModelGeneration(
+        body.conversationId.trim(),
+        body.modelIds,
+        res,
+        {
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
+        }
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/multi-generation/stop
+  if (
+    req.url === "/api/text-runtime/multi-generation/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopMultiModelGeneration(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-runtime/model-health
+  if (
+    req.url === "/api/text-runtime/model-health" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        ...getModelHealthSummary(),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/model-health/reset
+  if (
+    req.url === "/api/text-runtime/model-health/reset" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const modelId =
+        String(
+          body.modelId || ""
+        ).trim();
+
+      if (!modelId) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "modelId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        model:
+          resetModelCircuit(
+            modelId
+          ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/generate-with-recovery
+  if (
+    req.url === "/api/text-runtime/generate-with-recovery" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      await generateWithRuntimeRecovery(
+        body.conversationId.trim(),
+        res,
+        {
+          requestedModelId:
+            body.modelId ||
+            null,
+          temperature:
+            body.temperature,
+          topP:
+            body.topP,
+          maxTokens:
+            body.maxTokens,
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
+        }
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/recovery/stop
+  if (
+    req.url === "/api/text-runtime/recovery/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopRuntimeRecoveryGeneration(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/generate-stream
+  if (
+    req.url === "/api/text-runtime/generate-stream" &&
+    req.method === "POST"
+  ) {
+    let body;
+
+    try {
+      body =
+        await readJsonRequestBody(req);
+    } catch (error) {
+      return json(res, 400, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+
+    if (
+      typeof body.conversationId !==
+        "string" ||
+      !body.conversationId.trim()
+    ) {
+      return json(res, 400, {
+        ok: false,
+        error:
+          "conversationId is required",
+      });
+    }
+
+    try {
+      await streamTextRuntimeGeneration(
+        body.conversationId.trim(),
+        res,
+        {
+          modelId:
+            body.modelId || null,
+          temperature:
+            body.temperature,
+          topP:
+            body.topP,
+          maxTokens:
+            body.maxTokens,
+          stop:
+            body.stop,
+          response_format:
+            body.response_format,
+          responseFormat:
+            body.responseFormat,
+        }
+      );
+
+      return;
+    } catch (error) {
+      if (!res.headersSent) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+
+      writeTextGenerationEvent(
+        res,
+        "error",
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+
+      res.end();
+      return;
+    }
+  }
+
+  // POST /api/text-runtime/generation/stop
+  if (
+    req.url === "/api/text-runtime/generation/stop" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...stopTextRuntimeGeneration(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/generation/status
+  if (
+    req.url === "/api/text-runtime/generation/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...getTextRuntimeGenerationStatus(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/session/refresh
+  if (
+    req.url === "/api/text-runtime/session/refresh" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      const result =
+        await refreshTextRuntimeSession(
+          body.conversationId.trim(),
+          {
+            forceMemoryRefresh:
+              body.forceMemoryRefresh !==
+              false,
+            reason:
+              String(
+                body.reason ||
+                "manual-runtime-refresh"
+              ),
+          }
+        );
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-runtime/session/status
+  if (
+    req.url === "/api/text-runtime/session/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...getTextRuntimeSessionStatus(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-runtime/restore-prompt
+  if (
+    req.url === "/api/text-runtime/restore-prompt" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const store =
+        readTextChatStore();
+
+      const conversation =
+        findTextChatConversation(
+          store,
+          String(
+            body.conversationId || ""
+          )
+        );
+
+      if (!conversation) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Conversation was not found.",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        conversationId:
+          conversation.id,
+        restorePrompt:
+          buildConversationRestorePrompt(
+            conversation
+          ),
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-chat/memory/optimize
+  if (
+    req.url === "/api/text-chat/memory/optimize" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      const result =
+        optimizeTextChatConversation(
+          body.conversationId.trim(),
+          {
+            force:
+              body.force === true,
+            reason:
+              String(
+                body.reason ||
+                "manual"
+              ),
+          }
+        );
+
+      return json(res, 200, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // POST /api/text-chat/memory/status
+  if (
+    req.url === "/api/text-chat/memory/status" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.conversationId !==
+          "string" ||
+        !body.conversationId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error:
+            "conversationId is required",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...getTextChatMemoryStatus(
+          body.conversationId.trim()
+        ),
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-chat/conversations
+  if (
+    req.url === "/api/text-chat/conversations" &&
+    req.method === "GET"
+  ) {
+    try {
+      const store =
+        readTextChatStore();
+
+      return json(res, 200, {
+        ok: true,
+        lastOpenedConversationId:
+          store.lastOpenedConversationId,
+        conversations:
+          store.conversations,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-chat/conversations
+  if (
+    req.url === "/api/text-chat/conversations" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      const conversation =
+        createTextChatConversation(
+          body || {}
+        );
+
+      return json(res, 201, {
+        ok: true,
+        conversation,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const textChatConversationMatch =
+    req.url.match(
+      /^\/api\/text-chat\/conversations\/([^/?]+)$/
+    );
+
+  if (
+    textChatConversationMatch &&
+    req.method === "GET"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatConversationMatch[1]
+        );
+
+      const store =
+        readTextChatStore();
+
+      const conversation =
+        findTextChatConversation(
+          store,
+          conversationId
+        );
+
+      if (!conversation) {
+        return json(res, 404, {
+          ok: false,
+          error:
+            "Conversation was not found.",
+        });
+      }
+
+      store.lastOpenedConversationId =
+        conversation.id;
+
+      writeTextChatStore(store);
+
+      return json(res, 200, {
+        ok: true,
+        conversation,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  if (
+    textChatConversationMatch &&
+    req.method === "PATCH"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatConversationMatch[1]
+        );
+
+      const body =
+        await readJsonRequestBody(req);
+
+      const conversation =
+        updateTextChatConversation(
+          conversationId,
+          body || {}
+        );
+
+      return json(res, 200, {
+        ok: true,
+        conversation,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  if (
+    textChatConversationMatch &&
+    req.method === "DELETE"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatConversationMatch[1]
+        );
+
+      const removed =
+        deleteTextChatConversation(
+          conversationId
+        );
+
+      return json(res, 200, {
+        ok: true,
+        removed,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  const textChatMessageMatch =
+    req.url.match(
+      /^\/api\/text-chat\/conversations\/([^/?]+)\/messages$/
+    );
+
+  if (
+    textChatMessageMatch &&
+    req.method === "POST"
+  ) {
+    try {
+      const conversationId =
+        decodeURIComponent(
+          textChatMessageMatch[1]
+        );
+
+      const body =
+        await readJsonRequestBody(req);
+
+      const result =
+        appendTextChatMessage(
+          conversationId,
+          body || {}
+        );
+
+      return json(res, 201, {
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/text-models/catalog
+  if (
+    req.url === "/api/text-models/catalog" &&
+    req.method === "GET"
+  ) {
+    try {
+      const catalog = readTextModelCatalog();
+
+      return json(res, 200, {
+        ok: true,
+        catalogId: catalog.catalogId,
+        catalogVersion:
+          catalog.catalogVersion,
+        trust: catalog.trust,
+        models: catalog.models,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // GET /api/text-models/download-queue
+  if (
+    req.url === "/api/text-models/download-queue" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(res, 200, {
+        ok: true,
+        queue: readTextModelQueue(),
+        policy:
+          readTextModelPolicy()
+            .downloadPolicy,
+      });
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  }
+
+  // POST /api/text-models/download-queue
+  if (
+    req.url === "/api/text-models/download-queue" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body =
+        await readJsonRequestBody(req);
+
+      if (
+        typeof body.modelId !== "string" ||
+        !body.modelId.trim()
+      ) {
+        return json(res, 400, {
+          ok: false,
+          error: "modelId is required",
+        });
+      }
+
+      const item =
+        await enqueueTextModel(
+          body.modelId.trim(),
+          typeof body.variantId === "string"
+            ? body.variantId.trim()
+            : undefined
+        );
+
+      return json(res, 201, {
+        ok: true,
+        item,
+        message:
+          "เพิ่มโมเดลลงคิวดาวน์โหลดแล้ว",
+      });
+    } catch (error) {
+      return json(
+        res,
+        error.statusCode || 500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
+  // GET /api/runtime/dependencies
+  if (
+    req.url === "/api/runtime/dependencies" &&
+    req.method === "GET"
+  ) {
+    try {
+      return json(
+        res,
+        200,
+        buildRuntimeDependencyStatus()
+      );
+    } catch (error) {
+      return json(res, 500, {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+
+    return;
+  }
+
   if (req.url === "/api/health" && req.method === "GET") {
     return json(res, 200, await getHealth());
   }
@@ -6425,6 +23403,7 @@ async function doLlmChat(req, res, body, retryCount = 0) {
       presence_penalty: Number.isFinite(Number(body.presence_penalty)) ? Number(body.presence_penalty) : 0.0,
       seed: Number.isInteger(Number(body.seed)) ? Number(body.seed) : undefined,
       stop: Array.isArray(body.stop) ? body.stop : (body.stop ? [body.stop] : undefined),
+      response_format: normalizeLlmResponseFormatCandidate(body.response_format, body.responseFormat),
     });
 
     if (isStream) {
@@ -6756,6 +23735,38 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
 
 
   // GET /api/capabilities/image-to-video/status
+  // LUKE_AI_IMAGE_TO_VIDEO_RUNTIME_CAPABILITY_API_V2
+  if (
+    req.url === "/api/capabilities/image-to-video/runtime" &&
+    req.method === "GET"
+  ) {
+    try {
+      const runtimeCapabilityManager =
+        new ImageToVideoRuntimeCapabilityManager({
+          root: ROOT,
+        });
+
+      return json(res, 200, {
+        ok: true,
+        runtime:
+          runtimeCapabilityManager
+            .getStatus(),
+      });
+    } catch (error) {
+      return json(
+        res,
+        500,
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      );
+    }
+  }
+
   if (req.url === "/api/capabilities/image-to-video/status" && req.method === "GET") {
     const runtimeDir = path.join(ROOT, "app", "runtimes", "image-to-video");
     const installedPath = path.join(runtimeDir, "installed.json");
@@ -6819,7 +23830,1436 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
   }
 
   // POST /api/image-to-video/generate
-  if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
+  // LUKE_AI_I2V_MAINTENANCE_STATUS_API_V1
+  {
+    const imageToVideoMaintenanceUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    if (
+      imageToVideoMaintenanceUrl.pathname ===
+        "/api/image-to-video/maintenance/status" &&
+      req.method === "GET"
+    ) {
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          ...getImageToVideoRecoveryStatus(),
+        }
+      );
+    }
+
+    if (
+      imageToVideoMaintenanceUrl.pathname ===
+        "/api/image-to-video/recovery" &&
+      req.method === "GET"
+    ) {
+      const status =
+        getImageToVideoRecoveryStatus();
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          activeJobs:
+            status.activeJobs,
+          recoveredJobs:
+            status.recoveredJobs,
+          summary:
+            status.summary,
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_I2V_BATCH_CONTROLS_API_V1
+  {
+    const batchControlUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    const match =
+      batchControlUrl.pathname
+        .match(
+          /^\/api\/image-to-video\/batches\/([^/]+)\/(pause|resume|cancel|retry-failed)$/
+        );
+
+    if (
+      match &&
+      req.method === "POST"
+    ) {
+      const batchId =
+        decodeURIComponent(
+          match[1]
+        );
+
+      const action =
+        match[2];
+
+      const manager =
+        getImageToVideoJobManager();
+
+      if (
+        action === "pause"
+      ) {
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            ...manager.pauseBatch(
+              batchId
+            ),
+          }
+        );
+      }
+
+      if (
+        action === "resume"
+      ) {
+        const result =
+          manager.resumeBatch(
+            batchId
+          );
+
+        if (
+          typeof imageToVideoProcessRunner
+            ?.drainQueue ===
+          "function"
+        ) {
+          imageToVideoProcessRunner
+            .drainQueue();
+        }
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            ...result,
+          }
+        );
+      }
+
+      if (
+        action === "cancel"
+      ) {
+        const jobs =
+          manager.getBatchJobs(
+            batchId
+          );
+
+        let cancelled = 0;
+
+        for (const job of jobs) {
+          if (
+            [
+              "queued",
+              "paused",
+            ].includes(
+              job.state
+            )
+          ) {
+            manager.skipJob(
+              job.id
+            );
+
+            cancelled += 1;
+          }
+        }
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            batchId,
+            cancelled,
+            runningPreserved:
+              jobs.filter(
+                (job) =>
+                  job.state ===
+                  "running"
+              ).length,
+          }
+        );
+      }
+
+      if (
+        action ===
+        "retry-failed"
+      ) {
+        const jobs =
+          manager.getBatchJobs(
+            batchId
+          );
+
+        const retryable =
+          jobs.filter(
+            (job) =>
+              [
+                "failed",
+                "cancelled",
+              ].includes(
+                job.state
+              )
+          );
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            batchId,
+            retryableJobIds:
+              retryable.map(
+                (job) =>
+                  job.id
+              ),
+          }
+        );
+      }
+    }
+
+    const skipMatch =
+      batchControlUrl.pathname
+        .match(
+          /^\/api\/image-to-video\/batches\/([^/]+)\/jobs\/([^/]+)\/skip$/
+        );
+
+    if (
+      skipMatch &&
+      req.method === "POST"
+    ) {
+      const manager =
+        getImageToVideoJobManager();
+
+      const batchId =
+        decodeURIComponent(
+          skipMatch[1]
+        );
+
+      const jobId =
+        decodeURIComponent(
+          skipMatch[2]
+        );
+
+      const job =
+        manager.getJob(
+          jobId
+        );
+
+      if (
+        !job ||
+        job?.payload
+          ?.batchId !==
+        batchId
+      ) {
+        return json(
+          res,
+          404,
+          {
+            ok: false,
+            error:
+              "Batch job not found.",
+          }
+        );
+      }
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          job:
+            manager.skipJob(
+              jobId
+            ),
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_REFERENCE_UPLOAD_API_V1
+  if (
+    req.method === "POST" &&
+    req.url === "/api/references/upload"
+  ) {
+    try {
+      const body =
+        await readJsonBody(
+          req
+        );
+
+      const dataUrl =
+        String(
+          body?.dataUrl || ""
+        );
+
+      const match =
+        dataUrl.match(
+          /^data:([^;]+);base64,(.+)$/
+        );
+
+      if (!match) {
+        return json(
+          res,
+          400,
+          {
+            ok: false,
+            error:
+              "Invalid reference data URL.",
+          }
+        );
+      }
+
+      const mimeType =
+        match[1];
+
+      const extensionMap = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+      };
+
+      const extension =
+        extensionMap[
+          mimeType
+        ];
+
+      if (!extension) {
+        return json(
+          res,
+          400,
+          {
+            ok: false,
+            error:
+              "Unsupported reference image type.",
+          }
+        );
+      }
+
+      const buffer =
+        Buffer.from(
+          match[2],
+          "base64"
+        );
+
+      if (
+        buffer.length < 1
+      ) {
+        return json(
+          res,
+          400,
+          {
+            ok: false,
+            error:
+              "Empty reference image.",
+          }
+        );
+      }
+
+      const digest =
+        crypto
+          .createHash("sha256")
+          .update(buffer)
+          .digest("hex")
+          .slice(0, 24);
+
+      const outputDir =
+        path.join(
+          ROOT,
+          "app",
+          "outputs",
+          "references"
+        );
+
+      fs.mkdirSync(
+        outputDir,
+        {
+          recursive: true,
+        }
+      );
+
+      const outputPath =
+        path.join(
+          outputDir,
+          `ref-${digest}${extension}`
+        );
+
+      if (
+        !fs.existsSync(
+          outputPath
+        )
+      ) {
+        fs.writeFileSync(
+          outputPath,
+          buffer
+        );
+      }
+
+      const stat =
+        fs.statSync(
+          outputPath
+        );
+
+      const registry =
+        getLukeAssetRegistry();
+
+      const referenceType =
+        String(
+          body?.referenceType ||
+          "generic"
+        )
+          .trim()
+          .toLowerCase();
+
+      const weightRaw =
+        Number(
+          body?.referenceWeight
+        );
+
+      const referenceWeight =
+        Number.isFinite(
+          weightRaw
+        )
+          ? Math.max(
+              0.2,
+              Math.min(
+                1,
+                weightRaw
+              )
+            )
+          : 0.85;
+
+      const asset =
+        registry.upsertByPath({
+          type:
+            "reference",
+
+          existingPath:
+            outputPath,
+
+          storageProviderId:
+            body?.storageProviderId ||
+            "local",
+
+          tags:
+            Array.isArray(
+              body?.tags
+            )
+              ? body.tags
+              : [],
+
+          favorite:
+            Boolean(
+              body?.favorite
+            ),
+
+          pinned:
+            Boolean(
+              body?.pinned
+            ),
+
+          project:
+            body?.project ||
+            null,
+
+          campaign:
+            body?.campaign ||
+            null,
+
+          metadata: {
+            referenceType,
+            referenceWeight,
+
+            referenceLock:
+              body?.referenceLock !==
+              false,
+
+            originalName:
+              body?.originalName ||
+              null,
+
+            mimeType,
+
+            source:
+              "upload",
+
+            sizeBytes:
+              stat.size,
+
+            sha256:
+              digest,
+          },
+        });
+
+      return json(
+        res,
+        201,
+        {
+          ok: true,
+          asset,
+
+          reference: {
+            assetId:
+              asset.assetId,
+
+            existingPath:
+              asset.existingPath,
+
+            referenceType,
+
+            referenceWeight,
+
+            referenceLock:
+              body?.referenceLock !==
+              false,
+
+            originalName:
+              body?.originalName ||
+              null,
+
+            mimeType,
+          },
+        }
+      );
+
+    } catch (error) {
+      return json(
+        res,
+        500,
+        {
+          ok: false,
+          error:
+            error?.message ||
+            "Reference upload failed.",
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_ASSET_REGISTRY_API_V1
+  {
+    const assetUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    if (
+      assetUrl.pathname ===
+        "/api/assets" &&
+      req.method === "GET"
+    ) {
+      const registry =
+        getLukeAssetRegistry();
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+
+          assets:
+            registry.list({
+              type:
+                assetUrl.searchParams
+                  .get("type") ||
+                undefined,
+
+              project:
+                assetUrl.searchParams
+                  .get("project") ||
+                undefined,
+
+              campaign:
+                assetUrl.searchParams
+                  .get("campaign") ||
+                undefined,
+
+              tag:
+                assetUrl.searchParams
+                  .get("tag") ||
+                undefined,
+
+              favorite:
+                assetUrl.searchParams
+                  .get("favorite") ===
+                "true"
+                  ? true
+                  : undefined,
+            }),
+        }
+      );
+    }
+
+    if (
+      assetUrl.pathname ===
+        "/api/assets" &&
+      req.method === "POST"
+    ) {
+      const body =
+        await readJsonBody(
+          req
+        );
+
+      const registry =
+        getLukeAssetRegistry();
+
+      return json(
+        res,
+        201,
+        {
+          ok: true,
+
+          asset:
+            registry.create(
+              body || {}
+            ),
+        }
+      );
+    }
+
+    const assetMatch =
+      assetUrl.pathname
+        .match(
+          /^\/api\/assets\/([^/]+)$/
+        );
+
+    if (
+      assetMatch &&
+      req.method === "GET"
+    ) {
+      const registry =
+        getLukeAssetRegistry();
+
+      const asset =
+        registry.get(
+          decodeURIComponent(
+            assetMatch[1]
+          )
+        );
+
+      if (!asset) {
+        return json(
+          res,
+          404,
+          {
+            ok: false,
+            error:
+              "Asset not found.",
+          }
+        );
+      }
+
+      return json(
+        res,
+        200,
+        {
+          ok: true,
+          asset,
+        }
+      );
+    }
+
+    if (
+      assetMatch &&
+      req.method === "PATCH"
+    ) {
+      const body =
+        await readJsonBody(
+          req
+        );
+
+      const registry =
+        getLukeAssetRegistry();
+
+      try {
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+
+            asset:
+              registry.update(
+                decodeURIComponent(
+                  assetMatch[1]
+                ),
+                body || {}
+              ),
+          }
+        );
+      } catch (error) {
+        return json(
+          res,
+          404,
+          {
+            ok: false,
+            error:
+              error.message,
+          }
+        );
+      }
+    }
+
+    if (
+      assetMatch &&
+      req.method === "DELETE"
+    ) {
+      const registry =
+        getLukeAssetRegistry();
+
+      const removed =
+        registry.remove(
+          decodeURIComponent(
+            assetMatch[1]
+          )
+        );
+
+      return json(
+        res,
+        removed
+          ? 200
+          : 404,
+        {
+          ok:
+            removed,
+        }
+      );
+    }
+  }
+
+  // LUKE_AI_I2V_JOB_API_V1
+  {
+    const imageToVideoJobUrl =
+      new URL(
+        req.url,
+        "http://localhost"
+      );
+
+    const imageToVideoJobPath =
+      imageToVideoJobUrl.pathname;
+
+    if (
+      imageToVideoJobPath ===
+        "/api/image-to-video/jobs" &&
+      req.method === "POST"
+    ) {
+      try {
+        const body =
+          await readImageToVideoJobBody(
+            req
+          );
+
+        const payload =
+          body?.payload &&
+          typeof body.payload ===
+            "object" &&
+          !Array.isArray(
+            body.payload
+          )
+            ? body.payload
+            : body;
+
+        if (
+          !payload ||
+          typeof payload !==
+            "object" ||
+          Array.isArray(payload) ||
+          Object.keys(payload)
+            .length === 0
+        ) {
+          return json(
+            res,
+            400,
+            {
+              ok: false,
+              error:
+                "Image-to-Video generation payload is required.",
+            }
+          );
+        }
+
+        const manager =
+          getImageToVideoJobManager();
+
+        const job =
+          manager.createJob({
+            payload,
+          });
+
+        try {
+          const prepared =
+            prepareImageToVideoJobExecution(
+              payload,
+              job.id
+            );
+
+          getImageToVideoProcessRunner()
+            .startPreparedJob(
+              job.id,
+              {
+                args:
+                  prepared.workerArgs,
+
+                output: {
+                  videoUrl:
+                    prepared.outputRelative,
+
+                  output:
+                    prepared.outputRelative,
+
+                  modelId:
+                    prepared.modelId,
+                },
+              }
+            );
+
+        } catch (error) {
+          manager.failJob(
+            job.id,
+            {
+              code:
+                error?.code ||
+                "JOB_PREPARATION_FAILED",
+
+              message:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            }
+          );
+        }
+
+        const startedJob =
+          manager.getJob(
+            job.id
+          );
+
+        // LUKE_AI_I2V_JOB_EXECUTION_CREATE_V2
+        return json(
+          res,
+          202,
+          {
+            ok: true,
+            job:
+              startedJob,
+          }
+        );
+
+      } catch (error) {
+        return json(
+          res,
+          error.statusCode || 500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+    }
+
+    if (
+      imageToVideoJobPath ===
+        "/api/image-to-video/jobs" &&
+      req.method === "GET"
+    ) {
+      try {
+        const manager =
+          getImageToVideoJobManager();
+
+        const state =
+          imageToVideoJobUrl
+            .searchParams
+            .get("state");
+
+        const limit =
+          imageToVideoJobUrl
+            .searchParams
+            .get("limit");
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            jobs:
+              manager.listJobs({
+                state:
+                  state || null,
+                limit:
+                  limit || 50,
+              }),
+            summary:
+              manager.getSummary(),
+          }
+        );
+
+      } catch (error) {
+        return json(
+          res,
+          500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+    }
+
+    if (
+      imageToVideoJobPath ===
+        "/api/image-to-video/jobs/summary" &&
+      req.method === "GET"
+    ) {
+      try {
+        const manager =
+          getImageToVideoJobManager();
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            summary:
+              manager.getSummary(),
+          }
+        );
+
+      } catch (error) {
+        return json(
+          res,
+          500,
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }
+        );
+      }
+    }
+
+    const imageToVideoJobMatch =
+      imageToVideoJobPath.match(
+        /^\/api\/image-to-video\/jobs\/([^/]+)(?:\/(cancel|retry))?$/
+      );
+
+    if (imageToVideoJobMatch) {
+      const jobId =
+        decodeURIComponent(
+          imageToVideoJobMatch[1]
+        );
+
+      const action =
+        imageToVideoJobMatch[2] ||
+        null;
+
+      if (
+        action === null &&
+        req.method === "GET"
+      ) {
+        const manager =
+          getImageToVideoJobManager();
+
+        const job =
+          manager.getJob(
+            jobId
+          );
+
+        if (!job) {
+          return json(
+            res,
+            404,
+            {
+              ok: false,
+              error:
+                "Image-to-Video job not found.",
+            }
+          );
+        }
+
+        return json(
+          res,
+          200,
+          {
+            ok: true,
+            job,
+          }
+        );
+      }
+
+      if (
+        action === "cancel" &&
+        req.method === "POST"
+      ) {
+        try {
+          const manager =
+            getImageToVideoJobManager();
+
+          const job =
+            manager.cancelJob(
+              jobId
+            );
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+              job,
+            }
+          );
+
+        } catch (error) {
+          return json(
+            res,
+            error.statusCode || 409,
+            {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            }
+          );
+        }
+      }
+
+      if (
+        action === "retry" &&
+        req.method === "POST"
+      ) {
+        try {
+          const manager =
+            getImageToVideoJobManager();
+
+          const job =
+            manager.retryJob(
+              jobId
+            );
+
+          try {
+            const prepared =
+              prepareImageToVideoJobExecution(
+                job.payload,
+                job.id
+              );
+
+            getImageToVideoProcessRunner()
+              .startPreparedJob(
+                job.id,
+                {
+                  args:
+                    prepared.workerArgs,
+
+                  output: {
+                    videoUrl:
+                      prepared.outputRelative,
+
+                    output:
+                      prepared.outputRelative,
+
+                    modelId:
+                      prepared.modelId,
+                  },
+                }
+              );
+
+          } catch (error) {
+            manager.failJob(
+              job.id,
+              {
+                code:
+                  error?.code ||
+                  "JOB_RETRY_PREPARATION_FAILED",
+
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : String(error),
+              }
+            );
+          }
+
+          const startedJob =
+            manager.getJob(
+              job.id
+            );
+
+          // LUKE_AI_I2V_JOB_EXECUTION_RETRY_V2
+          return json(
+            res,
+            202,
+            {
+              ok: true,
+              job:
+                startedJob,
+            }
+          );
+
+        } catch (error) {
+          return json(
+            res,
+            error.statusCode || 409,
+            {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            }
+          );
+        }
+      }
+    }
+  }
+
+  // LUKE_AI_I2V_JOB_PREPARATION_V2
+function prepareImageToVideoJobExecution(
+  body,
+  jobId
+) {
+  let modelId =
+    String(
+      body.modelId || ""
+    );
+
+  const imageDataUrl =
+    String(
+      body.imageDataUrl || ""
+    );
+
+  const references =
+    Array.isArray(
+      body.references
+    )
+      ? body.references.slice(
+          0,
+          8
+        )
+      : [];
+
+  const automaticMatch =
+    body.automaticMatch === true;
+
+  if (
+    modelId === "auto"
+  ) {
+    const hw =
+      getHardwareSpecs();
+
+    const apple =
+      process.platform === "darwin" &&
+      process.arch === "arm64";
+
+    const ram =
+      Number(
+        hw.ram_total_gb || 0
+      );
+
+    const vram =
+      Number(
+        hw.gpu_vram_gb ||
+        hw.vram_total_gb ||
+        0
+      );
+
+    modelId =
+      (
+        apple
+          ? ram >= 48
+          : vram >= 16
+      )
+        ? "svd-xt"
+        : "svd";
+  }
+
+  if (
+    !imageDataUrl.startsWith(
+      "data:image/"
+    )
+  ) {
+    const error =
+      new Error(
+        "A valid source image is required."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    ![
+      "svd",
+      "svd-xt",
+    ].includes(
+      modelId
+    )
+  ) {
+    const error =
+      new Error(
+        "This model is shown for compatibility planning, but its verified local worker adapter is not installed yet."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const match =
+    imageDataUrl.match(
+      /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/
+    );
+
+  if (!match) {
+    const error =
+      new Error(
+        "Unsupported image encoding."
+      );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const safeJobId =
+    String(
+      jobId || ""
+    ).replace(
+      /[^a-zA-Z0-9._-]/g,
+      "-"
+    );
+
+  if (!safeJobId) {
+    throw new Error(
+      "A valid Image-to-Video job ID is required."
+    );
+  }
+
+  const inputDir =
+    path.join(
+      ROOT,
+      "app",
+      "cache",
+      "image-to-video"
+    );
+
+  const outputDir =
+    path.join(
+      ROOT,
+      "app",
+      "outputs",
+      "video"
+    );
+
+  fs.mkdirSync(
+    inputDir,
+    {
+      recursive: true,
+    }
+  );
+
+  fs.mkdirSync(
+    outputDir,
+    {
+      recursive: true,
+    }
+  );
+
+  const inputPath =
+    path.join(
+      inputDir,
+      safeJobId + ".png"
+    );
+
+  const outputPath =
+    path.join(
+      outputDir,
+      safeJobId + ".mp4"
+    );
+
+  fs.writeFileSync(
+    inputPath,
+    Buffer.from(
+      match[1],
+      "base64"
+    )
+  );
+
+  const referenceDir =
+    path.join(
+      inputDir,
+      safeJobId +
+        "-references"
+    );
+
+  fs.mkdirSync(
+    referenceDir,
+    {
+      recursive: true,
+    }
+  );
+
+  const referenceManifest =
+    [];
+
+  for (
+    let i = 0;
+    i <
+    references.length;
+    i += 1
+  ) {
+    const ref =
+      references[i] || {};
+
+    const refMatch =
+      String(
+        ref.dataUrl || ""
+      ).match(
+        /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/
+      );
+
+    if (!refMatch) {
+      continue;
+    }
+
+    const refPath =
+      path.join(
+        referenceDir,
+        `ref-${i}.png`
+      );
+
+    fs.writeFileSync(
+      refPath,
+      Buffer.from(
+        refMatch[1],
+        "base64"
+      )
+    );
+
+    referenceManifest.push({
+      path:
+        refPath,
+
+      type:
+        automaticMatch
+          ? "auto"
+          : String(
+              ref.type ||
+              "product"
+            ),
+
+      weight:
+        automaticMatch
+          ? 1
+          : Math.max(
+              0.2,
+              Math.min(
+                1,
+                Number(
+                  ref.weight
+                ) ||
+                0.85
+              )
+            ),
+    });
+  }
+
+  const manifestPath =
+    path.join(
+      referenceDir,
+      "manifest.json"
+    );
+
+  fs.writeFileSync(
+    manifestPath,
+    JSON.stringify(
+      referenceManifest,
+      null,
+      2
+    )
+  );
+
+  const seconds =
+    Math.max(
+      2,
+      Math.min(
+          15,
+        Number(
+          body.seconds
+        ) ||
+        5
+      )
+    );
+
+  return {
+    modelId,
+
+    inputPath,
+
+    outputPath,
+
+    outputRelative:
+      path.relative(
+        ROOT,
+        outputPath
+      ),
+
+    workerArgs: [
+      "--model",
+      modelId,
+
+      "--image",
+      inputPath,
+
+      "--output",
+      outputPath,
+
+      "--prompt",
+      String(
+        body.prompt || ""
+      ),
+
+      "--seconds",
+      String(
+        seconds
+      ),
+
+      "--references",
+      manifestPath,
+
+      "--reference-lock",
+      body.referenceLock ===
+        false
+        ? "0"
+        : "1",
+
+      "--automatic-match",
+      automaticMatch
+        ? "1"
+        : "0",
+    ],
+  };
+}
+
+  // LUKE_AI_I2V_DURATION_15_BACKEND_V1
+
+if (req.url === "/api/image-to-video/generate" && req.method === "POST") {
     try {
       const body = await readJsonBody(req, res);
       if (!body) return;
@@ -6864,6 +25304,186 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       const result = spawnSync(runtimePython, [worker, "--model", modelId, "--image", inputPath, "--output", outputPath, "--prompt", String(body.prompt || ""), "--seconds", String(Math.max(2, Math.min(10, Number(body.seconds) || 5))), "--references", manifestPath, "--reference-lock", body.referenceLock === false ? "0" : "1", "--automatic-match", automaticMatch ? "1" : "0"], { encoding: "utf8", timeout: 60 * 60 * 1000, maxBuffer: 10 * 1024 * 1024 });
       let parsed = null; try { parsed = JSON.parse(String(result.stdout || "").trim().split(/\r?\n/).pop()); } catch (_) {}
       if (result.error || result.status !== 0 || !parsed?.ok) return json(res, 500, { ok: false, error: parsed?.error || String(result.stderr || result.error?.message || "Image-to-video worker failed.") });
+      // LUKE_AI_I2V_VIDEO_ASSET_REGISTRATION_V1
+      try {
+        if (
+          fs.existsSync(
+            outputPath
+          )
+        ) {
+          const outputStat =
+            fs.statSync(
+              outputPath
+            );
+
+          if (
+            outputStat.isFile()
+          ) {
+            const normalizedSeconds =
+              Math.max(
+                2,
+                Math.min(
+                  10,
+                  Number(
+                    body.seconds
+                  ) || 5
+                )
+              );
+
+            const registry =
+              getLukeAssetRegistry();
+
+            registry.upsertByPath({
+              type:
+                "video",
+
+              // LUKE_AI_I2V_VIDEO_RELATIONSHIPS_V1
+              derivedFrom:
+                body.sourceAssetId
+                  ? [
+                      String(
+                        body.sourceAssetId
+                      ),
+                    ]
+                  : [],
+
+              references:
+                Array.isArray(
+                  body.referenceAssetIds
+                )
+                  ? body.referenceAssetIds
+                      .map(
+                        (assetId) =>
+                          String(
+                            assetId || ""
+                          ).trim()
+                      )
+                      .filter(Boolean)
+                  : [],
+
+              relations: [
+                ...(
+                  body.sourceAssetId
+                    ? [
+                        {
+                          assetId:
+                            String(
+                              body.sourceAssetId
+                            ),
+
+                          relation:
+                            "derived_from",
+                        },
+                      ]
+                    : []
+                ),
+
+                ...(
+                  Array.isArray(
+                    body.referenceAssetIds
+                  )
+                    ? body.referenceAssetIds
+                        .map(
+                          (assetId) =>
+                            String(
+                              assetId || ""
+                            ).trim()
+                        )
+                        .filter(Boolean)
+                        .map(
+                          (assetId) => ({
+                            assetId,
+                            relation:
+                              "reference",
+                          })
+                        )
+                    : []
+                ),
+              ],
+
+
+              existingPath:
+                outputPath,
+
+              storageProviderId:
+                body.storageProviderId ||
+                "local",
+
+              sourcePrompt:
+                String(
+                  body.prompt || ""
+                ) || null,
+
+              sourceModel:
+                modelId ||
+                null,
+
+              project:
+                body.project ||
+                null,
+
+              campaign:
+                body.campaign ||
+                null,
+
+              metadata: {
+                registrationSource:
+                  "image-to-video-success",
+
+                jobId,
+
+                outputRelative:
+                  path.relative(
+                    ROOT,
+                    outputPath
+                  ),
+
+                videoUrl:
+                  path.relative(
+                    ROOT,
+                    outputPath
+                  ),
+
+                sizeBytes:
+                  outputStat.size,
+
+                seconds:
+                  normalizedSeconds,
+
+                batchId:
+                  body.batchId ||
+                  null,
+
+                batchIndex:
+                  body.batchIndex ??
+                  null,
+
+                batchSize:
+                  body.batchSize ??
+                  null,
+
+                referenceLock:
+                  body.referenceLock !==
+                  false,
+
+                automaticMatch:
+                  automaticMatch ===
+                  true,
+
+                referenceCount:
+                  referenceManifest.length,
+              },
+            });
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "[assets] Completed I2V registration skipped:",
+          error?.message ||
+            error
+        );
+      }
+
       return json(res, 200, { ok: true, output: path.relative(ROOT, outputPath), message: `Video saved to ${path.relative(ROOT, outputPath)}` });
     } catch (err) { return json(res, 500, { ok: false, error: err.message || String(err) }); }
   }
@@ -7279,6 +25899,9 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
 
 server.timeout = 0; // Disable socket timeout for large model uploads/downloads
 
+// LUKE_AI_I2V_STARTUP_MAINTENANCE_RUN_V1
+runImageToVideoStartupMaintenance();
+
 server.listen(PORT_FRONTEND, "0.0.0.0", () => {
   console.log("");
   console.log("  ============================================================");
@@ -7299,3 +25922,44 @@ server.listen(PORT_FRONTEND, "0.0.0.0", () => {
 // Graceful shutdown
 process.on("SIGINT",  async () => { await killBackend(); await killOpenVinoWorker(); await killLlm(); await stopSpeech(); await stopTts(); process.exit(0); });
 process.on("SIGTERM", async () => { await killBackend(); await killOpenVinoWorker(); await killLlm(); await stopSpeech(); await stopTts(); process.exit(0); });
+
+
+// LUKE_AI_RUNTIME_SUPERVISOR_SHUTDOWN_V3
+let runtimeSupervisorShutdownStarted =
+  false;
+
+async function shutdownRuntimeSupervisor() {
+  if (runtimeSupervisorShutdownStarted) {
+    return;
+  }
+
+  runtimeSupervisorShutdownStarted =
+    true;
+
+  try {
+    await textRuntimeSupervisor.shutdown();
+  } catch (error) {
+    console.error(
+      "[runtime-supervisor] shutdown failed:",
+      error instanceof Error
+        ? error.message
+        : String(error)
+    );
+  }
+}
+
+process.once(
+  "SIGINT",
+  async () => {
+    await shutdownRuntimeSupervisor();
+    process.exit(0);
+  }
+);
+
+process.once(
+  "SIGTERM",
+  async () => {
+    await shutdownRuntimeSupervisor();
+    process.exit(0);
+  }
+);

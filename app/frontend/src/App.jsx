@@ -12,6 +12,14 @@ import Home from "./components/Home";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, listLlmConversations, saveLlmConversation, deleteLlmConversation, listSpeechTranscriptions, deleteSpeechTranscription, listTtsOutputs, deleteTtsOutput, stopServer } from "./services/api";
 import "./App.css";
 
+// LUKE_AI_RUNTIME_DASHBOARD_V1
+import RuntimeDownloadDashboard from "./components/RuntimeDownloadDashboard";
+// LUKE_AI_TEXT_MODEL_MANAGER_UI_V1
+import TextModelManager from "./components/TextModelManager";
+// LUKE_AI_PERSISTENT_TEXT_CHAT_UI_V1
+import PersistentTextChat from "./components/PersistentTextChat";
+// LUKE_AI_ASSET_LIBRARY_UI_V1
+import AssetLibrary from "./components/AssetLibrary";
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -774,6 +782,10 @@ function App() {
           <ImageToVideo specs={specs} showAlert={showAlert} />
         </div>
 
+        <div style={{ display: activeTab === "assets" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "auto" }}>
+          <AssetLibrary />
+        </div>
+
         <div style={{ display: activeTab === "models" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <ModelManager
             activeModel={activeModel}
@@ -836,7 +848,12 @@ function App() {
         </div>
 
         <div style={{ display: activeTab === "settings" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
-          <Settings
+          <div className="runtime-dashboard-shell">
+  <RuntimeDownloadDashboard />
+<TextModelManager />
+<PersistentTextChat />
+</div>
+<Settings
             constraints={constraints}
             setConstraints={setConstraints}
             activeModel={activeModel}

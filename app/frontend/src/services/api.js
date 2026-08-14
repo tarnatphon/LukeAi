@@ -583,6 +583,43 @@ export async function stopLlm() {
   return await readJsonResponse(res, "The local server returned an invalid text backend response.");
 }
 
+function buildLlmResponseFormat(options = {}) {
+  if (options.responseFormat) {
+    return options.responseFormat;
+  }
+
+  if (
+    !options.jsonSchema ||
+    typeof options.jsonSchema !== "object" ||
+    Array.isArray(options.jsonSchema)
+  ) {
+    return undefined;
+  }
+
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: normalizeLlmJsonSchemaName(
+        options.jsonSchemaName ||
+          options.jsonSchema.name ||
+          options.jsonSchema.title
+      ),
+      schema: options.jsonSchema,
+      strict: options.jsonSchemaStrict !== false,
+    },
+  };
+}
+
+function normalizeLlmJsonSchemaName(value) {
+  const name = String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+
+  return name || "luke_json_output";
+}
+
 export async function chatWithLlm(messages, options = {}) {
   const res = await fetchWithTimeoutAndRetry("/api/llm/chat", {
     method: "POST",
@@ -600,6 +637,7 @@ export async function chatWithLlm(messages, options = {}) {
       presence_penalty: options.presencePenalty,
       seed: options.seed,
       stop: options.stop,
+      response_format: buildLlmResponseFormat(options),
       useWeb: options.useWeb === true,
       timeFilter: options.timeFilter || "any",
     }),
@@ -631,6 +669,7 @@ export async function streamChatWithLlm(messages, options = {}, onToken = () => 
       presence_penalty: options.presencePenalty,
       seed: options.seed,
       stop: options.stop,
+      response_format: buildLlmResponseFormat(options),
       useWeb: options.useWeb === true,
       timeFilter: options.timeFilter || "any",
     }),
@@ -1255,7 +1294,7 @@ export async function importModelFile(sourcePath, onProgress, signal) {
 
   if (isTauri()) {
     const { listen } = await import("@tauri-apps/api/event");
-    
+
     let unlisten = null;
     if (onProgress) {
       unlisten = await listen("import-progress", (event) => {
@@ -1275,7 +1314,7 @@ export async function importModelFile(sourcePath, onProgress, signal) {
   // Fallback simulation in browser
   const filename = sourcePath.split(/[\\/]/).pop() || "imported_model.gguf";
   console.log(`Web Mode: Simulating copying ${filename} to USB models folder`);
-  
+
   const totalSteps = 40;
   const start = Date.now();
 
@@ -1529,4 +1568,475 @@ export async function generateImageToVideo(payload) {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
   });
   return await readJsonResponse(res, "Invalid image-to-video generation response.");
+}
+
+// LUKE_AI_I2V_RUNTIME_CAPABILITY_SERVICE_V1
+export async function getImageToVideoRuntimeCapability() {
+  const response =
+    await fetch(
+      "/api/capabilities/image-to-video/runtime",
+      {
+        method: "GET",
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  let data = {};
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      `Image-to-Video runtime health request failed (${response.status})`,
+    );
+  }
+
+  return (
+    data?.runtime ||
+    data
+  );
+}
+
+// LUKE_AI_I2V_ASYNC_JOB_SERVICE_V1
+async function requestImageToVideoJobApi(
+  url,
+  options = {},
+) {
+  const response =
+    await fetch(
+      url,
+      {
+        ...options,
+        headers: {
+          Accept:
+            "application/json",
+          ...(options.body
+            ? {
+                "Content-Type":
+                  "application/json",
+              }
+            : {}),
+          ...(options.headers || {}),
+        },
+      },
+    );
+
+  let data = {};
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      `Image-to-Video job request failed (${response.status})`,
+    );
+  }
+
+  return data;
+}
+
+export async function createImageToVideoJob(
+  payload,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      "/api/image-to-video/jobs",
+      {
+        method: "POST",
+        body:
+          JSON.stringify({
+            payload,
+          }),
+      },
+    );
+
+  return data.job;
+}
+
+export async function getImageToVideoJob(
+  jobId,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      `/api/image-to-video/jobs/${encodeURIComponent(jobId)}`,
+    );
+
+  return data.job;
+}
+
+export async function listImageToVideoJobs(
+  limit = 20,
+) {
+  return requestImageToVideoJobApi(
+    `/api/image-to-video/jobs?limit=${encodeURIComponent(limit)}`,
+  );
+}
+
+export async function cancelImageToVideoJob(
+  jobId,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      `/api/image-to-video/jobs/${encodeURIComponent(jobId)}/cancel`,
+      {
+        method: "POST",
+      },
+    );
+
+  return data.job;
+}
+
+export async function retryImageToVideoJob(
+  jobId,
+) {
+  const data =
+    await requestImageToVideoJobApi(
+      `/api/image-to-video/jobs/${encodeURIComponent(jobId)}/retry`,
+      {
+        method: "POST",
+      },
+    );
+
+  return data.job;
+}
+
+// LUKE_AI_I2V_RECOVERY_SERVICE_V1
+export async function getImageToVideoRecoveryStatus() {
+  const response =
+    await fetch(
+      "/api/image-to-video/recovery",
+      {
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      "Unable to read Image-to-Video recovery status.",
+    );
+  }
+
+  return data;
+}
+
+export async function getImageToVideoMaintenanceStatus() {
+  const response =
+    await fetch(
+      "/api/image-to-video/maintenance/status",
+      {
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      "Unable to read Image-to-Video maintenance status.",
+    );
+  }
+
+  return data;
+}
+
+// LUKE_AI_I2V_BATCH_CONTROLS_SERVICE_V1
+async function imageToVideoBatchAction(
+  batchId,
+  action,
+) {
+  const response =
+    await fetch(
+      `/api/image-to-video/batches/${encodeURIComponent(
+        batchId,
+      )}/${action}`,
+      {
+        method: "POST",
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        "Image-to-Video Batch action failed.",
+    );
+  }
+
+  return data;
+}
+
+export function pauseImageToVideoBatch(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "pause",
+  );
+}
+
+export function resumeImageToVideoBatch(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "resume",
+  );
+}
+
+export function cancelImageToVideoBatch(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "cancel",
+  );
+}
+
+export function getRetryableImageToVideoBatchJobs(
+  batchId,
+) {
+  return imageToVideoBatchAction(
+    batchId,
+    "retry-failed",
+  );
+}
+
+export async function skipImageToVideoBatchJob(
+  batchId,
+  jobId,
+) {
+  const response =
+    await fetch(
+      `/api/image-to-video/batches/${encodeURIComponent(
+        batchId,
+      )}/jobs/${encodeURIComponent(
+        jobId,
+      )}/skip`,
+      {
+        method: "POST",
+        headers: {
+          Accept:
+            "application/json",
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        "Unable to skip Batch job.",
+    );
+  }
+
+  return data;
+}
+
+// LUKE_AI_ASSET_REGISTRY_SERVICE_V1
+async function assetApiRequest(
+  requestPath,
+  options = {},
+) {
+  const response =
+    await fetch(
+      requestPath,
+      {
+        ...options,
+
+        headers: {
+          Accept:
+            "application/json",
+
+          ...(
+            options.body
+              ? {
+                  "Content-Type":
+                    "application/json",
+                }
+              : {}
+          ),
+
+          ...options.headers,
+        },
+      },
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        "Asset Registry request failed.",
+    );
+  }
+
+  return data;
+}
+
+export function listAssets(
+  filters = {},
+) {
+  const params =
+    new URLSearchParams();
+
+  for (
+    const [
+      key,
+      value,
+    ] of
+    Object.entries(filters)
+  ) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      params.set(
+        key,
+        String(value),
+      );
+    }
+  }
+
+  const query =
+    params.toString();
+
+  return assetApiRequest(
+    `/api/assets${
+      query
+        ? `?${query}`
+        : ""
+    }`,
+  );
+}
+
+export function createAsset(
+  payload
+) {
+  return assetApiRequest(
+    "/api/assets",
+    {
+      method: "POST",
+
+      body:
+        JSON.stringify(
+          payload || {},
+        ),
+    },
+  );
+}
+
+export function getAsset(
+  assetId
+) {
+  return assetApiRequest(
+    `/api/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+  );
+}
+
+export function updateAsset(
+  assetId,
+  patch
+) {
+  return assetApiRequest(
+    `/api/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+    {
+      method: "PATCH",
+
+      body:
+        JSON.stringify(
+          patch || {},
+        ),
+    },
+  );
+}
+
+export function deleteAsset(
+  assetId
+) {
+  return assetApiRequest(
+    `/api/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+// LUKE_AI_REFERENCE_UPLOAD_SERVICE_V1
+export async function uploadReferenceAsset(
+  payload
+) {
+  const response =
+    await fetch(
+      "/api/references/upload",
+      {
+        method: "POST",
+
+        headers: {
+          Accept:
+            "application/json",
+
+          "Content-Type":
+            "application/json",
+        },
+
+        body:
+          JSON.stringify(
+            payload || {}
+          ),
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+      "Reference upload failed."
+    );
+  }
+
+  return data;
 }
