@@ -228,6 +228,12 @@ assertIncludes(
 
 assertIncludes(
   server,
+  "value.json_schema_strict !== false",
+  "Server must support snake_case JSON schema strict overrides."
+);
+
+assertIncludes(
+  server,
   "value.jsonSchemaStrict !== false",
   "Server must support camelCase JSON schema strict overrides."
 );
