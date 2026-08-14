@@ -198,6 +198,12 @@ assertIncludes(
 
 assertIncludes(
   server,
+  "value.json_schema_name",
+  "Server must support snake_case JSON schema name hints."
+);
+
+assertIncludes(
+  server,
   "value.jsonSchemaName",
   "Server must support camelCase JSON schema name hints."
 );

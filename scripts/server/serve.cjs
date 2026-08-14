@@ -11983,6 +11983,7 @@ function normalizeLlmResponseFormat(value) {
     const schemaName =
       jsonSchema.name ||
       value.name ||
+      value.json_schema_name ||
       value.jsonSchemaName ||
       jsonSchema.title ||
       value.title ||

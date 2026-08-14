@@ -597,7 +597,7 @@ async function main() {
             },
             responseFormat: {
               type: "JSON_SCHEMA",
-              jsonSchemaName:
+              json_schema_name:
                 "Explicit Output Name!",
               jsonSchema: {
                 title:
