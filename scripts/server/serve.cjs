@@ -11995,6 +11995,11 @@ function normalizeLlmResponseFormat(value) {
   };
 }
 
+function normalizeLlmResponseFormatCandidate(primary, fallback) {
+  return normalizeLlmResponseFormat(primary) ||
+    normalizeLlmResponseFormat(fallback);
+}
+
 async function loadTextRuntimeModel(
   conversation,
   restorePrompt
@@ -12384,8 +12389,8 @@ function createTextGenerationPayload(
   const policy =
     readTextGenerationPolicy();
   const responseFormat =
-    normalizeLlmResponseFormat(
-      overrides.response_format ||
+    normalizeLlmResponseFormatCandidate(
+      overrides.response_format,
       overrides.responseFormat
     );
 
@@ -14272,8 +14277,8 @@ async function streamAiJudgeSynthesis(
   const generationPolicy =
     readTextGenerationPolicy();
   const normalizedResponseFormat =
-    normalizeLlmResponseFormat(
-      response_format ||
+    normalizeLlmResponseFormatCandidate(
+      response_format,
       responseFormat
     );
 
@@ -23380,7 +23385,7 @@ async function doLlmChat(req, res, body, retryCount = 0) {
       presence_penalty: Number.isFinite(Number(body.presence_penalty)) ? Number(body.presence_penalty) : 0.0,
       seed: Number.isInteger(Number(body.seed)) ? Number(body.seed) : undefined,
       stop: Array.isArray(body.stop) ? body.stop : (body.stop ? [body.stop] : undefined),
-      response_format: normalizeLlmResponseFormat(body.response_format || body.responseFormat),
+      response_format: normalizeLlmResponseFormatCandidate(body.response_format, body.responseFormat),
     });
 
     if (isStream) {

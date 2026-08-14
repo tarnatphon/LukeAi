@@ -108,6 +108,12 @@ assertIncludes(
 
 assertIncludes(
   server,
+  "function normalizeLlmResponseFormatCandidate(primary, fallback)",
+  "Server must normalize response format fallbacks independently."
+);
+
+assertIncludes(
+  server,
   "const mode = value.trim().toLowerCase();",
   "Server must support string response format modes."
 );
@@ -198,7 +204,7 @@ assertIncludes(
 
 assertIncludes(
   server,
-  "response_format: normalizeLlmResponseFormat(body.response_format || body.responseFormat)",
+  "response_format: normalizeLlmResponseFormatCandidate(body.response_format, body.responseFormat)",
   "Server must forward normalized response_format to the local text runtime."
 );
 
