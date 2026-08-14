@@ -591,9 +591,9 @@ async function main() {
               schemaConversationId,
             response_format: {
               type: "JSON_SCHEMA",
-              name:
-                "test_schema_output",
               schema: {
+                title:
+                  "Test Schema Output!",
                 type: "object",
                 additionalProperties:
                   false,
@@ -641,7 +641,7 @@ async function main() {
         .response_format
         .json_schema
         ?.name !==
-        "test_schema_output" ||
+        "Test_Schema_Output" ||
       schemaRuntimeBody
         .response_format
         .json_schema

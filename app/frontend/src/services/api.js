@@ -599,7 +599,11 @@ function buildLlmResponseFormat(options = {}) {
   return {
     type: "json_schema",
     json_schema: {
-      name: normalizeLlmJsonSchemaName(options.jsonSchemaName),
+      name: normalizeLlmJsonSchemaName(
+        options.jsonSchemaName ||
+          options.jsonSchema.name ||
+          options.jsonSchema.title
+      ),
       schema: options.jsonSchema,
       strict: options.jsonSchemaStrict !== false,
     },

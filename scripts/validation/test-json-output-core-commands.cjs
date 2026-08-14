@@ -72,8 +72,14 @@ assertIncludes(
 
 assertIncludes(
   api,
-  "name: normalizeLlmJsonSchemaName(options.jsonSchemaName)",
-  "Frontend JSON schema response format must use a stable default schema name."
+  "options.jsonSchema.name ||",
+  "Frontend JSON schema response format must derive names from schema metadata."
+);
+
+assertIncludes(
+  api,
+  "options.jsonSchema.title",
+  "Frontend JSON schema response format must support JSON Schema titles as names."
 );
 
 assertIncludes(
@@ -138,8 +144,20 @@ assertIncludes(
 
 assertIncludes(
   server,
-  "name: normalizeLlmJsonSchemaName(jsonSchema.name || value.name)",
-  "Server must provide a stable JSON schema response format name."
+  "const schemaName =",
+  "Server must derive a stable JSON schema response format name."
+);
+
+assertIncludes(
+  server,
+  "schema.title",
+  "Server must support JSON Schema titles as response format names."
+);
+
+assertIncludes(
+  server,
+  "name: normalizeLlmJsonSchemaName(schemaName)",
+  "Server must normalize derived JSON schema response format names."
 );
 
 assertIncludes(
