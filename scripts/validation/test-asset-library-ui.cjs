@@ -677,7 +677,7 @@ assertIncludes(
 
 assertIncludes(
   sidebar,
-  'setActiveTab("assets")',
+  'navigationProps("assets")',
   "Asset Library navigation item is missing."
 );
 

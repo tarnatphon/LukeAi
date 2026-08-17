@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 "use strict";
 
+let testPortOffset = 0;
+
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -44,7 +46,7 @@ function getFreePort() {
     server.listen(
       {
         host: "127.0.0.1",
-        port: 0,
+        port: 38000 + ((process.pid + testPortOffset++) % 2000),
       },
       () => {
         const address = server.address();
