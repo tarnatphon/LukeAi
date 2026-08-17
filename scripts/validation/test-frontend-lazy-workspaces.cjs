@@ -55,7 +55,7 @@ for (const component of settingsModules) {
 
 for (const [tab] of workspaceModules) {
   requireText(`visitedTabs.has(\"${tab}\")`, `VISITED_TAB_GATE_MISSING_${tab}`);
-  if (!sidebar.includes(`prefetchProps(\"${tab}\")`)) {
+  if (!sidebar.includes(`navigationProps(\"${tab}\")`)) {
     throw new Error(`SIDEBAR_PREFETCH_MISSING_${tab}`);
   }
 }

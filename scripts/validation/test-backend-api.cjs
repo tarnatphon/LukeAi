@@ -24,18 +24,26 @@ function delay(milliseconds) {
   });
 }
 
-function getFreePort() {
+function canReservePort(port) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
 
     server.unref();
 
-    server.on("error", reject);
+    server.on("error", (error) => {
+      if (error?.code === "EADDRINUSE" || error?.code === "EACCES") {
+        resolve(false);
+        return;
+      }
+      reject(error);
+    });
 
     server.listen(
       {
-        host: "127.0.0.1",
-        port: 0,
+        // Match serve.cjs, which binds the frontend server on every IPv4 interface.
+        // Probing loopback alone can select a port already occupied elsewhere.
+        host: "0.0.0.0",
+        port,
       },
       () => {
         const address = server.address();
@@ -46,19 +54,30 @@ function getFreePort() {
           return;
         }
 
-        const port = address.port;
-
         server.close((error) => {
           if (error) {
             reject(error);
             return;
           }
 
-          resolve(port);
+          resolve(true);
         });
       }
     );
   });
+}
+
+async function getFreePort() {
+  const minimum = 38000;
+  const range = 2000;
+  const startOffset = process.pid % range;
+
+  for (let offset = 0; offset < range; offset += 1) {
+    const port = minimum + ((startOffset + offset) % range);
+    if (await canReservePort(port)) return port;
+  }
+
+  throw new Error("Unable to allocate a non-ephemeral test port.");
 }
 
 function discoverHealthEndpoints(source) {
@@ -271,6 +290,8 @@ async function main() {
   console.log(`Routes : ${endpoints.join(", ")}`);
 
   const output = [];
+  const childEnv = { ...process.env };
+  delete childEnv.LUKE_AI_I2V_VALIDATION_PYTHON;
 
   const child = spawn(
     process.execPath,
@@ -278,7 +299,7 @@ async function main() {
     {
       cwd: projectRoot,
       env: {
-        ...process.env,
+        ...childEnv,
         NODE_ENV: "test",
         HOST: "127.0.0.1",
         PORT: String(port),

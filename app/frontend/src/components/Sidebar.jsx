@@ -39,6 +39,20 @@ function Sidebar({
     onFocus: () => prefetchWorkspace?.(tab),
   });
 
+  const navigationProps = (tab) => ({
+    role: "link",
+    tabIndex: 0,
+    "aria-current": activeTab === tab ? "page" : undefined,
+    onClick: () => setActiveTab(tab),
+    onKeyDown: (event) => {
+      if (event.target !== event.currentTarget) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      setActiveTab(tab);
+    },
+    ...prefetchProps(tab),
+  });
+
   return (
     <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div>
@@ -50,26 +64,25 @@ function Sidebar({
 
         {/* Sidebar Navigation Links (Material 3 style) */}
         <div className="nav-list">
-          <div className={`nav-item ${activeTab === "home" ? "active" : ""}`} onClick={() => setActiveTab("home")}>
+          <div className={`nav-item ${activeTab === "home" ? "active" : ""}`} {...navigationProps("home")}>
             <Home size={20} />
             <span>Home</span>
           </div>
 
           <div
             className={`nav-item ${activeTab === "generator" ? "active" : ""}`}
-            onClick={() => setActiveTab("generator")}
-            {...prefetchProps("generator")}
+            {...navigationProps("generator")}
           >
             <Image size={20} />
             <span>Create Image</span>
           </div>
 
-          <div className={`nav-item ${activeTab === "image-video" ? "active" : ""}`} onClick={() => setActiveTab("image-video")} {...prefetchProps("image-video")}>
+          <div className={`nav-item ${activeTab === "image-video" ? "active" : ""}`} {...navigationProps("image-video")}>
             <Film size={20} />
             <span>Animate Image</span>
           </div>
 
-          <div className={`nav-item ${activeTab === "assets" ? "active" : ""}`} onClick={() => setActiveTab("assets")} {...prefetchProps("assets")}>
+          <div className={`nav-item ${activeTab === "assets" ? "active" : ""}`} {...navigationProps("assets")}>
             <Archive size={20} />
             <span>Assets</span>
           </div>
@@ -77,8 +90,7 @@ function Sidebar({
           <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
             <div
               className={`nav-item ${activeTab === "chat" ? "active" : ""}`}
-              onClick={() => setActiveTab("chat")}
-              {...prefetchProps("chat")}
+              {...navigationProps("chat")}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -195,8 +207,7 @@ function Sidebar({
           <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
             <div
               className={`nav-item ${activeTab === "speech" ? "active" : ""}`}
-              onClick={() => setActiveTab("speech")}
-              {...prefetchProps("speech")}
+              {...navigationProps("speech")}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -317,8 +328,7 @@ function Sidebar({
           <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
             <div
               className={`nav-item ${activeTab === "tts" ? "active" : ""}`}
-              onClick={() => setActiveTab("tts")}
-              {...prefetchProps("tts")}
+              {...navigationProps("tts")}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -438,8 +448,7 @@ function Sidebar({
 
           <div
             className={`nav-item ${activeTab === "models" ? "active" : ""}`}
-            onClick={() => setActiveTab("models")}
-            {...prefetchProps("models")}
+            {...navigationProps("models")}
           >
             <FolderDown size={20} />
             <span>AI Library</span>
@@ -447,8 +456,7 @@ function Sidebar({
 
           <div
             className={`nav-item ${activeTab === "settings" ? "active" : ""}`}
-            onClick={() => setActiveTab("settings")}
-            {...prefetchProps("settings")}
+            {...navigationProps("settings")}
           >
             <Settings size={20} />
             <span>Settings</span>
