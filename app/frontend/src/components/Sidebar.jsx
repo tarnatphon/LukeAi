@@ -13,6 +13,7 @@ function Sidebar({
   collapsed = false,
   activeTab, 
   setActiveTab, 
+  prefetchWorkspace,
   specs,
   conversations = [],
   activeConversationId,
@@ -33,6 +34,11 @@ function Sidebar({
   setShowTtsHistory,
   onDeleteTtsOutput
 }) {
+  const prefetchProps = (tab) => ({
+    onPointerEnter: () => prefetchWorkspace?.(tab),
+    onFocus: () => prefetchWorkspace?.(tab),
+  });
+
   return (
     <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div>
@@ -52,17 +58,18 @@ function Sidebar({
           <div
             className={`nav-item ${activeTab === "generator" ? "active" : ""}`}
             onClick={() => setActiveTab("generator")}
+            {...prefetchProps("generator")}
           >
             <Image size={20} />
             <span>Create Image</span>
           </div>
 
-          <div className={`nav-item ${activeTab === "image-video" ? "active" : ""}`} onClick={() => setActiveTab("image-video")}>
+          <div className={`nav-item ${activeTab === "image-video" ? "active" : ""}`} onClick={() => setActiveTab("image-video")} {...prefetchProps("image-video")}>
             <Film size={20} />
             <span>Animate Image</span>
           </div>
 
-          <div className={`nav-item ${activeTab === "assets" ? "active" : ""}`} onClick={() => setActiveTab("assets")}>
+          <div className={`nav-item ${activeTab === "assets" ? "active" : ""}`} onClick={() => setActiveTab("assets")} {...prefetchProps("assets")}>
             <Archive size={20} />
             <span>Assets</span>
           </div>
@@ -71,6 +78,7 @@ function Sidebar({
             <div
               className={`nav-item ${activeTab === "chat" ? "active" : ""}`}
               onClick={() => setActiveTab("chat")}
+              {...prefetchProps("chat")}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -188,6 +196,7 @@ function Sidebar({
             <div
               className={`nav-item ${activeTab === "speech" ? "active" : ""}`}
               onClick={() => setActiveTab("speech")}
+              {...prefetchProps("speech")}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -309,6 +318,7 @@ function Sidebar({
             <div
               className={`nav-item ${activeTab === "tts" ? "active" : ""}`}
               onClick={() => setActiveTab("tts")}
+              {...prefetchProps("tts")}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -429,6 +439,7 @@ function Sidebar({
           <div
             className={`nav-item ${activeTab === "models" ? "active" : ""}`}
             onClick={() => setActiveTab("models")}
+            {...prefetchProps("models")}
           >
             <FolderDown size={20} />
             <span>AI Library</span>
@@ -437,6 +448,7 @@ function Sidebar({
           <div
             className={`nav-item ${activeTab === "settings" ? "active" : ""}`}
             onClick={() => setActiveTab("settings")}
+            {...prefetchProps("settings")}
           >
             <Settings size={20} />
             <span>Settings</span>

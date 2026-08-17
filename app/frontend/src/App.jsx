@@ -5,13 +5,24 @@ import Home from "./components/Home";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, listLlmConversations, saveLlmConversation, deleteLlmConversation, listSpeechTranscriptions, deleteSpeechTranscription, listTtsOutputs, deleteTtsOutput, stopServer } from "./services/api";
 import "./App.css";
 
-const Generator = lazy(() => import("./components/Generator"));
-const ModelManager = lazy(() => import("./components/ModelManager"));
-const Settings = lazy(() => import("./components/Settings"));
-const TextChat = lazy(() => import("./components/TextChat"));
-const SpeechTranscriber = lazy(() => import("./components/SpeechTranscriber"));
-const TextToSpeech = lazy(() => import("./components/TextToSpeech"));
-const ImageToVideo = lazy(() => import("./components/ImageToVideo"));
+const workspaceLoaders = {
+  generator: () => import("./components/Generator"),
+  models: () => import("./components/ModelManager"),
+  settings: () => import("./components/Settings"),
+  chat: () => import("./components/TextChat"),
+  speech: () => import("./components/SpeechTranscriber"),
+  tts: () => import("./components/TextToSpeech"),
+  "image-video": () => import("./components/ImageToVideo"),
+  assets: () => import("./components/AssetLibrary"),
+};
+
+const Generator = lazy(workspaceLoaders.generator);
+const ModelManager = lazy(workspaceLoaders.models);
+const Settings = lazy(workspaceLoaders.settings);
+const TextChat = lazy(workspaceLoaders.chat);
+const SpeechTranscriber = lazy(workspaceLoaders.speech);
+const TextToSpeech = lazy(workspaceLoaders.tts);
+const ImageToVideo = lazy(workspaceLoaders["image-video"]);
 // LUKE_AI_RUNTIME_DASHBOARD_V1
 const RuntimeDownloadDashboard = lazy(() => import("./components/RuntimeDownloadDashboard"));
 // LUKE_AI_TEXT_MODEL_MANAGER_UI_V1
@@ -19,7 +30,7 @@ const TextModelManager = lazy(() => import("./components/TextModelManager"));
 // LUKE_AI_PERSISTENT_TEXT_CHAT_UI_V1
 const PersistentTextChat = lazy(() => import("./components/PersistentTextChat"));
 // LUKE_AI_ASSET_LIBRARY_UI_V1
-const AssetLibrary = lazy(() => import("./components/AssetLibrary"));
+const AssetLibrary = lazy(workspaceLoaders.assets);
 
 const WorkspaceFallback = () => (
   <div className="workspace-loading" role="status" aria-live="polite">
@@ -75,6 +86,11 @@ function App() {
       return next;
     });
   }, [activeTab]);
+
+  const prefetchWorkspace = useCallback((tab) => {
+    const load = workspaceLoaders[tab];
+    if (load) void load();
+  }, []);
 
   // Prompts
   const [prompt, setPrompt] = useState("");
@@ -708,6 +724,7 @@ function App() {
       collapsed={!sidebarVisible}
       activeTab={activeTab}
       setActiveTab={setActiveTab}
+      prefetchWorkspace={prefetchWorkspace}
       specs={specs}
       conversations={conversations}
       activeConversationId={activeConversationId}
