@@ -480,6 +480,20 @@ body {
   transform: translateX(2px);
 }
 
+.nav-item:focus-visible,
+.sidebar-history-item:focus-visible,
+.history-toggle-arrow:focus-visible,
+.sidebar-history-delete:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--md-sys-color-primary) 72%, white);
+  outline-offset: 2px;
+}
+
+.nav-item:focus-visible,
+.sidebar-history-item:focus-visible {
+  background-color: var(--md-sys-color-surface-variant);
+  color: var(--md-sys-color-primary);
+}
+
 .nav-item.active {
   background-color: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-primary);
@@ -3805,6 +3819,11 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .sidebar-history-delete:hover {
   color: var(--md-sys-color-error) !important;
   background-color: rgba(239, 68, 68, 0.1) !important;
+  opacity: 1 !important;
+}
+
+.history-toggle-arrow:focus-visible,
+.sidebar-history-delete:focus-visible {
   opacity: 1 !important;
 }
 
