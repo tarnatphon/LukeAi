@@ -16,6 +16,24 @@ const workspaceLoaders = {
   assets: () => import("./components/AssetLibrary"),
 };
 
+const workspacePrefetches = new Map();
+
+function preloadWorkspace(tab) {
+  const load = workspaceLoaders[tab];
+  if (!load) return Promise.resolve(null);
+  if (workspacePrefetches.has(tab)) return workspacePrefetches.get(tab);
+
+  const request = Promise.resolve()
+    .then(load)
+    .catch((error) => {
+      workspacePrefetches.delete(tab);
+      console.warn(`Workspace prefetch failed for ${tab}; navigation can retry.`, error);
+      return null;
+    });
+  workspacePrefetches.set(tab, request);
+  return request;
+}
+
 const Generator = lazy(workspaceLoaders.generator);
 const ModelManager = lazy(workspaceLoaders.models);
 const Settings = lazy(workspaceLoaders.settings);
@@ -146,8 +164,7 @@ function App() {
   }, []);
 
   const prefetchWorkspace = useCallback((tab) => {
-    const load = workspaceLoaders[tab];
-    if (load) void load();
+    void preloadWorkspace(tab);
   }, []);
 
   // Prompts
