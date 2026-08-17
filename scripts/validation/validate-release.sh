@@ -710,6 +710,13 @@ else
 fi
 
 if command -v node >/dev/null 2>&1; then
+  node scripts/validation/test-frontend-workspace-recovery.cjs
+else
+  echo "FAIL: Node.js is required for Frontend Workspace Recovery validation"
+  exit 1
+fi
+
+if command -v node >/dev/null 2>&1; then
   node scripts/validation/test-frontend-bundle-budgets.cjs
 else
   echo "FAIL: Node.js is required for Frontend Bundle Budget validation"
