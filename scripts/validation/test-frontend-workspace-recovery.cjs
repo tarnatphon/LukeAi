@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+"use strict";
+
+const fs = require("node:fs");
+
+const app = fs.readFileSync("app/frontend/src/App.jsx", "utf8");
+const css = fs.readFileSync("app/frontend/src/App.css", "utf8");
+
+function requireText(source, text, label) {
+  if (!source.includes(text)) throw new Error(`${label}: ${text}`);
+}
+
+requireText(app, "class WorkspaceErrorBoundary extends Component", "ERROR_BOUNDARY_MISSING");
+requireText(app, "static getDerivedStateFromError(error)", "ERROR_CAPTURE_MISSING");
+requireText(app, '<WorkspaceErrorBoundary onReturnHome={() => setActiveTab("home")}>', "WORKSPACE_BOUNDARY_NOT_CONNECTED");
+requireText(app, 'role="alert"', "ACCESSIBLE_ERROR_ALERT_MISSING");
+requireText(app, "window.location.reload()", "RETRY_ACTION_MISSING");
+requireText(app, "this.props.onReturnHome()", "RETURN_HOME_ACTION_MISSING");
+requireText(app, "Your current data is still stored locally.", "DATA_SAFETY_MESSAGE_MISSING");
+requireText(css, ".workspace-load-error", "ERROR_STYLE_MISSING");
+requireText(css, ".workspace-load-error-actions", "ERROR_ACTION_STYLE_MISSING");
+
+console.log("PASS: Lazy workspace failures are contained by an Error Boundary.");
+console.log("PASS: Workspace recovery offers Retry and Return Home actions.");
+console.log("PASS: Workspace recovery is announced accessibly.");
+console.log("PASS: Beta 9 Frontend Workspace Recovery validation completed.");

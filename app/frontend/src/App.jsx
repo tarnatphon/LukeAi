@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Component, lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Sidebar from "./components/Sidebar";
 import TopStatusBar from "./components/TopStatusBar";
 import Home from "./components/Home";
@@ -37,6 +37,45 @@ const WorkspaceFallback = () => (
     Loading workspace…
   </div>
 );
+
+class WorkspaceErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("Workspace failed to load", error, info);
+  }
+
+  returnHome = () => {
+    this.setState({ error: null });
+    this.props.onReturnHome();
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+
+    return (
+      <div className="workspace-load-error" role="alert" aria-live="assertive">
+        <strong>Workspace could not be loaded.</strong>
+        <span>Your current data is still stored locally. Retry the app or return Home.</span>
+        <div className="workspace-load-error-actions">
+          <button type="button" className="m3-btn m3-btn-filled" onClick={() => window.location.reload()}>
+            Retry
+          </button>
+          <button type="button" className="m3-btn m3-btn-outlined" onClick={this.returnHome}>
+            Return Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -788,6 +827,7 @@ function App() {
           <Home setActiveTab={setActiveTab} specs={specs} health={health} activeModel={activeModel} isLlmLoaded={isLlmLoaded} />
         </div>
 
+        <WorkspaceErrorBoundary onReturnHome={() => setActiveTab("home")}>
         <Suspense fallback={<WorkspaceFallback />}>
         {visitedTabs.has("generator") && (
         <div style={{ display: activeTab === "generator" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
@@ -935,6 +975,7 @@ function App() {
         </div>
         )}
         </Suspense>
+        </WorkspaceErrorBoundary>
       </div>
 
       {dialog && (
