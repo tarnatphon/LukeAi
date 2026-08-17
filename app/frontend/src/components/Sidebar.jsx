@@ -53,6 +53,20 @@ function Sidebar({
     ...prefetchProps(tab),
   });
 
+  const historyItemProps = (onSelect, isActive, label) => ({
+    role: "button",
+    tabIndex: 0,
+    "aria-current": isActive ? "true" : undefined,
+    "aria-label": label,
+    onClick: onSelect,
+    onKeyDown: (event) => {
+      if (event.target !== event.currentTarget) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      onSelect();
+    },
+  });
+
   return (
     <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div>
@@ -98,6 +112,9 @@ function Sidebar({
                 <span>Chat</span>
               </div>
               <button
+                aria-expanded={showHistory}
+                aria-controls="chat-history-list"
+                aria-label={showHistory ? "Hide chat history" : "Show chat history"}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowHistory(!showHistory);
@@ -124,6 +141,8 @@ function Sidebar({
             {/* Sidebar Chat History List */}
             {showHistory && (
               <div 
+                id="chat-history-list"
+                aria-label="Chat history"
                 className="sidebar-history-list" 
                 style={{ 
                   paddingLeft: "14px", 
@@ -147,10 +166,10 @@ function Sidebar({
                     return (
                       <div
                         key={conv.id}
-                        onClick={() => {
+                        {...historyItemProps(() => {
                           setActiveConversationId(conv.id);
                           setActiveTab("chat");
-                        }}
+                        }, isActive, `Open chat ${conv.title}`)}
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -215,6 +234,9 @@ function Sidebar({
                 <span>Transcribe</span>
               </div>
               <button
+                aria-expanded={showSpeechHistory}
+                aria-controls="speech-history-list"
+                aria-label={showSpeechHistory ? "Hide transcriptions" : "Show transcriptions"}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowSpeechHistory(!showSpeechHistory);
@@ -240,6 +262,8 @@ function Sidebar({
 
             {showSpeechHistory && (
               <div
+                id="speech-history-list"
+                aria-label="Transcription history"
                 className="sidebar-history-list"
                 style={{
                   paddingLeft: "14px",
@@ -266,10 +290,10 @@ function Sidebar({
                     return (
                       <div
                         key={itemId}
-                        onClick={() => {
+                        {...historyItemProps(() => {
                           setSelectedSpeechTranscript(item);
                           setActiveTab("speech");
-                        }}
+                        }, isActive, `Open transcription ${title}`)}
                         style={{
                           display: "flex",
                           flexDirection: "row",
@@ -336,6 +360,9 @@ function Sidebar({
                 <span>Text to Speech</span>
               </div>
               <button
+                aria-expanded={showTtsHistory}
+                aria-controls="tts-history-list"
+                aria-label={showTtsHistory ? "Hide TTS outputs" : "Show TTS outputs"}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowTtsHistory(!showTtsHistory);
@@ -361,6 +388,8 @@ function Sidebar({
 
             {showTtsHistory && (
               <div
+                id="tts-history-list"
+                aria-label="Text to speech history"
                 className="sidebar-history-list"
                 style={{
                   paddingLeft: "14px",
@@ -387,10 +416,10 @@ function Sidebar({
                     return (
                       <div
                         key={itemId}
-                        onClick={() => {
+                        {...historyItemProps(() => {
                           setSelectedTtsOutput(item);
                           setActiveTab("tts");
-                        }}
+                        }, isActive, `Open audio ${title}`)}
                         style={{
                           display: "flex",
                           flexDirection: "row",
