@@ -1,25 +1,31 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Sidebar from "./components/Sidebar";
 import TopStatusBar from "./components/TopStatusBar";
-import Generator from "./components/Generator";
-import ModelManager from "./components/ModelManager";
-import Settings from "./components/Settings";
-import TextChat from "./components/TextChat";
-import SpeechTranscriber from "./components/SpeechTranscriber";
-import TextToSpeech from "./components/TextToSpeech";
-import ImageToVideo from "./components/ImageToVideo";
 import Home from "./components/Home";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, listLlmConversations, saveLlmConversation, deleteLlmConversation, listSpeechTranscriptions, deleteSpeechTranscription, listTtsOutputs, deleteTtsOutput, stopServer } from "./services/api";
 import "./App.css";
 
+const Generator = lazy(() => import("./components/Generator"));
+const ModelManager = lazy(() => import("./components/ModelManager"));
+const Settings = lazy(() => import("./components/Settings"));
+const TextChat = lazy(() => import("./components/TextChat"));
+const SpeechTranscriber = lazy(() => import("./components/SpeechTranscriber"));
+const TextToSpeech = lazy(() => import("./components/TextToSpeech"));
+const ImageToVideo = lazy(() => import("./components/ImageToVideo"));
 // LUKE_AI_RUNTIME_DASHBOARD_V1
-import RuntimeDownloadDashboard from "./components/RuntimeDownloadDashboard";
+const RuntimeDownloadDashboard = lazy(() => import("./components/RuntimeDownloadDashboard"));
 // LUKE_AI_TEXT_MODEL_MANAGER_UI_V1
-import TextModelManager from "./components/TextModelManager";
+const TextModelManager = lazy(() => import("./components/TextModelManager"));
 // LUKE_AI_PERSISTENT_TEXT_CHAT_UI_V1
-import PersistentTextChat from "./components/PersistentTextChat";
+const PersistentTextChat = lazy(() => import("./components/PersistentTextChat"));
 // LUKE_AI_ASSET_LIBRARY_UI_V1
-import AssetLibrary from "./components/AssetLibrary";
+const AssetLibrary = lazy(() => import("./components/AssetLibrary"));
+
+const WorkspaceFallback = () => (
+  <div className="workspace-loading" role="status" aria-live="polite">
+    Loading workspace…
+  </div>
+);
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -59,6 +65,16 @@ function App() {
 
   // Navigation
   const [activeTab, setActiveTab] = useState("home");
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(["home"]));
+
+  useEffect(() => {
+    setVisitedTabs((current) => {
+      if (current.has(activeTab)) return current;
+      const next = new Set(current);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
 
   // Prompts
   const [prompt, setPrompt] = useState("");
@@ -755,6 +771,8 @@ function App() {
           <Home setActiveTab={setActiveTab} specs={specs} health={health} activeModel={activeModel} isLlmLoaded={isLlmLoaded} />
         </div>
 
+        <Suspense fallback={<WorkspaceFallback />}>
+        {visitedTabs.has("generator") && (
         <div style={{ display: activeTab === "generator" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <Generator
             prompt={prompt}
@@ -777,15 +795,21 @@ function App() {
             textSettings={textSettings}
           />
         </div>
+        )}
 
+        {visitedTabs.has("image-video") && (
         <div style={{ display: activeTab === "image-video" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <ImageToVideo specs={specs} showAlert={showAlert} />
         </div>
+        )}
 
+        {visitedTabs.has("assets") && (
         <div style={{ display: activeTab === "assets" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "auto" }}>
           <AssetLibrary />
         </div>
+        )}
 
+        {visitedTabs.has("models") && (
         <div style={{ display: activeTab === "models" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <ModelManager
             activeModel={activeModel}
@@ -804,7 +828,9 @@ function App() {
             setTextSettings={setTextSettings}
           />
         </div>
+        )}
 
+        {visitedTabs.has("chat") && (
         <div style={{ display: activeTab === "chat" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <TextChat
             specs={specs}
@@ -824,7 +850,9 @@ function App() {
             setIsLlmLoaded={setIsLlmLoaded}
           />
         </div>
+        )}
 
+        {visitedTabs.has("speech") && (
         <div style={{ display: activeTab === "speech" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <SpeechTranscriber
             showAlert={showAlert}
@@ -835,7 +863,9 @@ function App() {
             setSpeechSettings={setSpeechSettings}
           />
         </div>
+        )}
 
+        {visitedTabs.has("tts") && (
         <div style={{ display: activeTab === "tts" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <TextToSpeech
             showAlert={showAlert}
@@ -846,7 +876,9 @@ function App() {
             setTtsSettings={setTtsSettings}
           />
         </div>
+        )}
 
+        {visitedTabs.has("settings") && (
         <div style={{ display: activeTab === "settings" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
           <div className="runtime-dashboard-shell">
   <RuntimeDownloadDashboard />
@@ -884,6 +916,8 @@ function App() {
             setFontSize={setFontSize}
           />
         </div>
+        )}
+        </Suspense>
       </div>
 
       {dialog && (
