@@ -76,6 +76,15 @@ class WorkspaceErrorBoundary extends Component {
     );
   }
 }
+
+const WorkspacePanel = ({ tab, activeTab, onReturnHome, overflow = "hidden", children }) => (
+  <div style={{ display: activeTab === tab ? "flex" : "none", flex: 1, flexDirection: "column", overflow }}>
+    <WorkspaceErrorBoundary onReturnHome={() => onReturnHome(tab)}>
+      {children}
+    </WorkspaceErrorBoundary>
+  </div>
+);
+
 function App() {
   const dialogResolverRef = useRef(null);
   const [dialog, setDialog] = useState(null);
@@ -125,6 +134,16 @@ function App() {
       return next;
     });
   }, [activeTab]);
+
+  const recoverFailedWorkspace = useCallback((failedTab) => {
+    setVisitedTabs((current) => {
+      if (!current.has(failedTab)) return current;
+      const next = new Set(current);
+      next.delete(failedTab);
+      return next;
+    });
+    setActiveTab("home");
+  }, []);
 
   const prefetchWorkspace = useCallback((tab) => {
     const load = workspaceLoaders[tab];
@@ -827,10 +846,9 @@ function App() {
           <Home setActiveTab={setActiveTab} specs={specs} health={health} activeModel={activeModel} isLlmLoaded={isLlmLoaded} />
         </div>
 
-        <WorkspaceErrorBoundary onReturnHome={() => setActiveTab("home")}>
         <Suspense fallback={<WorkspaceFallback />}>
         {visitedTabs.has("generator") && (
-        <div style={{ display: activeTab === "generator" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+        <WorkspacePanel tab="generator" activeTab={activeTab} onReturnHome={recoverFailedWorkspace}>
           <Generator
             prompt={prompt}
             setPrompt={setPrompt}
@@ -851,23 +869,23 @@ function App() {
             specs={specs}
             textSettings={textSettings}
           />
-        </div>
+        </WorkspacePanel>
         )}
 
         {visitedTabs.has("image-video") && (
-        <div style={{ display: activeTab === "image-video" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+        <WorkspacePanel tab="image-video" activeTab={activeTab} onReturnHome={recoverFailedWorkspace}>
           <ImageToVideo specs={specs} showAlert={showAlert} />
-        </div>
+        </WorkspacePanel>
         )}
 
         {visitedTabs.has("assets") && (
-        <div style={{ display: activeTab === "assets" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "auto" }}>
+        <WorkspacePanel tab="assets" activeTab={activeTab} onReturnHome={recoverFailedWorkspace} overflow="auto">
           <AssetLibrary />
-        </div>
+        </WorkspacePanel>
         )}
 
         {visitedTabs.has("models") && (
-        <div style={{ display: activeTab === "models" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+        <WorkspacePanel tab="models" activeTab={activeTab} onReturnHome={recoverFailedWorkspace}>
           <ModelManager
             activeModel={activeModel}
             setActiveModel={setActiveModel}
@@ -884,11 +902,11 @@ function App() {
             textSettings={textSettings}
             setTextSettings={setTextSettings}
           />
-        </div>
+        </WorkspacePanel>
         )}
 
         {visitedTabs.has("chat") && (
-        <div style={{ display: activeTab === "chat" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+        <WorkspacePanel tab="chat" activeTab={activeTab} onReturnHome={recoverFailedWorkspace}>
           <TextChat
             specs={specs}
             showAlert={showAlert}
@@ -906,11 +924,11 @@ function App() {
             saveConversationState={saveConversationState}
             setIsLlmLoaded={setIsLlmLoaded}
           />
-        </div>
+        </WorkspacePanel>
         )}
 
         {visitedTabs.has("speech") && (
-        <div style={{ display: activeTab === "speech" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+        <WorkspacePanel tab="speech" activeTab={activeTab} onReturnHome={recoverFailedWorkspace}>
           <SpeechTranscriber
             showAlert={showAlert}
             showConfirm={showConfirm}
@@ -919,11 +937,11 @@ function App() {
             speechSettings={speechSettings}
             setSpeechSettings={setSpeechSettings}
           />
-        </div>
+        </WorkspacePanel>
         )}
 
         {visitedTabs.has("tts") && (
-        <div style={{ display: activeTab === "tts" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+        <WorkspacePanel tab="tts" activeTab={activeTab} onReturnHome={recoverFailedWorkspace}>
           <TextToSpeech
             showAlert={showAlert}
             showConfirm={showConfirm}
@@ -932,11 +950,11 @@ function App() {
             ttsSettings={ttsSettings}
             setTtsSettings={setTtsSettings}
           />
-        </div>
+        </WorkspacePanel>
         )}
 
         {visitedTabs.has("settings") && (
-        <div style={{ display: activeTab === "settings" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+        <WorkspacePanel tab="settings" activeTab={activeTab} onReturnHome={recoverFailedWorkspace}>
           <div className="runtime-dashboard-shell">
   <RuntimeDownloadDashboard />
 <TextModelManager />
@@ -972,10 +990,9 @@ function App() {
             fontSize={fontSize}
             setFontSize={setFontSize}
           />
-        </div>
+        </WorkspacePanel>
         )}
         </Suspense>
-        </WorkspaceErrorBoundary>
       </div>
 
       {dialog && (

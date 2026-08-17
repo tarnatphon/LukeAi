@@ -671,7 +671,7 @@ assertIncludes(
 
 assertIncludes(
   app,
-  'activeTab === "assets"',
+  '<WorkspacePanel tab="assets"',
   "Asset Library tab route is missing."
 );
 
