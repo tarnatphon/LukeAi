@@ -95,6 +95,8 @@ requireText(chat, "persistRecoverableMessageQueue", "MESSAGE_QUEUE_PERSISTENCE_M
 requireText(chat, "!item.attachments?.length", "MESSAGE_QUEUE_ATTACHMENT_STORAGE_GUARD_MISSING");
 requireText(chat, "messageQueuePaused", "RECOVERED_QUEUE_PAUSE_MISSING");
 requireText(chat, 'aria-label="Resume recovered queued messages"', "RECOVERED_QUEUE_RESUME_MISSING");
+requireText(chat, "memo(function MarkdownRenderer", "MARKDOWN_RENDER_MEMOIZATION_MISSING");
+requireText(chat, "onSendToTerminal={sendCodeToTerminal}", "STABLE_TERMINAL_CALLBACK_MISSING");
 requireText(chat, "Add message to queue", "MESSAGE_QUEUE_SEND_ACTION_MISSING");
 requireText(chat, "Edit queued message", "MESSAGE_QUEUE_EDIT_MISSING");
 requireText(chat, "Move queued message", "MESSAGE_QUEUE_REORDER_MISSING");
@@ -145,6 +147,7 @@ console.log("PASS: Work Tools exposes read-only Environment, Review and Files vi
 console.log("PASS: Work Terminal, Browser and external apps are allowlisted and approval-gated.");
 console.log("PASS: Composer remains editable during streaming and supports an editable message queue.");
 console.log("PASS: Text-only queued messages recover within storage bounds and remain paused until resumed.");
+console.log("PASS: Completed Markdown messages reuse rendered output during unrelated Chat updates.");
 console.log("PASS: Chat search covers current and project conversations with result navigation.");
 console.log("PASS: Edit and retry preserve previous responses as switchable conversation branches.");
 console.log("PASS: Work projects expose editable memory and restorable conversation checkpoints.");

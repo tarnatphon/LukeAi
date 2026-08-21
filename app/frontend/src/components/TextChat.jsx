@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Bot, Brain, Check, ChevronLeft, ChevronRight, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Pencil, RefreshCw, Search, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
 import WorkToolsPanel from "./WorkToolsPanel";
 import WorkTerminalDock from "./WorkTerminalDock";
@@ -238,6 +238,10 @@ function TextChat({
   const [showApprovalMenu, setShowApprovalMenu] = useState(false);
   const [showWorkTools, setShowWorkTools] = useState(false);
   const [showBottomTerminal, setShowBottomTerminal] = useState(false);
+  const sendCodeToTerminal = useCallback((code) => {
+    setShowBottomTerminal(true);
+    setTimeout(() => window.dispatchEvent(new CustomEvent("luke:work-terminal-command", { detail: { command: code } })), 0);
+  }, []);
   const [showProjectMemory, setShowProjectMemory] = useState(false);
   const [messageQueue, setMessageQueue] = useState([]);
   const [messageQueuePaused, setMessageQueuePaused] = useState(false);
@@ -1546,7 +1550,7 @@ function TextChat({
                           {Array.isArray(displayContent) ? (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                               {displayContent.map((item, idx) => {
-                                if (item.type === "text") return <MarkdownRenderer key={idx} content={item.text} workMode={assistantMode === "work"} onSendToTerminal={(code) => { setShowBottomTerminal(true); setTimeout(() => window.dispatchEvent(new CustomEvent("luke:work-terminal-command", { detail: { command: code } })), 0); }} />;
+                                if (item.type === "text") return <MarkdownRenderer key={idx} content={item.text} workMode={assistantMode === "work"} onSendToTerminal={sendCodeToTerminal} />;
                                 if (item.type === "image_url") return (
                                   <img key={idx} src={item.image_url.url} alt="Attached image"
                                     style={{ maxWidth: "240px", maxHeight: "180px", objectFit: "contain", borderRadius: "8px", marginTop: "4px" }}
@@ -1556,7 +1560,7 @@ function TextChat({
                               })}
                             </div>
                           ) : (
-                            <MarkdownRenderer content={displayContent} workMode={assistantMode === "work"} onSendToTerminal={(code) => { setShowBottomTerminal(true); setTimeout(() => window.dispatchEvent(new CustomEvent("luke:work-terminal-command", { detail: { command: code } })), 0); }} />
+                            <MarkdownRenderer content={displayContent} workMode={assistantMode === "work"} onSendToTerminal={sendCodeToTerminal} />
                           )}
                         </div>
                       )}
@@ -1855,7 +1859,7 @@ function parseInlineMarkdown(text) {
   });
 }
 
-export function MarkdownRenderer({ content, workMode = false, onSendToTerminal }) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content, workMode = false, onSendToTerminal }) {
   if (typeof content !== 'string') return null;
 
   const parts = content.split(/(```[\s\S]*?```)/g);
@@ -1979,6 +1983,6 @@ export function MarkdownRenderer({ content, workMode = false, onSendToTerminal }
       })}
     </div>
   );
-}
+});
 
 export default TextChat;
