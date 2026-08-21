@@ -1,5 +1,5 @@
-import React, { memo, useEffect, useRef, useState } from "react";
-import { Archive, BriefcaseBusiness, Check, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
+import React, { memo, useEffect, useState } from "react";
+import { Archive, BriefcaseBusiness, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
 import ChatProjects from "./ChatProjects";
 
 function formatSidebarDate(value) {
@@ -42,13 +42,10 @@ function Sidebar({
   assistantMode = "chat",
   setAssistantMode,
 }) {
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [chatContextMenu, setChatContextMenu] = useState(null);
-  const modeMenuRef = useRef(null);
 
   useEffect(() => {
     const closeModeMenu = (event) => {
-      if (modeMenuRef.current && !modeMenuRef.current.contains(event.target)) setShowModeMenu(false);
       if (!event.target.closest?.(".chat-project-context-menu")) setChatContextMenu(null);
     };
     document.addEventListener("mousedown", closeModeMenu);
@@ -91,26 +88,20 @@ function Sidebar({
     <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div>
         {/* Sidebar Header */}
-        <div className="sidebar-mode-selector" ref={modeMenuRef}>
-          <button type="button" className="sidebar-mode-trigger" onClick={() => setShowModeMenu((open) => !open)} aria-expanded={showModeMenu} aria-haspopup="menu">
-            {assistantMode === "work" ? <BriefcaseBusiness size={19} /> : <Sparkles size={19} />}
-            <span>{assistantMode === "work" ? "Work" : "Chat"}</span>
-            <ChevronDown size={16} />
-          </button>
-          {showModeMenu && (
-            <div className="sidebar-mode-menu" role="menu">
-              <button type="button" role="menuitemradio" aria-checked={assistantMode === "chat"} onClick={() => { setAssistantMode?.("chat"); setShowModeMenu(false); }}>
-                <MessageSquare size={18} />
-                <span><b>Chat</b><small>Ask, learn, and explore</small></span>
-                {assistantMode === "chat" && <Check size={17} />}
-              </button>
-              <button type="button" role="menuitemradio" aria-checked={assistantMode === "work"} onClick={() => { setAssistantMode?.("work"); setShowModeMenu(false); }}>
-                <BriefcaseBusiness size={18} />
-                <span><b>Work</b><small>Build with project context</small></span>
-                {assistantMode === "work" && <Check size={17} />}
-              </button>
-            </div>
-          )}
+        <button type="button" className="sidebar-logo" onClick={() => setActiveTab("home")} aria-label="LUKE AI Studio home">
+          <span className="sidebar-logo-mark"><Sparkles className="sidebar-logo-icon" aria-hidden="true" /></span>
+          <span className="sidebar-logo-text"><b>LUKE AI</b><small>STUDIO</small></span>
+        </button>
+        <div className="sidebar-mode-selector" aria-label="Assistant mode">
+          <div className="sidebar-mode-tabs" role="tablist" aria-label="Choose Chat or Work mode">
+            <button type="button" role="tab" aria-selected={assistantMode === "chat"} className={assistantMode === "chat" ? "active" : ""} onClick={() => setAssistantMode?.("chat")}>
+              <MessageSquare size={18} /><span>Chat</span>
+            </button>
+            <button type="button" role="tab" aria-selected={assistantMode === "work"} className={assistantMode === "work" ? "active" : ""} onClick={() => setAssistantMode?.("work")}>
+              <BriefcaseBusiness size={18} /><span>Work</span>
+            </button>
+          </div>
+          <small>{assistantMode === "work" ? "Projects, files and tools" : "Ask, learn and explore"}</small>
         </div>
 
         {/* Sidebar Navigation Links (Material 3 style) */}
