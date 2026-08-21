@@ -45,6 +45,7 @@ requireText("event.nativeEvent.isComposing", "IME_COMPOSITION_GUARD_MISSING");
 requireText("draftSaveTimerRef", "DRAFT_DEBOUNCE_MISSING");
 requireText("frameBudget = document.visibilityState === \"visible\" ? 40 : 160", "ADAPTIVE_STREAM_PAINT_MISSING");
 requireText("scheduleStreamPaint", "STREAM_PAINT_BATCHING_MISSING");
+requireText('scrollIntoView({ behavior: "auto" })', "STREAM_SCROLL_ANIMATION_GUARD_MISSING");
 requireText('className={`chat-message-row', "MESSAGE_ROW_VIRTUALIZATION_TARGET_MISSING");
 requireText(' ? " streaming" : ""', "ACTIVE_STREAM_VIRTUALIZATION_GUARD_MISSING");
 

@@ -795,8 +795,13 @@ function TextChat({
     const lastMessage = messages[len - 1];
     const isNewUserMessage = len > prevLen && lastMessage?.role === "user";
 
-    if (isNewUserMessage || followGenerationRef.current) {
+    if (isNewUserMessage) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else if (followGenerationRef.current) {
+      // Streaming updates already arrive several times per second. Immediate
+      // scrolling avoids stacking smooth-scroll animations on the main thread,
+      // keeping the composer responsive while the response grows.
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
     } else {
       const threshold = 150;
       const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
