@@ -352,6 +352,11 @@ const {
   chooseStorageFolder,
 } = require("./storage-folder-picker.cjs");
 
+// LUKE_AI_WORK_ENVIRONMENT_INSPECTOR_IMPORT_V1
+const {
+  inspectWorkEnvironment,
+} = require("./work-environment-inspector.cjs");
+
 // LUKE_AI_STORAGE_DESTINATION_MANAGER_IMPORT_V2
 const {
   StorageDestinationManager,
@@ -19956,6 +19961,25 @@ const server = http.createServer(async (req, res) => {
             error.providers || null,
         }
       );
+    }
+  }
+
+  // POST /api/work/environment
+  if (
+    req.url === "/api/work/environment" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body = await readJsonRequestBody(req);
+      const environment = await inspectWorkEnvironment({
+        sourceFolders: body.sourceFolders,
+      });
+      return json(res, 200, { ok: true, environment });
+    } catch (error) {
+      return json(res, error.statusCode || 500, {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

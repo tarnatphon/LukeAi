@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bot, Check, Copy, Hand, LoaderCircle, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import { Bot, Check, Copy, Hand, LoaderCircle, PanelRight, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import WorkToolsPanel from "./WorkToolsPanel";
 import {
   getDownloadProgress,
   getLlmStatus,
@@ -188,6 +189,7 @@ function TextChat({
     return ["ask", "auto", "full", "custom"].includes(saved) ? saved : "auto";
   });
   const [showApprovalMenu, setShowApprovalMenu] = useState(false);
+  const [showWorkTools, setShowWorkTools] = useState(false);
   const approvalMenuRef = useRef(null);
 
   useEffect(() => {
@@ -1159,6 +1161,11 @@ function TextChat({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+            {assistantMode === "work" && (
+              <button type="button" className="m3-btn m3-btn-outlined" onClick={() => setShowWorkTools((open) => !open)} aria-pressed={showWorkTools} title="Toggle Work tools" style={{ height: "32px", padding: "0 9px" }}>
+                <PanelRight size={16} />
+              </button>
+            )}
             <button
               className="m3-btn m3-btn-outlined"
               style={{ height: "32px", padding: "0 10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", borderRadius: "var(--md-shape-corner-medium)" }}
@@ -1498,6 +1505,7 @@ function TextChat({
           <div className="chat-composer-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line</div>
         </div>
       </section>
+      {assistantMode === "work" && showWorkTools && <WorkToolsPanel project={activeProject} onClose={() => setShowWorkTools(false)} />}
     </div>
   );
 }
