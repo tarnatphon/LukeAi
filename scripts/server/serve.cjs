@@ -20022,7 +20022,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url === "/api/work/file/write" && req.method === "POST") {
     try {
       const body = await readJsonRequestBody(req);
-      const result = await writeWorkFile({ root: body.root, filePath: body.path, content: body.content, approvalGranted: body.approvalGranted });
+      const result = await writeWorkFile({ root: body.root, filePath: body.path, content: body.content, approvalGranted: body.approvalGranted, expectedModifiedAt: body.expectedModifiedAt });
       return json(res, 200, { ok: true, result });
     } catch (error) {
       return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });

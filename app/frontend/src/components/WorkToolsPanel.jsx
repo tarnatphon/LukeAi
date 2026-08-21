@@ -108,9 +108,9 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
     }
   };
 
-  const readFile = async (filePath) => {
+  const readFile = async (filePath, force = false) => {
     if (!selectedRoot || fileBusy) return;
-    if (fileDirty && !window.confirm("Discard the unsaved Work file changes?")) return;
+    if (!force && fileDirty && !window.confirm("Discard the unsaved Work file changes?")) return;
     setFileBusy(true);
     setError("");
     try {
@@ -139,11 +139,15 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
       const response = await fetch("/api/work/file/write", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ root: selectedRoot, path: openFile.path, content: fileDraft, approvalGranted: true }),
+        body: JSON.stringify({ root: selectedRoot, path: openFile.path, content: fileDraft, approvalGranted: true, expectedModifiedAt: openFile.modifiedAt }),
       });
       const data = await response.json();
+      if (response.status === 409) {
+        window.alert("This file changed on disk. Your draft is still here. Reload the file before saving again.");
+        return;
+      }
       if (!response.ok) throw new Error(data.error || "Could not save the Work file.");
-      setOpenFile((current) => ({ ...current, content: fileDraft, sizeBytes: data.result?.sizeBytes ?? current.sizeBytes }));
+      setOpenFile((current) => ({ ...current, content: fileDraft, sizeBytes: data.result?.sizeBytes ?? current.sizeBytes, modifiedAt: data.result?.modifiedAt ?? current.modifiedAt }));
       await refresh();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
@@ -166,7 +170,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
           <button type="button" className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)}>{item}</button>
         ))}
       </nav>
-      {environment?.sourceFolders?.length > 1 && <label className="work-root-selector"><span>Source</span><select value={selectedRoot} onChange={(event) => { setSelectedRoot(event.target.value); setOpenFile(null); setFileDraft(""); }} aria-label="Active Work source folder">{environment.sourceFolders.map((folder) => <option value={folder} key={folder}>{folder}</option>)}</select></label>}
+      {environment?.sourceFolders?.length > 1 && <label className="work-root-selector"><span>Source</span><select value={selectedRoot} onChange={(event) => { const nextRoot = event.target.value; if (fileDirty && !window.confirm("Discard the unsaved Work file changes before switching source folders?")) return; setSelectedRoot(nextRoot); setOpenFile(null); setFileDraft(""); }} aria-label="Active Work source folder">{environment.sourceFolders.map((folder) => <option value={folder} key={folder}>{folder}</option>)}</select></label>}
       <div className="work-tools-content">
         {error && <div className="work-tools-error">{error}</div>}
         {!error && !project && <div className="work-tools-empty">Select a Work project to inspect its environment.</div>}
@@ -198,7 +202,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
             {openFile && <section className="work-file-editor" aria-label={`Editing ${openFile.path}`}>
               <header><div><strong>{openFile.path}</strong><small>{openFile.sizeBytes} bytes{fileDirty ? " · Unsaved" : " · Saved"}</small></div><button type="button" onClick={() => { if (!fileDirty || window.confirm("Discard the unsaved Work file changes?")) { setOpenFile(null); setFileDraft(""); } }} title="Close file"><X size={15} /></button></header>
               <textarea value={fileDraft} onChange={(event) => setFileDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveFile(); } }} spellCheck="false" disabled={fileBusy} aria-label="Work file contents" />
-              <footer><span>UTF-8 text · 1 MB maximum</span><button type="button" onClick={() => void saveFile()} disabled={!fileDirty || fileBusy}><Save size={14} /> {fileBusy ? "Saving…" : "Save"}</button></footer>
+              <footer><span>UTF-8 text · 1 MB maximum</span><div style={{ display: "flex", gap: 6 }}><button type="button" onClick={() => void readFile(openFile.path, true)} disabled={fileBusy}>Reload</button><button type="button" onClick={() => void saveFile()} disabled={!fileDirty || fileBusy}><Save size={14} /> {fileBusy ? "Saving…" : "Save"}</button></div></footer>
             </section>}
           </div>
         )}

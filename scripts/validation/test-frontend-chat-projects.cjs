@@ -100,6 +100,9 @@ requireText(workTools, 'className="work-file-breadcrumbs"', "WORK_DIRECTORY_BREA
 requireText(workTools, 'aria-label="Filter Work files"', "WORK_FILE_FILTER_MISSING");
 requireText(workTools, 'aria-label="Active Work source folder"', "MULTI_SOURCE_WORK_SELECTOR_MISSING");
 requireText(workTools, 'fetch("/api/work/file/write"', "WORK_FILE_EDITOR_MISSING");
+requireText(workTools, "expectedModifiedAt: openFile.modifiedAt", "WORK_FILE_CONFLICT_TOKEN_MISSING");
+requireText(workTools, "This file changed on disk", "WORK_FILE_CONFLICT_UI_MISSING");
+requireText(workTools, ">Reload</button>", "WORK_FILE_RELOAD_MISSING");
 requireText(workTools, 'event.key.toLowerCase() === "s"', "WORK_FILE_SAVE_SHORTCUT_MISSING");
 requireText(server, 'req.url === "/api/work/file/read"', "WORK_FILE_READ_API_MISSING");
 requireText(server, 'req.url === "/api/work/directory"', "WORK_DIRECTORY_API_MISSING");

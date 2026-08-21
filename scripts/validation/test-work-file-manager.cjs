@@ -42,8 +42,15 @@ async function main() {
     await rejectsWithStatus(() => readWorkFile({ root, filePath: "binary.dat" }), 415);
     await rejectsWithStatus(() => writeWorkFile({ root, filePath: "notes.txt", content: "changed", approvalGranted: false }), 403);
 
-    const saved = await writeWorkFile({ root, filePath: "notes.txt", content: "alpha\nbeta\ngamma", approvalGranted: true });
+    const future = new Date(Date.now() + 5000);
+    await fs.utimes(path.join(root, "notes.txt"), future, future);
+    await rejectsWithStatus(() => writeWorkFile({ root, filePath: "notes.txt", content: "stale", approvalGranted: true, expectedModifiedAt: opened.modifiedAt }), 409);
+    assert.equal(await fs.readFile(path.join(root, "notes.txt"), "utf8"), "one\ntwo\nthree\n");
+
+    const refreshed = await readWorkFile({ root, filePath: "notes.txt" });
+    const saved = await writeWorkFile({ root, filePath: "notes.txt", content: "alpha\nbeta\ngamma", approvalGranted: true, expectedModifiedAt: refreshed.modifiedAt });
     assert.equal(saved.saved, true);
+    assert.ok(saved.modifiedAt);
     assert.equal(await fs.readFile(path.join(root, "notes.txt"), "utf8"), "alpha\nbeta\ngamma");
     assert.equal((await runTypedWorkCommand({ root, command: "cat notes.txt" })).output, "alpha\nbeta\ngamma");
     assert.equal((await runTypedWorkCommand({ root, command: "head -n 2 notes.txt" })).output, "alpha\nbeta");
