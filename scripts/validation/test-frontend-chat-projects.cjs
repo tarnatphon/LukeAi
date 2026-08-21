@@ -72,6 +72,13 @@ requireText(terminalDock, 'fetch("/api/work/terminal"', "BOTTOM_TERMINAL_API_MIS
 requireText(terminalDock, 'aria-label="Bottom Work Terminal"', "BOTTOM_TERMINAL_ACCESSIBILITY_MISSING");
 requireText(terminalDock, 'aria-label="Work Terminal command"', "EDITABLE_TERMINAL_INPUT_MISSING");
 requireText(terminalDock, 'event.key === "ArrowUp"', "TERMINAL_HISTORY_MISSING");
+requireText(terminalDock, "commandQueue", "TERMINAL_COMMAND_QUEUE_MISSING");
+requireText(terminalDock, 'aria-label="Queued Terminal commands"', "TERMINAL_COMMAND_QUEUE_UI_MISSING");
+requireText(terminalDock, 'busy ? "Queue" : "Run"', "TERMINAL_NON_BLOCKING_SUBMIT_MISSING");
+requireText(terminalDock, "Type the next command while this one runs", "TERMINAL_BUSY_COMPOSER_PROMPT_MISSING");
+if (/aria-label="Work Terminal command"[^>]*disabled=\{busy\}/.test(terminalDock)) {
+  throw new Error("BUSY_TERMINAL_COMPOSER_MUST_REMAIN_EDITABLE");
+}
 requireText(server, 'req.url === "/api/work/terminal"', "TYPED_TERMINAL_API_MISSING");
 requireText(actionRunner, "runTypedWorkCommand", "TYPED_TERMINAL_RUNNER_MISSING");
 requireText(actionRunner, "Pipes, redirection, substitutions", "TERMINAL_METACHAR_GUARD_MISSING");
@@ -132,4 +139,5 @@ console.log("PASS: Work projects expose editable memory and restorable conversat
 console.log("PASS: Composer mentions, slash commands and safe code-to-terminal actions are connected.");
 console.log("PASS: Work Files edits confined text files with explicit write approval.");
 console.log("PASS: Work Terminal reads files with allowlisted commands and copies output.");
+console.log("PASS: Work Terminal remains editable while commands run and processes a removable FIFO queue.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");
