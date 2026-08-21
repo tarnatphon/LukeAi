@@ -180,8 +180,9 @@ function TextChat({
     return String(message.content || "").trim();
   };
 
-  const compactConversationContext = (allMessages, contextLimit) => {
-    const usableBudget = Math.max(1024, Math.floor(Number(contextLimit || 4096) * 0.72));
+  const compactConversationContext = (allMessages, contextLimit, reservedTokens = 0) => {
+    const totalBudget = Math.max(1024, Math.floor(Number(contextLimit || 4096) * 0.72));
+    const usableBudget = Math.max(768, totalBudget - Math.max(0, Number(reservedTokens) || 0));
     const recent = [];
     const older = [];
     let recentTokens = 0;
@@ -198,7 +199,12 @@ function TextChat({
     }
 
     if (older.length === 0) {
-      return { messages: recent, compressed: false, archivedCount: 0 };
+      return {
+        messages: recent,
+        compressed: false,
+        archivedCount: 0,
+        activeMessageCount: recent.length,
+      };
     }
 
     const facts = [];
@@ -229,6 +235,7 @@ function TextChat({
       messages: [{ role: "system", content: summary }, ...recent],
       compressed: true,
       archivedCount: older.length,
+      activeMessageCount: recent.length,
     };
   };
 
@@ -439,21 +446,37 @@ function TextChat({
         if (conv.model && models.some(m => m.filename === conv.model)) {
           setSelectedModel(conv.model);
         }
-        const total = conv.messages.reduce((sum, m) => {
+        const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
+        const reservedSystemTokens = estimateTokens(
+          textSettings?.systemPrompt || "You are a helpful local AI assistant.",
+        ) + 16;
+        const managedContext = compactConversationContext(
+          conv.messages,
+          contextLimit,
+          reservedSystemTokens,
+        );
+        const total = managedContext.messages.reduce((sum, m) => {
           const text = Array.isArray(m.content)
             ? m.content.map(c => c.text || "").join(" ")
             : (m.content || "");
           return sum + estimateTokens(text) + estimateTokens(m.reasoning || "");
-        }, 0);
+        }, reservedSystemTokens);
         setTokenUsage({
           prompt_tokens: Math.round(total * 0.7),
           completion_tokens: Math.round(total * 0.3),
           total_tokens: total
         });
+        setMemoryStatus({
+          compressed: managedContext.compressed,
+          archivedCount: managedContext.archivedCount,
+          activeMessageCount: managedContext.activeMessageCount,
+          conversationId: activeConversationId,
+        });
       }
     } else {
       setMessages([]);
       setTokenUsage({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+      setMemoryStatus({ compressed: false, archivedCount: 0, activeMessageCount: 0 });
     }
   }, [activeConversationId, conversations, models, isBusy]);
 
@@ -691,12 +714,22 @@ function TextChat({
         visionInstruction,
       ].filter(Boolean).join("\n\n");
       const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
-      const managedContext = compactConversationContext(requestConversationMessages, contextLimit);
+      const reservedSystemTokens = estimateTokens(combinedSystemPrompt) + 16;
+      const managedContext = compactConversationContext(
+        requestConversationMessages,
+        contextLimit,
+        reservedSystemTokens,
+      );
       const requestMessages = [
         ...(combinedSystemPrompt ? [{ role: "system", content: combinedSystemPrompt }] : []),
         ...managedContext.messages,
       ];
-      setMemoryStatus({ compressed: managedContext.compressed, archivedCount: managedContext.archivedCount });
+      setMemoryStatus({
+        compressed: managedContext.compressed,
+        archivedCount: managedContext.archivedCount,
+        activeMessageCount: managedContext.activeMessageCount,
+        conversationId: convId,
+      });
       const promptTokenEstimate = requestMessages.reduce((sum, message) => {
         const messageText = Array.isArray(message.content)
           ? message.content.map((item) => item.text || "").join(" ")
@@ -1030,6 +1063,29 @@ function TextChat({
               );
             })()}
 
+            {memoryStatus.compressed && memoryStatus.conversationId === activeConversationId && (
+              <div
+                role="status"
+                title={`${memoryStatus.archivedCount} older messages remain saved and visible, but are represented by an automatic memory summary in the active model context.`}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                  maxWidth: "190px",
+                  padding: "5px 9px",
+                  borderRadius: "var(--md-shape-corner-medium)",
+                  background: "var(--md-sys-color-secondary-container)",
+                  color: "var(--md-sys-color-on-secondary-container)",
+                  lineHeight: 1.15,
+                }}
+              >
+                <strong style={{ fontSize: "0.68rem" }}>Auto context refreshed</strong>
+                <span style={{ fontSize: "0.62rem" }}>
+                  {memoryStatus.archivedCount} older messages remain visible
+                </span>
+              </div>
+            )}
+
             <button
               className="m3-btn m3-btn-outlined"
               style={{ height: "32px", padding: "0 10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", borderRadius: "var(--md-shape-corner-medium)" }}
@@ -1037,7 +1093,7 @@ function TextChat({
               disabled={messages.length === 0}
             >
               <Trash2 size={14} />
-              <span>Clear</span>
+              <span>Delete history</span>
             </button>
           </div>
         </div>
