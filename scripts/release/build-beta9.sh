@@ -300,9 +300,11 @@ log ""
 log "[7/9] รัน Packaging Validation"
 
 if [ "$STATUS" -eq 0 ]; then
+  PACKAGING_I2V_VALIDATION_PYTHON="${LUKE_AI_I2V_VALIDATION_PYTHON:-$PROJECT_DIR/app/runtimes/image-to-video/venv/bin/python}"
+
   (
     cd "$PACKAGE_DIR" &&
-    LUKE_AI_I2V_VALIDATION_PYTHON="$PROJECT_DIR/app/runtimes/image-to-video/venv/bin/python" \
+    LUKE_AI_I2V_VALIDATION_PYTHON="$PACKAGING_I2V_VALIDATION_PYTHON" \
     LUKE_AI_PACKAGING_MODE=1 \
       bash scripts/validation/validate-release.sh
   ) 2>&1 |
