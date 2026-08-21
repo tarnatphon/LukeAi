@@ -146,6 +146,8 @@ function CopyContentButton({ value, label = "Copy" }) {
 }
 
 const MAX_PERSISTED_CHAT_DRAFT_CHARS = 65536;
+const MAX_RECOVERED_QUEUE_ITEMS = 20;
+const MAX_RECOVERED_QUEUE_TEXT_CHARS = 8000;
 
 function readChatDraft(key) {
   try {
@@ -162,6 +164,29 @@ function persistChatDraft(key, value) {
     else localStorage.removeItem(key);
   } catch {
     // Storage availability must never interrupt composer input.
+  }
+}
+
+function readRecoveredMessageQueue(key) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "[]");
+    if (!Array.isArray(saved)) return [];
+    return saved.slice(0, MAX_RECOVERED_QUEUE_ITEMS).flatMap((item, index) => {
+      const text = typeof item?.text === "string" ? item.text.slice(0, MAX_RECOVERED_QUEUE_TEXT_CHARS) : "";
+      return text.trim() ? [{ id: `recovered_${Date.now()}_${index}`, text, attachments: [], recovered: true }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function persistRecoverableMessageQueue(key, queue) {
+  try {
+    const recoverable = queue.filter((item) => !item.attachments?.length && String(item.text || "").trim()).slice(0, MAX_RECOVERED_QUEUE_ITEMS).map((item) => ({ text: String(item.text).slice(0, MAX_RECOVERED_QUEUE_TEXT_CHARS) }));
+    if (recoverable.length) localStorage.setItem(key, JSON.stringify(recoverable));
+    else localStorage.removeItem(key);
+  } catch {
+    // Queue recovery is best-effort and must never interrupt composer input.
   }
 }
 
@@ -215,6 +240,7 @@ function TextChat({
   const [showBottomTerminal, setShowBottomTerminal] = useState(false);
   const [showProjectMemory, setShowProjectMemory] = useState(false);
   const [messageQueue, setMessageQueue] = useState([]);
+  const [messageQueuePaused, setMessageQueuePaused] = useState(false);
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
   const [messageSearchIndex, setMessageSearchIndex] = useState(0);
@@ -392,7 +418,9 @@ function TextChat({
   const streamFlushTimerRef = useRef(null);
   const lastStreamPaintRef = useRef(0);
   const draftSaveTimerRef = useRef(null);
+  const queueSaveTimerRef = useRef(null);
   const draftLatestRef = useRef({ [draftStorageKey]: readChatDraft(draftStorageKey) });
+  const queueStorageKey = `luke_chat_queue:${assistantMode}:${activeProject?.id || "general"}:${activeConversationId || "new"}`;
 
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -495,6 +523,22 @@ function TextChat({
     fillComposer(next === current ? `${current}${current ? " " : ""}${value} ` : next);
     setComposerAssist("");
   }, [fillComposer]);
+
+  useEffect(() => {
+    const recovered = readRecoveredMessageQueue(queueStorageKey);
+    setMessageQueue(recovered);
+    setMessageQueuePaused(recovered.length > 0);
+  }, [queueStorageKey]);
+
+  useEffect(() => {
+    clearTimeout(queueSaveTimerRef.current);
+    queueSaveTimerRef.current = setTimeout(() => persistRecoverableMessageQueue(queueStorageKey, messageQueue), 300);
+    return () => clearTimeout(queueSaveTimerRef.current);
+  }, [messageQueue, queueStorageKey]);
+
+  useEffect(() => {
+    if (messageQueue.length === 0) setMessageQueuePaused(false);
+  }, [messageQueue.length]);
 
   const isImage = (file) => {
     return /\.(jpe?g|png|webp)$/i.test(file.name) || file.type.startsWith("image/");
@@ -1190,12 +1234,12 @@ function TextChat({
   };
 
   useEffect(() => {
-    if (isBusy || !status.ready || messageQueue.length === 0) return;
+    if (isBusy || !status.ready || messageQueuePaused || messageQueue.length === 0) return;
     const [nextItem, ...remaining] = messageQueue;
     setMessageQueue(remaining);
     const timer = setTimeout(() => { void sendMessage(nextItem, true); }, 0);
     return () => clearTimeout(timer);
-  }, [isBusy, status.ready, messageQueue]);
+  }, [isBusy, status.ready, messageQueue, messageQueuePaused]);
 
   const stripBranchAlternatives = (tail) => tail.map((message, index) => index === 0
     ? { ...message, branchAlternatives: [] }
@@ -1593,7 +1637,7 @@ function TextChat({
         <div className="chat-composer">
           {messageQueue.length > 0 && (
             <div className="chat-message-queue" aria-label="Queued messages" aria-live="polite">
-              <div className="chat-message-queue-heading"><strong>Next messages</strong><span>{messageQueue.length} queued</span></div>
+              <div className="chat-message-queue-heading"><strong>Next messages</strong><span>{messageQueue.length} queued{messageQueuePaused ? " · Paused after recovery" : ""}{messageQueuePaused && <button type="button" onClick={() => setMessageQueuePaused(false)} aria-label="Resume recovered queued messages" style={{ marginLeft: 8, padding: "4px 8px", border: "1px solid var(--border-color)", borderRadius: 7, background: "transparent", color: "inherit", cursor: "pointer" }}>Resume</button>}</span></div>
               {messageQueue.map((item, index) => (
                 <div className="chat-message-queue-item" key={item.id}>
                   <span className="chat-message-queue-number">{index + 1}</span>

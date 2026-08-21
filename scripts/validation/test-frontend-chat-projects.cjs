@@ -89,6 +89,12 @@ requireText(actionRunner, "runTypedWorkCommand", "TYPED_TERMINAL_RUNNER_MISSING"
 requireText(actionRunner, "Pipes, redirection, substitutions", "TERMINAL_METACHAR_GUARD_MISSING");
 requireText(chat, "messageQueue", "MESSAGE_QUEUE_STATE_MISSING");
 requireText(chat, 'aria-label="Queued messages"', "MESSAGE_QUEUE_UI_MISSING");
+requireText(chat, "MAX_RECOVERED_QUEUE_ITEMS", "MESSAGE_QUEUE_RECOVERY_BOUND_MISSING");
+requireText(chat, "MAX_RECOVERED_QUEUE_TEXT_CHARS", "MESSAGE_QUEUE_TEXT_BOUND_MISSING");
+requireText(chat, "persistRecoverableMessageQueue", "MESSAGE_QUEUE_PERSISTENCE_MISSING");
+requireText(chat, "!item.attachments?.length", "MESSAGE_QUEUE_ATTACHMENT_STORAGE_GUARD_MISSING");
+requireText(chat, "messageQueuePaused", "RECOVERED_QUEUE_PAUSE_MISSING");
+requireText(chat, 'aria-label="Resume recovered queued messages"', "RECOVERED_QUEUE_RESUME_MISSING");
 requireText(chat, "Add message to queue", "MESSAGE_QUEUE_SEND_ACTION_MISSING");
 requireText(chat, "Edit queued message", "MESSAGE_QUEUE_EDIT_MISSING");
 requireText(chat, "Move queued message", "MESSAGE_QUEUE_REORDER_MISSING");
@@ -138,6 +144,7 @@ console.log("PASS: Chat and Work modes persist and use distinct model instructio
 console.log("PASS: Work Tools exposes read-only Environment, Review and Files views.");
 console.log("PASS: Work Terminal, Browser and external apps are allowlisted and approval-gated.");
 console.log("PASS: Composer remains editable during streaming and supports an editable message queue.");
+console.log("PASS: Text-only queued messages recover within storage bounds and remain paused until resumed.");
 console.log("PASS: Chat search covers current and project conversations with result navigation.");
 console.log("PASS: Edit and retry preserve previous responses as switchable conversation branches.");
 console.log("PASS: Work projects expose editable memory and restorable conversation checkpoints.");
