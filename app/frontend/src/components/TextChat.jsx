@@ -145,6 +145,26 @@ function CopyContentButton({ value, label = "Copy" }) {
   );
 }
 
+const MAX_PERSISTED_CHAT_DRAFT_CHARS = 65536;
+
+function readChatDraft(key) {
+  try {
+    return String(localStorage.getItem(key) || "").slice(0, MAX_PERSISTED_CHAT_DRAFT_CHARS);
+  } catch {
+    return "";
+  }
+}
+
+function persistChatDraft(key, value) {
+  try {
+    const draft = String(value || "");
+    if (draft) localStorage.setItem(key, draft.slice(0, MAX_PERSISTED_CHAT_DRAFT_CHARS));
+    else localStorage.removeItem(key);
+  } catch {
+    // Storage availability must never interrupt composer input.
+  }
+}
+
 function TextChat({ 
   specs, 
   showAlert, 
@@ -175,7 +195,7 @@ function TextChat({
   const [selectedModel, setSelectedModel] = useState("");
   const [messages, setMessages] = useState([]);
   const draftStorageKey = `luke_chat_draft:${assistantMode}:${activeProject?.id || "general"}:${activeConversationId || "new"}`;
-  const [draftAvailable, setDraftAvailable] = useState(() => Boolean(localStorage.getItem(draftStorageKey)?.trim()));
+  const [draftAvailable, setDraftAvailable] = useState(() => Boolean(readChatDraft(draftStorageKey).trim()));
   const [isBusy, setIsBusy] = useState(false);
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [webTimeFilter, setWebTimeFilter] = useState("any");
@@ -372,7 +392,7 @@ function TextChat({
   const streamFlushTimerRef = useRef(null);
   const lastStreamPaintRef = useRef(0);
   const draftSaveTimerRef = useRef(null);
-  const draftLatestRef = useRef({ [draftStorageKey]: localStorage.getItem(draftStorageKey) || "" });
+  const draftLatestRef = useRef({ [draftStorageKey]: readChatDraft(draftStorageKey) });
 
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -438,15 +458,15 @@ function TextChat({
   useEffect(() => () => cancelPendingStreamPaint(), [cancelPendingStreamPaint]);
 
   useLayoutEffect(() => {
-    draftLatestRef.current[draftStorageKey] = localStorage.getItem(draftStorageKey) || "";
+    draftLatestRef.current[draftStorageKey] = readChatDraft(draftStorageKey);
     resizeComposerInput();
-    setDraftAvailable(Boolean(localStorage.getItem(draftStorageKey)?.trim()));
+    setDraftAvailable(Boolean(readChatDraft(draftStorageKey).trim()));
   }, [draftStorageKey, resizeComposerInput]);
 
   useEffect(() => () => {
     clearTimeout(draftSaveTimerRef.current);
     const latestDraft = draftLatestRef.current[draftStorageKey];
-    if (latestDraft) localStorage.setItem(draftStorageKey, latestDraft);
+    persistChatDraft(draftStorageKey, latestDraft);
   }, [draftStorageKey]);
 
   const updateComposerDraft = useCallback((value) => {
@@ -455,9 +475,8 @@ function TextChat({
     setDraftAvailable((current) => current === hasText ? current : hasText);
     clearTimeout(draftSaveTimerRef.current);
     draftSaveTimerRef.current = setTimeout(() => {
-      if (value) localStorage.setItem(draftStorageKey, value);
-      else localStorage.removeItem(draftStorageKey);
-    }, 180);
+      persistChatDraft(draftStorageKey, value);
+    }, 240);
     requestAnimationFrame(resizeComposerInput);
   }, [draftStorageKey, resizeComposerInput]);
 
@@ -839,7 +858,7 @@ function TextChat({
       if (textareaRef.current) textareaRef.current.value = "";
       setAttachments([]);
       draftLatestRef.current[draftStorageKey] = "";
-      localStorage.removeItem(draftStorageKey);
+      persistChatDraft(draftStorageKey, "");
       setDraftAvailable(false);
       requestAnimationFrame(resizeComposerInput);
       return;
@@ -930,7 +949,7 @@ function TextChat({
       if (textareaRef.current) textareaRef.current.value = "";
       draftLatestRef.current[draftStorageKey] = "";
       clearTimeout(draftSaveTimerRef.current);
-      localStorage.removeItem(draftStorageKey);
+      persistChatDraft(draftStorageKey, "");
       setDraftAvailable(false);
       requestAnimationFrame(resizeComposerInput);
     }
@@ -1648,7 +1667,7 @@ function TextChat({
                 key={draftStorageKey}
                 ref={textareaRef}
                 className="chat-composer-textarea"
-                defaultValue={localStorage.getItem(draftStorageKey) || ""}
+                defaultValue={readChatDraft(draftStorageKey)}
                 onInput={(event) => { const value = event.currentTarget.value; updateComposerDraft(value); setComposerAssist(value.match(/(?:^|\s)([@/])[^\s]*$/)?.[1] || ""); }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {

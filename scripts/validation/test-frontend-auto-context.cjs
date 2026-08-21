@@ -32,8 +32,15 @@ if (chat.includes("Auto context refreshed") || chat.includes("Context Used:")) {
   throw new Error("CONTEXT_UI_MUST_REMAIN_HIDDEN");
 }
 requireText("<span>Delete history</span>", "DESTRUCTIVE_HISTORY_LABEL_MISSING");
-requireText("defaultValue={localStorage.getItem(draftStorageKey)", "UNCONTROLLED_COMPOSER_MISSING");
+requireText("defaultValue={readChatDraft(draftStorageKey)}", "UNCONTROLLED_COMPOSER_MISSING");
 requireText("luke_chat_draft:", "DRAFT_PERSISTENCE_MISSING");
+requireText("MAX_PERSISTED_CHAT_DRAFT_CHARS", "BOUNDED_DRAFT_PERSISTENCE_MISSING");
+requireText("function readChatDraft", "SAFE_DRAFT_READER_MISSING");
+requireText("function persistChatDraft", "SAFE_DRAFT_WRITER_MISSING");
+requireText("Storage availability must never interrupt composer input", "DRAFT_STORAGE_FAILURE_GUARD_MISSING");
+if (/localStorage\.(?:getItem|setItem|removeItem)\(draftStorageKey/.test(chat)) {
+  throw new Error("DIRECT_DRAFT_STORAGE_ACCESS_MUST_BE_GUARDED");
+}
 requireText("event.nativeEvent.isComposing", "IME_COMPOSITION_GUARD_MISSING");
 requireText("draftSaveTimerRef", "DRAFT_DEBOUNCE_MISSING");
 requireText("frameBudget = document.visibilityState === \"visible\" ? 40 : 160", "ADAPTIVE_STREAM_PAINT_MISSING");
@@ -47,6 +54,7 @@ console.log("PASS: Earlier messages are summarized for inference without deletin
 console.log("PASS: Context sizing adapts to hardware without displaying a gauge.");
 console.log("PASS: Destructive history deletion is labelled explicitly.");
 console.log("PASS: Composer typing avoids full-chat rerenders and preserves drafts.");
+console.log("PASS: Composer draft persistence is bounded and storage failures cannot interrupt typing.");
 console.log("PASS: IME composition cannot accidentally submit a partial message.");
 console.log("PASS: Streaming tokens are paint-batched and throttled when the app is hidden.");
 console.log("PASS: Frontend Automatic Context Refresh validation completed.");
