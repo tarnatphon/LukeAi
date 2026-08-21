@@ -9,6 +9,7 @@ const chat = fs.readFileSync("app/frontend/src/components/TextChat.jsx", "utf8")
 const workTools = fs.readFileSync("app/frontend/src/components/WorkToolsPanel.jsx", "utf8");
 const server = fs.readFileSync("scripts/server/serve.cjs", "utf8");
 const inspector = fs.readFileSync("scripts/server/work-environment-inspector.cjs", "utf8");
+const actionRunner = fs.readFileSync("scripts/server/work-action-runner.cjs", "utf8");
 
 function requireText(source, text, label) {
   if (!source.includes(text)) throw new Error(`${label}: ${text}`);
@@ -50,6 +51,14 @@ requireText(workTools, 'tab === "files"', "FILES_TAB_MISSING");
 requireText(server, 'req.url === "/api/work/environment"', "WORK_ENVIRONMENT_API_MISSING");
 requireText(inspector, 'shell: false', "WORK_GIT_SHELL_GUARD_MISSING");
 requireText(inspector, '["status", "--porcelain=v1", "--branch"]', "WORK_GIT_STATUS_MISSING");
+requireText(workTools, 'tab === "terminal"', "WORK_TERMINAL_TAB_MISSING");
+requireText(workTools, 'tab === "browser"', "WORK_BROWSER_TAB_MISSING");
+requireText(workTools, 'approvalGranted: true', "WORK_OPEN_APPROVAL_MISSING");
+requireText(server, 'req.url === "/api/work/command"', "WORK_COMMAND_API_MISSING");
+requireText(server, 'req.url === "/api/work/open"', "WORK_OPEN_API_MISSING");
+requireText(actionRunner, "READ_ONLY_COMMANDS", "READ_ONLY_COMMAND_PALETTE_MISSING");
+requireText(actionRunner, 'shell: false', "WORK_ACTION_SHELL_GUARD_MISSING");
+requireText(actionRunner, "approvalGranted !== true", "WORK_OPEN_BACKEND_APPROVAL_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
@@ -57,4 +66,5 @@ console.log("PASS: Native source folders can be added and detached without delet
 console.log("PASS: Project chats are grouped in the sidebar.");
 console.log("PASS: Chat and Work modes persist and use distinct model instructions.");
 console.log("PASS: Work Tools exposes read-only Environment, Review and Files views.");
+console.log("PASS: Work Terminal, Browser and external apps are allowlisted and approval-gated.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");

@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { File, Folder, GitBranch, PanelRightClose, RefreshCw } from "lucide-react";
+import { ExternalLink, File, Folder, GitBranch, Globe2, PanelRightClose, RefreshCw, Terminal } from "lucide-react";
 
-export default function WorkToolsPanel({ project, onClose }) {
+export default function WorkToolsPanel({ project, approvalMode = "auto", onClose }) {
   const [tab, setTab] = useState("environment");
   const [environment, setEnvironment] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [terminalOutput, setTerminalOutput] = useState("Choose a read-only command to inspect this project.");
+  const [terminalBusy, setTerminalBusy] = useState(false);
+  const [browserUrl, setBrowserUrl] = useState("https://www.google.com");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -28,6 +31,44 @@ export default function WorkToolsPanel({ project, onClose }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  const runCommand = async (commandId) => {
+    if (!environment?.activeRoot) return;
+    setTerminalBusy(true);
+    setTerminalOutput(`Running ${commandId}…`);
+    try {
+      const response = await fetch("/api/work/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root: environment.activeRoot, commandId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Work command failed.");
+      setTerminalOutput(data.result?.output || "No output.");
+      await refresh();
+    } catch (commandError) {
+      setTerminalOutput(commandError instanceof Error ? commandError.message : String(commandError));
+    } finally {
+      setTerminalBusy(false);
+    }
+  };
+
+  const openTarget = async (target) => {
+    if (!environment?.activeRoot) return;
+    const needsConfirmation = approvalMode !== "full";
+    if (needsConfirmation && !window.confirm(`Allow LUKE AI to open ${target} for this Work project?`)) return;
+    try {
+      const response = await fetch("/api/work/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root: environment.activeRoot, target, url: target === "browser" ? browserUrl : undefined, approvalGranted: true }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Could not open ${target}.`);
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : String(openError));
+    }
+  };
+
   const repository = environment?.repository;
   return (
     <aside className="work-tools-panel" aria-label="Work tools">
@@ -37,7 +78,7 @@ export default function WorkToolsPanel({ project, onClose }) {
         <button type="button" onClick={onClose} title="Close side panel"><PanelRightClose size={17} /></button>
       </header>
       <nav aria-label="Work tool sections">
-        {["environment", "review", "files"].map((item) => (
+        {["environment", "review", "files", "terminal", "browser"].map((item) => (
           <button type="button" className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)}>{item}</button>
         ))}
       </nav>
@@ -47,7 +88,7 @@ export default function WorkToolsPanel({ project, onClose }) {
         {!error && project && !project.sourceFolders?.length && <div className="work-tools-empty">Add a source folder in Edit project to enable Files and Review.</div>}
         {!error && environment && tab === "environment" && (
           <div className="work-tools-sections">
-            <section><h3>Environment</h3><dl><dt>Platform</dt><dd>{navigator.platform || "Local"}</dd><dt>Project</dt><dd>{project?.name}</dd><dt>Source folders</dt><dd>{environment.sourceFolders.length}</dd></dl></section>
+            <section><h3>Environment</h3><dl><dt>Platform</dt><dd>{navigator.platform || "Local"}</dd><dt>Project</dt><dd>{project?.name}</dd><dt>Source folders</dt><dd>{environment.sourceFolders.length}</dd></dl><div className="work-open-actions"><button type="button" onClick={() => openTarget("files")}><Folder size={14} /> Files</button><button type="button" onClick={() => openTarget("terminal")}><Terminal size={14} /> Terminal</button><button type="button" onClick={() => openTarget("vscode")}><ExternalLink size={14} /> VS Code</button></div></section>
             <section><h3>Repository</h3>{repository ? <dl><dt>Branch</dt><dd><GitBranch size={13} /> {repository.branch}</dd><dt>HEAD</dt><dd>{repository.head || "No commits"}</dd><dt>Sync</dt><dd>↑ {repository.ahead} · ↓ {repository.behind}</dd><dt>Changes</dt><dd>{repository.changeCount}</dd></dl> : <p>No Git repository detected.</p>}</section>
             <section><h3>Sources</h3>{environment.sourceFolders.map((folder) => <div className="work-tool-path" key={folder}><Folder size={14} /><span title={folder}>{folder}</span></div>)}</section>
           </div>
@@ -64,6 +105,22 @@ export default function WorkToolsPanel({ project, onClose }) {
           <div className="work-file-list">
             <h3>Files <span>{environment.files.length}</span></h3>
             {environment.files.map((entry) => <div key={entry.name}>{entry.type === "folder" ? <Folder size={15} /> : <File size={15} />}<span title={entry.name}>{entry.name}</span></div>)}
+          </div>
+        )}
+        {!error && environment && tab === "terminal" && (
+          <div className="work-terminal">
+            <div className="work-command-palette">
+              {[{ id: "git-status", label: "git status" }, { id: "git-diff", label: "git diff --stat" }, { id: "git-log", label: "git log -20" }, { id: "list-files", label: "list files" }].map((command) => <button type="button" disabled={terminalBusy} key={command.id} onClick={() => runCommand(command.id)}>{command.label}</button>)}
+            </div>
+            <pre aria-live="polite">{terminalOutput}</pre>
+            <small>Read-only command palette · shell disabled</small>
+          </div>
+        )}
+        {!error && environment && tab === "browser" && (
+          <div className="work-browser">
+            <label><span>Open website</span><input value={browserUrl} onChange={(event) => setBrowserUrl(event.target.value)} placeholder="https://example.com" /></label>
+            <button type="button" onClick={() => openTarget("browser")}><Globe2 size={15} /> Open in browser</button>
+            <p>HTTP and HTTPS links only. Opening an external app follows the selected approval policy.</p>
           </div>
         )}
       </div>

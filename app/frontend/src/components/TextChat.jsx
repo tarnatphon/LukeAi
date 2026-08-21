@@ -1505,7 +1505,7 @@ function TextChat({
           <div className="chat-composer-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line</div>
         </div>
       </section>
-      {assistantMode === "work" && showWorkTools && <WorkToolsPanel project={activeProject} onClose={() => setShowWorkTools(false)} />}
+      {assistantMode === "work" && showWorkTools && <WorkToolsPanel project={activeProject} approvalMode={approvalMode} onClose={() => setShowWorkTools(false)} />}
     </div>
   );
 }
