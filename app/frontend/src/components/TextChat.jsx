@@ -171,7 +171,8 @@ function TextChat({
   const [status, setStatus] = useState({ ready: false, running: false, settings: {} });
   const [selectedModel, setSelectedModel] = useState("");
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
+  const draftStorageKey = `luke_chat_draft:${assistantMode}:${activeProject?.id || "general"}:${activeConversationId || "new"}`;
+  const [draftAvailable, setDraftAvailable] = useState(() => Boolean(localStorage.getItem(draftStorageKey)?.trim()));
   const [isBusy, setIsBusy] = useState(false);
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [webTimeFilter, setWebTimeFilter] = useState("any");
@@ -318,6 +319,8 @@ function TextChat({
   const rafRef = useRef(null);
   // Debounced stats: only update stats pill every 250ms
   const statsDebounceRef = useRef(null);
+  const draftSaveTimerRef = useRef(null);
+  const draftLatestRef = useRef({ [draftStorageKey]: localStorage.getItem(draftStorageKey) || "" });
 
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -338,8 +341,35 @@ function TextChat({
   }, []);
 
   useLayoutEffect(() => {
+    draftLatestRef.current[draftStorageKey] = localStorage.getItem(draftStorageKey) || "";
     resizeComposerInput();
-  }, [input, resizeComposerInput]);
+    setDraftAvailable(Boolean(localStorage.getItem(draftStorageKey)?.trim()));
+  }, [draftStorageKey, resizeComposerInput]);
+
+  useEffect(() => () => {
+    clearTimeout(draftSaveTimerRef.current);
+    const latestDraft = draftLatestRef.current[draftStorageKey];
+    if (latestDraft) localStorage.setItem(draftStorageKey, latestDraft);
+  }, [draftStorageKey]);
+
+  const updateComposerDraft = useCallback((value) => {
+    draftLatestRef.current[draftStorageKey] = value;
+    const hasText = Boolean(String(value || "").trim());
+    setDraftAvailable((current) => current === hasText ? current : hasText);
+    clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = setTimeout(() => {
+      if (value) localStorage.setItem(draftStorageKey, value);
+      else localStorage.removeItem(draftStorageKey);
+    }, 180);
+    requestAnimationFrame(resizeComposerInput);
+  }, [draftStorageKey, resizeComposerInput]);
+
+  const fillComposer = useCallback((value) => {
+    if (!textareaRef.current) return;
+    textareaRef.current.value = value;
+    updateComposerDraft(value);
+    textareaRef.current.focus();
+  }, [updateComposerDraft]);
 
   const isImage = (file) => {
     return /\.(jpe?g|png|webp)$/i.test(file.name) || file.type.startsWith("image/");
@@ -675,7 +705,7 @@ function TextChat({
   };
 
   const sendMessage = async () => {
-    const text = input.trim();
+    const text = String(textareaRef.current?.value || "").trim();
     const hasAttachments = attachments.length > 0;
     if ((!text && !hasAttachments) || isBusy || !status.ready) return;
 
@@ -747,7 +777,12 @@ function TextChat({
     const requestConversationMessages = [...messages, { role: "user", content: requestUserMessageContent }];
     followGenerationRef.current = true;
     setMessages(nextMessages);
-    setInput("");
+    if (textareaRef.current) textareaRef.current.value = "";
+    draftLatestRef.current[draftStorageKey] = "";
+    clearTimeout(draftSaveTimerRef.current);
+    localStorage.removeItem(draftStorageKey);
+    setDraftAvailable(false);
+    requestAnimationFrame(resizeComposerInput);
     setIsBusy(true);
 
     const displayTitleText = text || (imageAttachments.length > 0 ? "Sent Image" : "Sent File");
@@ -1227,7 +1262,7 @@ function TextChat({
                         <button
                           key={i}
                           className="chat-suggestion-chip"
-                          onClick={() => { setInput(s.text); }}
+                          onClick={() => fillComposer(s.text)}
                         >
                           <span style={{ fontSize: "1rem", flexShrink: 0 }}>{s.icon}</span>
                           <span>{s.text}</span>
@@ -1393,12 +1428,13 @@ function TextChat({
           <div className="chat-composer-inner">
             <div className="chat-composer-textarea-container">
               <textarea
+                key={draftStorageKey}
                 ref={textareaRef}
                 className="chat-composer-textarea"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
+                defaultValue={localStorage.getItem(draftStorageKey) || ""}
+                onInput={(event) => updateComposerDraft(event.currentTarget.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
                     sendMessage();
                   }
@@ -1488,7 +1524,7 @@ function TextChat({
                   <button
                     className="chat-composer-send-btn"
                     onClick={sendMessage}
-                    disabled={(!input.trim() && attachments.length === 0) || !status.ready}
+                    disabled={(!draftAvailable && attachments.length === 0) || !status.ready}
                     title="Send message"
                   >
                     <Send size={17} />
