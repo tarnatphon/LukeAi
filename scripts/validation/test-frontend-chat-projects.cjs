@@ -76,6 +76,11 @@ requireText(terminalDock, "commandQueue", "TERMINAL_COMMAND_QUEUE_MISSING");
 requireText(terminalDock, 'aria-label="Queued Terminal commands"', "TERMINAL_COMMAND_QUEUE_UI_MISSING");
 requireText(terminalDock, 'busy ? "Queue" : "Run"', "TERMINAL_NON_BLOCKING_SUBMIT_MISSING");
 requireText(terminalDock, "Type the next command while this one runs", "TERMINAL_BUSY_COMPOSER_PROMPT_MISSING");
+requireText(terminalDock, "terminalSessionKey", "TERMINAL_SESSION_STORAGE_KEY_MISSING");
+requireText(terminalDock, "MAX_SAVED_DRAFT_CHARS", "TERMINAL_DRAFT_STORAGE_BOUND_MISSING");
+requireText(terminalDock, "MAX_SAVED_HISTORY", "TERMINAL_HISTORY_STORAGE_BOUND_MISSING");
+requireText(terminalDock, "localStorage.setItem(sessionKey", "TERMINAL_SESSION_PERSISTENCE_MISSING");
+requireText(terminalDock, "window.setTimeout", "TERMINAL_PERSISTENCE_DEBOUNCE_MISSING");
 if (/aria-label="Work Terminal command"[^>]*disabled=\{busy\}/.test(terminalDock)) {
   throw new Error("BUSY_TERMINAL_COMPOSER_MUST_REMAIN_EDITABLE");
 }
@@ -140,4 +145,5 @@ console.log("PASS: Composer mentions, slash commands and safe code-to-terminal a
 console.log("PASS: Work Files edits confined text files with explicit write approval.");
 console.log("PASS: Work Terminal reads files with allowlisted commands and copies output.");
 console.log("PASS: Work Terminal remains editable while commands run and processes a removable FIFO queue.");
+console.log("PASS: Work Terminal preserves bounded per-project drafts and history with debounced storage.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");

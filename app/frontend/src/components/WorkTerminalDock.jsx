@@ -14,6 +14,24 @@ const queueItemStyle = { display: "grid", gridTemplateColumns: "1fr auto", align
 const queueCodeStyle = { overflow: "hidden", color: "#cbd6d0", fontSize: ".66rem", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const queueRemoveStyle = { display: "grid", placeItems: "center", width: 25, height: 25, border: 0, borderRadius: 6, background: "transparent", color: "#8e9692", cursor: "pointer" };
 const queueStatusStyle = { flex: "0 0 auto", color: "#67d391", fontSize: ".62rem", whiteSpace: "nowrap" };
+const MAX_SAVED_DRAFT_CHARS = 8000;
+const MAX_SAVED_HISTORY = 50;
+
+function terminalSessionKey(projectId, root) {
+  return `luke_work_terminal:${projectId || "none"}:${root || "none"}`;
+}
+
+function readTerminalSession(key) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    return {
+      draft: typeof saved?.draft === "string" ? saved.draft.slice(0, MAX_SAVED_DRAFT_CHARS) : "",
+      history: Array.isArray(saved?.history) ? saved.history.filter((item) => typeof item === "string").slice(-MAX_SAVED_HISTORY) : [],
+    };
+  } catch {
+    return { draft: "", history: [] };
+  }
+}
 
 export default function WorkTerminalDock({ project, onClose }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -27,9 +45,24 @@ export default function WorkTerminalDock({ project, onClose }) {
   const [commandQueue, setCommandQueue] = useState([]);
   const roots = project?.sourceFolders || [];
   const [root, setRoot] = useState(() => roots[0] || "");
+  const sessionKey = terminalSessionKey(project?.id, root);
 
   useEffect(() => { setRoot((current) => roots.includes(current) ? current : roots[0] || ""); }, [project?.id, project?.sourceFolders]);
-  useEffect(() => { setCommandQueue([]); setCommandText(""); setHistoryIndex(-1); }, [project?.id]);
+  useEffect(() => {
+    const saved = readTerminalSession(sessionKey);
+    setCommandQueue([]);
+    setCommandText(saved.draft);
+    setHistory(saved.history);
+    setHistoryIndex(-1);
+  }, [sessionKey]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(sessionKey, JSON.stringify({ draft: commandText.slice(0, MAX_SAVED_DRAFT_CHARS), history: history.slice(-MAX_SAVED_HISTORY) }));
+      } catch {}
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [commandText, history, sessionKey]);
 
   useEffect(() => {
     const receiveCommand = (event) => setCommandText(String(event.detail?.command || ""));
