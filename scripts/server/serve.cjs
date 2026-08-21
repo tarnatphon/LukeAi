@@ -357,6 +357,7 @@ const {
   inspectWorkEnvironment,
 } = require("./work-environment-inspector.cjs");
 const {
+  listWorkDirectory,
   readWorkFile,
   writeWorkFile,
 } = require("./work-file-manager.cjs");
@@ -19991,6 +19992,17 @@ const server = http.createServer(async (req, res) => {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  // POST /api/work/file/read (project-confined text preview)
+  if (req.url === "/api/work/directory" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const directory = await listWorkDirectory({ root: body.root, directoryPath: body.path });
+      return json(res, 200, { ok: true, directory });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   }
 

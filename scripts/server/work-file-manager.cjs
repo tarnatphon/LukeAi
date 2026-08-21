@@ -33,6 +33,27 @@ async function resolveProjectFile(rootValue, relativeValue) {
   return { root, target: realTarget, relativePath: path.relative(root, target).replace(/\\/g, "/") };
 }
 
+async function listWorkDirectory({ root, directoryPath = "" }) {
+  if (!root || !path.isAbsolute(String(root))) throw httpError("Work directory root must be an absolute path.");
+  const realRoot = await fs.realpath(path.resolve(String(root))).catch(() => null);
+  if (!realRoot) throw httpError("Work directory root is not available.");
+  const relative = String(directoryPath || "").replace(/\\/g, "/");
+  if (path.isAbsolute(relative) || relative.split("/").includes("..")) throw httpError("Work directory path must stay inside the project root.");
+  const requested = path.resolve(realRoot, relative || ".");
+  const target = await fs.realpath(requested).catch(() => null);
+  if (!target) throw httpError("Work directory was not found.", 404);
+  if (target !== realRoot && !target.startsWith(`${realRoot}${path.sep}`)) throw httpError("Work directory symlink escaped the project root.", 403);
+  const stats = await fs.stat(target);
+  if (!stats.isDirectory()) throw httpError("Work directory was not found.", 404);
+  const currentPath = path.relative(realRoot, requested).replace(/\\/g, "/");
+  const entries = (await fs.readdir(target, { withFileTypes: true }))
+    .filter((entry) => entry.name !== ".git" && !entry.name.startsWith("."))
+    .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))
+    .slice(0, 300)
+    .map((entry) => ({ name: entry.name, path: [currentPath, entry.name].filter(Boolean).join("/"), type: entry.isDirectory() ? "folder" : "file" }));
+  return { path: currentPath, parentPath: currentPath.includes("/") ? currentPath.slice(0, currentPath.lastIndexOf("/")) : "", entries };
+}
+
 function assertTextBuffer(buffer) {
   if (buffer.includes(0)) throw httpError("Binary files cannot be edited in Work Files.", 415);
 }
@@ -67,4 +88,4 @@ async function writeWorkFile({ root, filePath, content, approvalGranted }) {
   return { path: resolved.relativePath, sizeBytes: bytes, saved: true };
 }
 
-module.exports = { MAX_TEXT_FILE_BYTES, readWorkFile, writeWorkFile };
+module.exports = { MAX_TEXT_FILE_BYTES, listWorkDirectory, readWorkFile, writeWorkFile };

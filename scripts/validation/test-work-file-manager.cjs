@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { readWorkFile, writeWorkFile } = require("../server/work-file-manager.cjs");
+const { listWorkDirectory, readWorkFile, writeWorkFile } = require("../server/work-file-manager.cjs");
 const { runTypedWorkCommand } = require("../server/work-action-runner.cjs");
 
 async function rejectsWithStatus(action, statusCode) {
@@ -17,6 +17,8 @@ async function main() {
   const root = path.join(sandbox, "project");
   try {
     await fs.mkdir(root);
+    await fs.mkdir(path.join(root, "nested"));
+    await fs.writeFile(path.join(root, "nested", "inside.txt"), "inside", "utf8");
     await fs.writeFile(path.join(root, "notes.txt"), "one\ntwo\nthree\n", "utf8");
     await fs.writeFile(path.join(root, "binary.dat"), Buffer.from([65, 0, 66]));
     await fs.writeFile(path.join(sandbox, "secret.txt"), "outside", "utf8");
@@ -24,6 +26,10 @@ async function main() {
 
     const opened = await readWorkFile({ root, filePath: "notes.txt" });
     assert.equal(opened.content, "one\ntwo\nthree\n");
+    const nested = await listWorkDirectory({ root, directoryPath: "nested" });
+    assert.equal(nested.path, "nested");
+    assert.deepEqual(nested.entries.map((entry) => entry.path), ["nested/inside.txt"]);
+    await rejectsWithStatus(() => listWorkDirectory({ root, directoryPath: ".." }), 400);
     await rejectsWithStatus(() => readWorkFile({ root, filePath: "../secret.txt" }), 400);
     await rejectsWithStatus(() => readWorkFile({ root, filePath: "escape.txt" }), 403);
     await rejectsWithStatus(() => readWorkFile({ root, filePath: "binary.dat" }), 415);
