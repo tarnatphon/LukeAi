@@ -332,6 +332,29 @@ function App() {
   const [conversations, setConversations] = useState([]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [showHistory, setShowHistory] = useState(false); // Default hide
+  const [chatProjects, setChatProjects] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("chat_projects") || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [activeProjectId, setActiveProjectId] = useState(() => localStorage.getItem("active_chat_project") || null);
+  const [assistantMode, setAssistantMode] = useState(() => localStorage.getItem("luke_assistant_mode") === "work" ? "work" : "chat");
+
+  useEffect(() => {
+    localStorage.setItem("chat_projects", JSON.stringify(chatProjects));
+  }, [chatProjects]);
+
+  useEffect(() => {
+    if (activeProjectId) localStorage.setItem("active_chat_project", activeProjectId);
+    else localStorage.removeItem("active_chat_project");
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    localStorage.setItem("luke_assistant_mode", assistantMode);
+  }, [assistantMode]);
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     const saved = localStorage.getItem("sidebarVisible");
     return saved !== "false";
@@ -441,7 +464,9 @@ function App() {
           messages: msgs,
           timestamp: Date.now(),
           model: modelName,
-          ...(newTitle ? { title: newTitle } : {})
+          ...(newTitle ? { title: newTitle } : {}),
+          projectId: activeProjectId || list[idx].projectId || null,
+          assistantMode,
         };
         list[idx] = conversation;
       } else {
@@ -450,14 +475,16 @@ function App() {
           title: newTitle || "Chat Session",
           model: modelName,
           messages: msgs,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          projectId: activeProjectId || null,
+          assistantMode,
         };
         list.unshift(conversation);
       }
       persistConversation(conversation);
       return list;
     });
-  }, []);
+  }, [activeProjectId, assistantMode]);
 
   const handleDeleteConversation = useCallback((id, e) => {
     if (e) e.stopPropagation();
@@ -472,6 +499,20 @@ function App() {
       setActiveConversationId(null);
     }
   }, [activeConversationId]);
+
+  const handleMoveConversationToProject = useCallback((conversationId, projectId) => {
+    setConversations((current) => current.map((conversation) => {
+      if (conversation.id !== conversationId) return conversation;
+      const updated = {
+        ...conversation,
+        projectId: projectId || null,
+        assistantMode: projectId ? "work" : "chat",
+        timestamp: Date.now(),
+      };
+      persistConversation(updated);
+      return updated;
+    }));
+  }, []);
 
   const refreshSpeechTranscriptions = useCallback(async () => {
     try {
@@ -807,6 +848,7 @@ function App() {
       showHistory={showHistory}
       setShowHistory={setShowHistory}
       onDeleteConversation={handleDeleteConversation}
+      onMoveConversationToProject={handleMoveConversationToProject}
       speechTranscriptions={speechTranscriptions}
       selectedSpeechTranscript={selectedSpeechTranscript}
       setSelectedSpeechTranscript={setSelectedSpeechTranscript}
@@ -819,8 +861,18 @@ function App() {
       showTtsHistory={showTtsHistory}
       setShowTtsHistory={setShowTtsHistory}
       onDeleteTtsOutput={handleDeleteTtsOutput}
+      projects={chatProjects}
+      setProjects={setChatProjects}
+      activeProjectId={activeProjectId}
+      setActiveProjectId={setActiveProjectId}
+      assistantMode={assistantMode}
+      setAssistantMode={(mode) => {
+        setAssistantMode(mode);
+        setActiveConversationId(null);
+        setActiveTab("chat");
+      }}
     />
-  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput]);
+  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, handleMoveConversationToProject, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput, chatProjects, activeProjectId, assistantMode]);
 
   const handleStopServer = useCallback(async () => {
     if (!serverRunning || isStoppingServer) return;
@@ -940,6 +992,8 @@ function App() {
             setShowHistory={setShowHistory}
             saveConversationState={saveConversationState}
             setIsLlmLoaded={setIsLlmLoaded}
+            assistantMode={assistantMode}
+            activeProject={chatProjects.find((project) => project.id === activeProjectId) || null}
           />
         </WorkspacePanel>
         )}

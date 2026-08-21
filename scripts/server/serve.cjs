@@ -352,6 +352,18 @@ const {
   chooseStorageFolder,
 } = require("./storage-folder-picker.cjs");
 
+// LUKE_AI_WORK_ENVIRONMENT_INSPECTOR_IMPORT_V1
+const {
+  inspectWorkEnvironment,
+} = require("./work-environment-inspector.cjs");
+
+// LUKE_AI_WORK_ACTION_RUNNER_IMPORT_V1
+const {
+  openWorkTarget,
+  runReadOnlyWorkCommand,
+  runTypedWorkCommand,
+} = require("./work-action-runner.cjs");
+
 // LUKE_AI_STORAGE_DESTINATION_MANAGER_IMPORT_V2
 const {
   StorageDestinationManager,
@@ -19956,6 +19968,58 @@ const server = http.createServer(async (req, res) => {
             error.providers || null,
         }
       );
+    }
+  }
+
+  // POST /api/work/environment
+  if (
+    req.url === "/api/work/environment" &&
+    req.method === "POST"
+  ) {
+    try {
+      const body = await readJsonRequestBody(req);
+      const environment = await inspectWorkEnvironment({
+        sourceFolders: body.sourceFolders,
+      });
+      return json(res, 200, { ok: true, environment });
+    } catch (error) {
+      return json(res, error.statusCode || 500, {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // POST /api/work/command (fixed read-only command palette)
+  if (req.url === "/api/work/command" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await runReadOnlyWorkCommand({ root: body.root, commandId: body.commandId });
+      return json(res, 200, { ok: true, result });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // POST /api/work/terminal (typed, parsed, read-only; never invokes a shell)
+  if (req.url === "/api/work/terminal" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await runTypedWorkCommand({ root: body.root, command: body.command });
+      return json(res, 200, { ok: true, result });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // POST /api/work/open (whitelisted external targets)
+  if (req.url === "/api/work/open" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await openWorkTarget({ root: body.root, target: body.target, url: body.url, approvalGranted: body.approvalGranted });
+      return json(res, 200, { ok: true, result });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   }
 

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bot, LoaderCircle, Send, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import { Bot, Check, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import WorkToolsPanel from "./WorkToolsPanel";
+import WorkTerminalDock from "./WorkTerminalDock";
 import {
   getDownloadProgress,
   getLlmStatus,
@@ -105,6 +107,43 @@ const messageContainsImage = (message) => (
   message.content.some((item) => item?.type === "image_url" && item?.image_url?.url)
 );
 
+async function copyToClipboard(value) {
+  const text = String(value || "");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function CopyContentButton({ value, label = "Copy" }) {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(timeoutRef.current), []);
+
+  const handleCopy = async () => {
+    await copyToClipboard(value);
+    setCopied(true);
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <button type="button" className="chat-copy-button" onClick={handleCopy} aria-label={copied ? "Copied" : label} title={copied ? "Copied" : label}>
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+      <span>{copied ? "Copied" : label}</span>
+    </button>
+  );
+}
+
 function TextChat({ 
   specs, 
   showAlert, 
@@ -120,7 +159,9 @@ function TextChat({
   showHistory,
   setShowHistory,
   saveConversationState,
-  setIsLlmLoaded
+  setIsLlmLoaded,
+  assistantMode = "chat",
+  activeProject = null,
 }) {
   const formatGenerationTime = (seconds) => {
     const value = Number(seconds) || 0;
@@ -132,7 +173,8 @@ function TextChat({
   const [status, setStatus] = useState({ ready: false, running: false, settings: {} });
   const [selectedModel, setSelectedModel] = useState("");
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
+  const draftStorageKey = `luke_chat_draft:${assistantMode}:${activeProject?.id || "general"}:${activeConversationId || "new"}`;
+  const [draftAvailable, setDraftAvailable] = useState(() => Boolean(localStorage.getItem(draftStorageKey)?.trim()));
   const [isBusy, setIsBusy] = useState(false);
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [webTimeFilter, setWebTimeFilter] = useState("any");
@@ -143,6 +185,26 @@ function TextChat({
     total_tokens: 0
   });
   const [memoryStatus, setMemoryStatus] = useState({ compressed: false, archivedCount: 0 });
+  const [approvalMode, setApprovalMode] = useState(() => {
+    const saved = localStorage.getItem("luke_work_approval_mode");
+    return ["ask", "auto", "full", "custom"].includes(saved) ? saved : "auto";
+  });
+  const [showApprovalMenu, setShowApprovalMenu] = useState(false);
+  const [showWorkTools, setShowWorkTools] = useState(false);
+  const [showBottomTerminal, setShowBottomTerminal] = useState(false);
+  const approvalMenuRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem("luke_work_approval_mode", approvalMode);
+  }, [approvalMode]);
+
+  useEffect(() => {
+    const closeApprovalMenu = (event) => {
+      if (approvalMenuRef.current && !approvalMenuRef.current.contains(event.target)) setShowApprovalMenu(false);
+    };
+    document.addEventListener("mousedown", closeApprovalMenu);
+    return () => document.removeEventListener("mousedown", closeApprovalMenu);
+  }, []);
 
   useEffect(() => {
     if (setIsLlmLoaded) {
@@ -172,6 +234,20 @@ function TextChat({
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+  const getHardwareContextTarget = () => {
+    const ramGb = Math.max(0, Number(specs?.ram_total_gb) || 0);
+    const cpuCores = Math.max(1, Number(specs?.cpu_cores_physical) || 1);
+    let target = ramGb >= 64 ? 32768 : ramGb >= 32 ? 16384 : ramGb >= 16 ? 8192 : 4096;
+    if (cpuCores <= 4) target = Math.min(target, 8192);
+    return target;
+  };
+
+  const getAdaptiveContextLimit = () => {
+    const hardwareTarget = getHardwareContextTarget();
+    const runtimeLimit = Number(status.settings?.contextSize) || hardwareTarget;
+    return Math.max(2048, Math.min(hardwareTarget, runtimeLimit));
+  };
+
   const messageText = (message) => {
     if (!message) return "";
     if (Array.isArray(message.content)) {
@@ -180,8 +256,9 @@ function TextChat({
     return String(message.content || "").trim();
   };
 
-  const compactConversationContext = (allMessages, contextLimit) => {
-    const usableBudget = Math.max(1024, Math.floor(Number(contextLimit || 4096) * 0.72));
+  const compactConversationContext = (allMessages, contextLimit, reservedTokens = 0) => {
+    const totalBudget = Math.max(1024, Math.floor(Number(contextLimit || 4096) * 0.72));
+    const usableBudget = Math.max(768, totalBudget - Math.max(0, Number(reservedTokens) || 0));
     const recent = [];
     const older = [];
     let recentTokens = 0;
@@ -198,7 +275,12 @@ function TextChat({
     }
 
     if (older.length === 0) {
-      return { messages: recent, compressed: false, archivedCount: 0 };
+      return {
+        messages: recent,
+        compressed: false,
+        archivedCount: 0,
+        activeMessageCount: recent.length,
+      };
     }
 
     const facts = [];
@@ -229,11 +311,12 @@ function TextChat({
       messages: [{ role: "system", content: summary }, ...recent],
       compressed: true,
       archivedCount: older.length,
+      activeMessageCount: recent.length,
     };
   };
 
   const getAutoMaxResponseTokens = (promptTokens, thinkingEnabled) => {
-    const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
+    const contextLimit = getAdaptiveContextLimit();
     const safetyBuffer = thinkingEnabled ? 768 : 512;
     const preferredMinimum = thinkingEnabled ? 512 : 256;
     const available = contextLimit - promptTokens - safetyBuffer;
@@ -254,6 +337,8 @@ function TextChat({
   const rafRef = useRef(null);
   // Debounced stats: only update stats pill every 250ms
   const statsDebounceRef = useRef(null);
+  const draftSaveTimerRef = useRef(null);
+  const draftLatestRef = useRef({ [draftStorageKey]: localStorage.getItem(draftStorageKey) || "" });
 
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -274,8 +359,35 @@ function TextChat({
   }, []);
 
   useLayoutEffect(() => {
+    draftLatestRef.current[draftStorageKey] = localStorage.getItem(draftStorageKey) || "";
     resizeComposerInput();
-  }, [input, resizeComposerInput]);
+    setDraftAvailable(Boolean(localStorage.getItem(draftStorageKey)?.trim()));
+  }, [draftStorageKey, resizeComposerInput]);
+
+  useEffect(() => () => {
+    clearTimeout(draftSaveTimerRef.current);
+    const latestDraft = draftLatestRef.current[draftStorageKey];
+    if (latestDraft) localStorage.setItem(draftStorageKey, latestDraft);
+  }, [draftStorageKey]);
+
+  const updateComposerDraft = useCallback((value) => {
+    draftLatestRef.current[draftStorageKey] = value;
+    const hasText = Boolean(String(value || "").trim());
+    setDraftAvailable((current) => current === hasText ? current : hasText);
+    clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = setTimeout(() => {
+      if (value) localStorage.setItem(draftStorageKey, value);
+      else localStorage.removeItem(draftStorageKey);
+    }, 180);
+    requestAnimationFrame(resizeComposerInput);
+  }, [draftStorageKey, resizeComposerInput]);
+
+  const fillComposer = useCallback((value) => {
+    if (!textareaRef.current) return;
+    textareaRef.current.value = value;
+    updateComposerDraft(value);
+    textareaRef.current.focus();
+  }, [updateComposerDraft]);
 
   const isImage = (file) => {
     return /\.(jpe?g|png|webp)$/i.test(file.name) || file.type.startsWith("image/");
@@ -377,7 +489,7 @@ function TextChat({
 
   const buildTextStartOptions = (settings) => ({
     threads: settings?.threads || specs?.cpu_cores_physical || 4,
-    contextSize: settings?.contextSize ?? 0,
+    contextSize: getHardwareContextTarget(),
     gpuLayers: settings?.gpuLayers ?? -1,
     enableThinking: settings?.enableThinking === true,
     flashAttn: settings?.flashAttn,
@@ -439,21 +551,37 @@ function TextChat({
         if (conv.model && models.some(m => m.filename === conv.model)) {
           setSelectedModel(conv.model);
         }
-        const total = conv.messages.reduce((sum, m) => {
+        const contextLimit = getAdaptiveContextLimit();
+        const reservedSystemTokens = estimateTokens(
+          textSettings?.systemPrompt || "You are a helpful local AI assistant.",
+        ) + 16;
+        const managedContext = compactConversationContext(
+          conv.messages,
+          contextLimit,
+          reservedSystemTokens,
+        );
+        const total = managedContext.messages.reduce((sum, m) => {
           const text = Array.isArray(m.content)
             ? m.content.map(c => c.text || "").join(" ")
             : (m.content || "");
           return sum + estimateTokens(text) + estimateTokens(m.reasoning || "");
-        }, 0);
+        }, reservedSystemTokens);
         setTokenUsage({
           prompt_tokens: Math.round(total * 0.7),
           completion_tokens: Math.round(total * 0.3),
           total_tokens: total
         });
+        setMemoryStatus({
+          compressed: managedContext.compressed,
+          archivedCount: managedContext.archivedCount,
+          activeMessageCount: managedContext.activeMessageCount,
+          conversationId: activeConversationId,
+        });
       }
     } else {
       setMessages([]);
       setTokenUsage({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+      setMemoryStatus({ compressed: false, archivedCount: 0, activeMessageCount: 0 });
     }
   }, [activeConversationId, conversations, models, isBusy]);
 
@@ -553,7 +681,7 @@ function TextChat({
 
       const result = await startLlm(filename, {
         threads: textSettings?.threads || specs?.cpu_cores_physical || 4,
-        contextSize: textSettings?.contextSize ?? 0,
+        contextSize: getHardwareContextTarget(),
         gpuLayers: textSettings?.gpuLayers ?? -1,
         enableThinking: textSettings?.enableThinking === true,
         flashAttn: textSettings?.flashAttn,
@@ -595,7 +723,7 @@ function TextChat({
   };
 
   const sendMessage = async () => {
-    const text = input.trim();
+    const text = String(textareaRef.current?.value || "").trim();
     const hasAttachments = attachments.length > 0;
     if ((!text && !hasAttachments) || isBusy || !status.ready) return;
 
@@ -667,7 +795,12 @@ function TextChat({
     const requestConversationMessages = [...messages, { role: "user", content: requestUserMessageContent }];
     followGenerationRef.current = true;
     setMessages(nextMessages);
-    setInput("");
+    if (textareaRef.current) textareaRef.current.value = "";
+    draftLatestRef.current[draftStorageKey] = "";
+    clearTimeout(draftSaveTimerRef.current);
+    localStorage.removeItem(draftStorageKey);
+    setDraftAvailable(false);
+    requestAnimationFrame(resizeComposerInput);
     setIsBusy(true);
 
     const displayTitleText = text || (imageAttachments.length > 0 ? "Sent Image" : "Sent File");
@@ -686,17 +819,46 @@ function TextChat({
 
     try {
       const systemPrompt = textSettings?.systemPrompt || "You are a helpful local AI assistant.";
+      const workInstruction = assistantMode === "work"
+        ? [
+            "You are in Work mode. Help complete multi-step project work with clear plans, checkpoints, and concrete deliverables.",
+            activeProject?.name ? `Active project: ${activeProject.name}.` : "No project is currently selected.",
+            activeProject?.sourceFolders?.length
+              ? `Project source folders: ${activeProject.sourceFolders.join(", ")}. Treat these paths as project scope; do not claim to have read files unless their contents were provided.`
+              : "No source folders are attached to this project.",
+          ].join("\n")
+        : "You are in Chat mode. Prioritize natural conversation, direct answers, learning, and exploration.";
+      const approvalInstruction = assistantMode === "work"
+        ? {
+            ask: "Approval policy: ask before every action that changes files, runs commands, opens apps, or uses the network.",
+            auto: "Approval policy: proceed with safe project-scoped actions, but ask before potentially unsafe, destructive, external, or network actions.",
+            full: "Approval policy: broad access was selected, but still explain destructive or irreversible actions clearly before proceeding.",
+            custom: "Approval policy: use the custom project permission rules; if a rule is unavailable or ambiguous, ask first.",
+          }[approvalMode]
+        : "";
       const combinedSystemPrompt = [
         systemPrompt.trim(),
+        workInstruction,
+        approvalInstruction,
         visionInstruction,
       ].filter(Boolean).join("\n\n");
-      const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
-      const managedContext = compactConversationContext(requestConversationMessages, contextLimit);
+      const contextLimit = getAdaptiveContextLimit();
+      const reservedSystemTokens = estimateTokens(combinedSystemPrompt) + 16;
+      const managedContext = compactConversationContext(
+        requestConversationMessages,
+        contextLimit,
+        reservedSystemTokens,
+      );
       const requestMessages = [
         ...(combinedSystemPrompt ? [{ role: "system", content: combinedSystemPrompt }] : []),
         ...managedContext.messages,
       ];
-      setMemoryStatus({ compressed: managedContext.compressed, archivedCount: managedContext.archivedCount });
+      setMemoryStatus({
+        compressed: managedContext.compressed,
+        archivedCount: managedContext.archivedCount,
+        activeMessageCount: managedContext.activeMessageCount,
+        conversationId: convId,
+      });
       const promptTokenEstimate = requestMessages.reduce((sum, message) => {
         const messageText = Array.isArray(message.content)
           ? message.content.map((item) => item.text || "").join(" ")
@@ -1001,35 +1163,12 @@ function TextChat({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-            {/* Context gauge */}
-            {(() => {
-              const maxTokens = status.settings?.contextSize || 4096;
-              const used = tokenUsage.total_tokens || 0;
-              const percent = Math.min(100, Math.round((used / maxTokens) * 100));
-              return (
-                <div style={{ display: "flex", alignItems: "center", gap: "7px" }} title={`Context Used: ${used} / ${maxTokens} tokens`}>
-                  <div style={{ position: "relative", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <svg width="32" height="32" viewBox="0 0 40 40">
-                      <circle cx="20" cy="20" r="16" stroke="var(--border-color)" strokeWidth="3" fill="transparent" />
-                      <circle cx="20" cy="20" r="16" stroke="var(--md-sys-color-primary)" strokeWidth="3" fill="transparent"
-                        strokeDasharray={2 * Math.PI * 16}
-                        strokeDashoffset={2 * Math.PI * 16 * (1 - percent / 100)}
-                        strokeLinecap="round" transform="rotate(-90 20 20)"
-                        style={{ transition: "stroke-dashoffset 0.35s" }}
-                      />
-                    </svg>
-                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ fontSize: "0.58rem", fontWeight: "700", lineHeight: 1 }}>{percent}%</span>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
-                    <span style={{ fontSize: "0.6rem", color: "var(--md-sys-color-outline)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Context</span>
-                    <span style={{ fontSize: "0.76rem", fontWeight: "600", color: "var(--md-sys-color-on-surface)" }}>{used} / {maxTokens}</span>
-                  </div>
-                </div>
-              );
-            })()}
-
+            {assistantMode === "work" && (
+              <>
+                <button type="button" className="m3-btn m3-btn-outlined" onClick={() => setShowBottomTerminal((open) => !open)} aria-pressed={showBottomTerminal} title="Toggle bottom Terminal" style={{ height: "32px", padding: "0 9px" }}><PanelBottom size={16} /></button>
+                <button type="button" className="m3-btn m3-btn-outlined" onClick={() => setShowWorkTools((open) => !open)} aria-pressed={showWorkTools} title="Toggle Work tools" style={{ height: "32px", padding: "0 9px" }}><PanelRight size={16} /></button>
+              </>
+            )}
             <button
               className="m3-btn m3-btn-outlined"
               style={{ height: "32px", padding: "0 10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", borderRadius: "var(--md-shape-corner-medium)" }}
@@ -1037,7 +1176,7 @@ function TextChat({
               disabled={messages.length === 0}
             >
               <Trash2 size={14} />
-              <span>Clear</span>
+              <span>Delete history</span>
             </button>
           </div>
         </div>
@@ -1095,7 +1234,7 @@ function TextChat({
                         <button
                           key={i}
                           className="chat-suggestion-chip"
-                          onClick={() => { setInput(s.text); }}
+                          onClick={() => fillComposer(s.text)}
                         >
                           <span style={{ fontSize: "1rem", flexShrink: 0 }}>{s.icon}</span>
                           <span>{s.text}</span>
@@ -1157,6 +1296,11 @@ function TextChat({
                           ) : (
                             <MarkdownRenderer content={displayContent} />
                           )}
+                        </div>
+                      )}
+                      {message.role === "assistant" && hasDisplayContent && (
+                        <div className="chat-message-actions">
+                          <CopyContentButton value={Array.isArray(displayContent) ? displayContent.map((item) => item?.text || "").join("\n") : displayContent} label="Copy response" />
                         </div>
                       )}
                       {message.role === "assistant" && Array.isArray(message.webSources) && message.webSources.length > 0 && (
@@ -1256,17 +1400,18 @@ function TextChat({
           <div className="chat-composer-inner">
             <div className="chat-composer-textarea-container">
               <textarea
+                key={draftStorageKey}
                 ref={textareaRef}
                 className="chat-composer-textarea"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
+                defaultValue={localStorage.getItem(draftStorageKey) || ""}
+                onInput={(event) => updateComposerDraft(event.currentTarget.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
                     sendMessage();
                   }
                 }}
-                placeholder={status.ready ? "Message your local model... (Shift+Enter for new line)" : "Select and load a GGUF model above to begin"}
+                placeholder={status.ready ? (assistantMode === "work" ? "What should we work on? (Shift+Enter for new line)" : "Message your local model... (Shift+Enter for new line)") : "Select and load a GGUF model above to begin"}
                 disabled={!status.ready || isBusy}
                 rows={1}
               />
@@ -1307,6 +1452,39 @@ function TextChat({
                     <span>DeepThink</span>
                   </button>
                 )}
+                {assistantMode === "work" && (
+                  <div className="work-approval-selector" ref={approvalMenuRef}>
+                    <button type="button" className="work-approval-trigger" onClick={() => setShowApprovalMenu((open) => !open)} aria-expanded={showApprovalMenu} aria-haspopup="menu">
+                      {approvalMode === "ask" ? <Hand size={14} /> : approvalMode === "full" ? <ShieldAlert size={14} /> : approvalMode === "custom" ? <Settings2 size={14} /> : <ShieldCheck size={14} />}
+                      <span>{{ ask: "Ask for approval", auto: "Approve for me", full: "Full Access", custom: "Custom" }[approvalMode]}</span>
+                      <ChevronDown size={13} />
+                    </button>
+                    {showApprovalMenu && (
+                      <div className="work-approval-menu" role="menu" aria-label="Work approval policy">
+                        <div className="work-approval-heading"><span>How should Work actions be approved?</span></div>
+                        {[
+                          { id: "ask", icon: Hand, title: "Ask for approval", detail: "Ask before commands, external files, apps, and internet access" },
+                          { id: "auto", icon: ShieldCheck, title: "Approve for me", detail: "Only ask for actions detected as potentially unsafe" },
+                          { id: "full", icon: ShieldAlert, title: "Full Access", detail: "Broad access to project files, commands, and internet" },
+                          { id: "custom", icon: Settings2, title: "Custom", detail: "Use permissions configured for this project" },
+                        ].map((option) => {
+                          const Icon = option.icon;
+                          return (
+                            <button type="button" role="menuitemradio" aria-checked={approvalMode === option.id} className={option.id === "full" ? "danger" : ""} key={option.id} onClick={() => {
+                              if (option.id === "full" && !window.confirm("Full Access allows broad project-file, command, app, and network access. Enable it for this Work session?")) return;
+                              setApprovalMode(option.id);
+                              setShowApprovalMenu(false);
+                            }}>
+                              <Icon size={18} />
+                              <span><b>{option.title}</b><small>{option.detail}</small></span>
+                              {approvalMode === option.id && <Check size={17} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="chat-composer-toolbar-right">
@@ -1318,7 +1496,7 @@ function TextChat({
                   <button
                     className="chat-composer-send-btn"
                     onClick={sendMessage}
-                    disabled={(!input.trim() && attachments.length === 0) || !status.ready}
+                    disabled={(!draftAvailable && attachments.length === 0) || !status.ready}
                     title="Send message"
                   >
                     <Send size={17} />
@@ -1329,7 +1507,9 @@ function TextChat({
           </div>
           <div className="chat-composer-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line</div>
         </div>
+        {assistantMode === "work" && showBottomTerminal && <WorkTerminalDock project={activeProject} onClose={() => setShowBottomTerminal(false)} />}
       </section>
+      {assistantMode === "work" && showWorkTools && <WorkToolsPanel project={activeProject} approvalMode={approvalMode} onClose={() => setShowWorkTools(false)} />}
     </div>
   );
 }
@@ -1380,7 +1560,12 @@ export function MarkdownRenderer({ content }) {
           const lang = match ? match[1] : "";
           const code = match ? match[2] : part.slice(3, -3);
           return (
-            <pre key={index} style={{ 
+            <div className="chat-code-block" key={index}>
+              <div className="chat-code-header">
+                <span>{lang || "Code"}</span>
+                <CopyContentButton value={code.trim()} label="Copy code" />
+              </div>
+              <pre style={{
               background: "var(--md-sys-color-surface-variant)", 
               color: "var(--md-sys-color-on-surface-variant)",
               padding: "12px", 
@@ -1388,14 +1573,14 @@ export function MarkdownRenderer({ content }) {
               fontFamily: "monospace", 
               fontSize: "0.85rem",
               overflowX: "auto",
-              margin: "6px 0",
+              margin: 0,
               border: "1px solid var(--border-color)",
               whiteSpace: "pre-wrap",
               wordBreak: "break-all"
             }}>
-              {lang && <div style={{ fontSize: "0.72rem", color: "var(--md-sys-color-outline)", marginBottom: "4px", textTransform: "uppercase", fontWeight: 600 }}>{lang}</div>}
               <code>{code.trim()}</code>
             </pre>
+            </div>
           );
         } else {
           const rawLines = part.split(/\r?\n/);

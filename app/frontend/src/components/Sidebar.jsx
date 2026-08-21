@@ -1,5 +1,6 @@
-import React, { memo } from "react";
-import { Archive, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
+import React, { memo, useEffect, useRef, useState } from "react";
+import { Archive, BriefcaseBusiness, Check, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
+import ChatProjects from "./ChatProjects";
 
 function formatSidebarDate(value) {
   const date = new Date(value);
@@ -21,6 +22,7 @@ function Sidebar({
   showHistory,
   setShowHistory,
   onDeleteConversation,
+  onMoveConversationToProject,
   speechTranscriptions = [],
   selectedSpeechTranscript,
   setSelectedSpeechTranscript,
@@ -32,8 +34,26 @@ function Sidebar({
   setSelectedTtsOutput,
   showTtsHistory,
   setShowTtsHistory,
-  onDeleteTtsOutput
+  onDeleteTtsOutput,
+  projects = [],
+  setProjects,
+  activeProjectId,
+  setActiveProjectId,
+  assistantMode = "chat",
+  setAssistantMode,
 }) {
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const [chatContextMenu, setChatContextMenu] = useState(null);
+  const modeMenuRef = useRef(null);
+
+  useEffect(() => {
+    const closeModeMenu = (event) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(event.target)) setShowModeMenu(false);
+      if (!event.target.closest?.(".chat-project-context-menu")) setChatContextMenu(null);
+    };
+    document.addEventListener("mousedown", closeModeMenu);
+    return () => document.removeEventListener("mousedown", closeModeMenu);
+  }, []);
   const prefetchProps = (tab) => ({
     onPointerEnter: () => prefetchWorkspace?.(tab),
     onFocus: () => prefetchWorkspace?.(tab),
@@ -71,9 +91,26 @@ function Sidebar({
     <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div>
         {/* Sidebar Header */}
-        <div className="sidebar-logo">
-          <Sparkles className="sidebar-logo-icon" />
-          <span className="sidebar-logo-text"><b>LUKE AI</b><small>Studio</small></span>
+        <div className="sidebar-mode-selector" ref={modeMenuRef}>
+          <button type="button" className="sidebar-mode-trigger" onClick={() => setShowModeMenu((open) => !open)} aria-expanded={showModeMenu} aria-haspopup="menu">
+            {assistantMode === "work" ? <BriefcaseBusiness size={19} /> : <Sparkles size={19} />}
+            <span>{assistantMode === "work" ? "Work" : "Chat"}</span>
+            <ChevronDown size={16} />
+          </button>
+          {showModeMenu && (
+            <div className="sidebar-mode-menu" role="menu">
+              <button type="button" role="menuitemradio" aria-checked={assistantMode === "chat"} onClick={() => { setAssistantMode?.("chat"); setShowModeMenu(false); }}>
+                <MessageSquare size={18} />
+                <span><b>Chat</b><small>Ask, learn, and explore</small></span>
+                {assistantMode === "chat" && <Check size={17} />}
+              </button>
+              <button type="button" role="menuitemradio" aria-checked={assistantMode === "work"} onClick={() => { setAssistantMode?.("work"); setShowModeMenu(false); }}>
+                <BriefcaseBusiness size={18} />
+                <span><b>Work</b><small>Build with project context</small></span>
+                {assistantMode === "work" && <Check size={17} />}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Sidebar Navigation Links (Material 3 style) */}
@@ -185,6 +222,15 @@ function Sidebar({
                         }}
                         className="sidebar-history-item"
                         title={conv.title}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setChatContextMenu({
+                            conversationId: conv.id,
+                            x: Math.min(event.clientX, window.innerWidth - 286),
+                            y: Math.min(event.clientY, window.innerHeight - Math.min(360, 112 + projects.length * 41)),
+                          });
+                        }}
                       >
                         <span style={{
                           overflow: "hidden",
@@ -491,6 +537,41 @@ function Sidebar({
             <span>Settings</span>
           </div>
         </div>
+
+        {assistantMode === "work" && <ChatProjects
+          projects={projects}
+          setProjects={setProjects}
+          conversations={conversations}
+          activeProjectId={activeProjectId}
+          setActiveProjectId={setActiveProjectId}
+          setActiveConversationId={setActiveConversationId}
+          setActiveTab={setActiveTab}
+        />}
+        {chatContextMenu && (
+          <div className="chat-project-context-menu" role="menu" style={{ left: chatContextMenu.x, top: chatContextMenu.y }}>
+            <strong>Move to Work project</strong>
+            {projects.length === 0 && <span>No projects yet — switch to Work to create one.</span>}
+            {projects.map((project) => (
+              <button type="button" role="menuitem" key={project.id} onClick={() => {
+                onMoveConversationToProject?.(chatContextMenu.conversationId, project.id);
+                setAssistantMode?.("work");
+                setActiveProjectId(project.id);
+                setActiveConversationId(chatContextMenu.conversationId);
+                setChatContextMenu(null);
+              }}>
+                <BriefcaseBusiness size={15} /> {project.name}
+              </button>
+            ))}
+            {conversations.find((conversation) => conversation.id === chatContextMenu.conversationId)?.projectId && (
+              <button type="button" role="menuitem" onClick={() => {
+                onMoveConversationToProject?.(chatContextMenu.conversationId, null);
+                setChatContextMenu(null);
+              }}>
+                <MessageSquare size={15} /> Move back to Chat
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Sidebar Footer with Host Telemetry System Specs */}
