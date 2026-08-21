@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, ExternalLink, File, Folder, GitBranch, Globe2, PanelRightClose, RefreshCw, Save, Terminal, X } from "lucide-react";
 
-const WORK_FILES_CSS = `.work-files-workspace{display:flex;flex-direction:column;gap:10px}.work-file-list>button,.work-file-breadcrumbs button{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:inherit;cursor:pointer;font:inherit}.work-file-list>button{width:100%;padding:7px 4px;border-radius:7px;font-size:.73rem;text-align:left}.work-file-list>button:hover,.work-file-list>button.active{background:var(--md-sys-color-secondary-container)}.work-file-list>button span,.work-file-editor strong,.work-file-editor small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.work-file-breadcrumbs{display:flex;align-items:center;gap:2px;overflow:auto;margin:-3px 0 8px}.work-file-breadcrumbs button{flex:0 0 auto;padding:3px;color:var(--md-sys-color-outline);font-size:.67rem}.work-file-editor{display:flex;flex-direction:column;gap:9px;min-height:310px;padding:13px;border:1px solid var(--md-sys-color-outline-variant);border-radius:13px;background:var(--md-sys-color-surface-container)}.work-file-editor>header,.work-file-editor>footer{display:flex;align-items:center;justify-content:space-between;gap:8px}.work-file-editor>header>div{min-width:0;display:flex;flex-direction:column;gap:2px}.work-file-editor small,.work-file-editor>footer span{color:var(--md-sys-color-outline);font-size:.65rem}.work-file-editor textarea{flex:1;min-height:220px;resize:vertical;padding:10px;border:1px solid var(--md-sys-color-outline-variant);border-radius:9px;outline:0;background:#111;color:#d8eadf;caret-color:#67d391;font:12px/1.5 monospace;tab-size:2}.work-file-editor button{display:flex;align-items:center;gap:5px;min-height:29px;padding:0 8px;border:1px solid var(--md-sys-color-outline-variant);border-radius:8px;background:transparent;color:inherit;cursor:pointer}.work-file-editor button:disabled{opacity:.4;cursor:not-allowed}`;
+const WORK_FILES_CSS = `.work-files-workspace{display:flex;flex-direction:column;gap:10px}.work-file-list>button,.work-file-breadcrumbs button{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:inherit;cursor:pointer;font:inherit}.work-file-list>button{width:100%;padding:7px 4px;border-radius:7px;font-size:.73rem;text-align:left}.work-file-list>button:hover,.work-file-list>button.active{background:var(--md-sys-color-secondary-container)}.work-file-list>button span,.work-file-editor strong,.work-file-editor small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.work-file-filter{width:100%;box-sizing:border-box;margin-bottom:7px;padding:7px 9px;border:1px solid var(--md-sys-color-outline-variant);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:.7rem}.work-file-breadcrumbs{display:flex;align-items:center;gap:2px;overflow:auto;margin:-3px 0 8px}.work-file-breadcrumbs button{flex:0 0 auto;padding:3px;color:var(--md-sys-color-outline);font-size:.67rem}.work-file-editor{display:flex;flex-direction:column;gap:9px;min-height:310px;padding:13px;border:1px solid var(--md-sys-color-outline-variant);border-radius:13px;background:var(--md-sys-color-surface-container)}.work-file-editor>header,.work-file-editor>footer{display:flex;align-items:center;justify-content:space-between;gap:8px}.work-file-editor>header>div{min-width:0;display:flex;flex-direction:column;gap:2px}.work-file-editor small,.work-file-editor>footer span{color:var(--md-sys-color-outline);font-size:.65rem}.work-file-editor textarea{flex:1;min-height:220px;resize:vertical;padding:10px;border:1px solid var(--md-sys-color-outline-variant);border-radius:9px;outline:0;background:#111;color:#d8eadf;caret-color:#67d391;font:12px/1.5 monospace;tab-size:2}.work-file-editor button{display:flex;align-items:center;gap:5px;min-height:29px;padding:0 8px;border:1px solid var(--md-sys-color-outline-variant);border-radius:8px;background:transparent;color:inherit;cursor:pointer}.work-file-editor button:disabled{opacity:.4;cursor:not-allowed}`;
 
 export default function WorkToolsPanel({ project, approvalMode = "auto", onClose }) {
   const [tab, setTab] = useState("environment");
@@ -15,7 +15,12 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   const [fileDraft, setFileDraft] = useState("");
   const [fileBusy, setFileBusy] = useState(false);
   const [directory, setDirectory] = useState({ path: "", parentPath: "", entries: [] });
+  const [fileFilter, setFileFilter] = useState("");
   const fileDirty = Boolean(openFile && fileDraft !== openFile.content);
+  const visibleDirectoryEntries = useMemo(() => {
+    const query = fileFilter.trim().toLocaleLowerCase();
+    return query ? directory.entries.filter((entry) => entry.name.toLocaleLowerCase().includes(query)) : directory.entries;
+  }, [directory.entries, fileFilter]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -47,6 +52,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not open the Work directory.");
       setDirectory(data.directory);
+      setFileFilter("");
     } catch (directoryError) {
       setError(directoryError instanceof Error ? directoryError.message : String(directoryError));
     } finally {
@@ -174,10 +180,11 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
         {!error && environment && tab === "files" && (
           <div className="work-files-workspace">
             <div className="work-file-list">
-              <h3>Files <span>{directory.entries.length}</span></h3>
+              <h3>Files <span>{visibleDirectoryEntries.length}/{directory.entries.length}</span></h3>
               <div className="work-file-breadcrumbs"><button type="button" onClick={() => void openDirectory("")}>Project</button>{directory.path.split("/").filter(Boolean).map((part, index, parts) => { const target = parts.slice(0, index + 1).join("/"); return <React.Fragment key={target}><ChevronRight size={12} /><button type="button" onClick={() => void openDirectory(target)}>{part}</button></React.Fragment>; })}</div>
+              <input className="work-file-filter" value={fileFilter} onChange={(event) => setFileFilter(event.target.value)} placeholder="Filter this folder…" aria-label="Filter Work files" />
               {directory.path && <button type="button" disabled={fileBusy} onClick={() => void openDirectory(directory.parentPath)}><Folder size={15} /><span>..</span></button>}
-              {directory.entries.map((entry) => <button type="button" className={openFile?.path === entry.path ? "active" : ""} disabled={fileBusy} key={entry.path} onClick={() => void (entry.type === "folder" ? openDirectory(entry.path) : readFile(entry.path))}>{entry.type === "folder" ? <Folder size={15} /> : <File size={15} />}<span title={entry.path}>{entry.name}</span></button>)}
+              {visibleDirectoryEntries.map((entry) => <button type="button" className={openFile?.path === entry.path ? "active" : ""} disabled={fileBusy} key={entry.path} onClick={() => void (entry.type === "folder" ? openDirectory(entry.path) : readFile(entry.path))}>{entry.type === "folder" ? <Folder size={15} /> : <File size={15} />}<span title={entry.path}>{entry.name}</span></button>)}
             </div>
             {openFile && <section className="work-file-editor" aria-label={`Editing ${openFile.path}`}>
               <header><div><strong>{openFile.path}</strong><small>{openFile.sizeBytes} bytes{fileDirty ? " · Unsaved" : " · Saved"}</small></div><button type="button" onClick={() => { if (!fileDirty || window.confirm("Discard the unsaved Work file changes?")) { setOpenFile(null); setFileDraft(""); } }} title="Close file"><X size={15} /></button></header>

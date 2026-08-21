@@ -97,6 +97,7 @@ requireText(terminalDock, '"luke:work-terminal-command"', "TERMINAL_CODE_RECEIVE
 requireText(workTools, 'fetch("/api/work/file/read"', "WORK_FILE_READER_MISSING");
 requireText(workTools, 'fetch("/api/work/directory"', "WORK_DIRECTORY_BROWSER_MISSING");
 requireText(workTools, 'className="work-file-breadcrumbs"', "WORK_DIRECTORY_BREADCRUMBS_MISSING");
+requireText(workTools, 'aria-label="Filter Work files"', "WORK_FILE_FILTER_MISSING");
 requireText(workTools, 'fetch("/api/work/file/write"', "WORK_FILE_EDITOR_MISSING");
 requireText(workTools, 'event.key.toLowerCase() === "s"', "WORK_FILE_SAVE_SHORTCUT_MISSING");
 requireText(server, 'req.url === "/api/work/file/read"', "WORK_FILE_READ_API_MISSING");

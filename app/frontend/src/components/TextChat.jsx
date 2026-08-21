@@ -1459,7 +1459,7 @@ function TextChat({
                   <div
                     key={`${message.role}-${index}`}
                     id={`chat-message-${index}`}
-                    className={`chat-message-row ${message.role === "user" ? "user" : "ai"}`}
+                    className={`chat-message-row ${message.role === "user" ? "user" : "ai"}${isBusy && index === messages.length - 1 && message.role === "assistant" ? " streaming" : ""}`}
                   >
                     {/* Avatar */}
                     <div className={`chat-avatar ${message.role === "user" ? "user" : "ai"}`}>
