@@ -9986,3 +9986,26 @@ html[data-theme^="dark"] .settings-subsection:hover {
 }
 .chat-message-queue-item button:hover:not(:disabled) { background: var(--md-sys-color-surface-variant); }
 .chat-message-queue-item button:disabled { opacity: 0.35; cursor: default; }
+.chat-message-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--md-sys-color-surface-container);
+}
+.chat-message-search input {
+  flex: 1;
+  min-width: 120px;
+  padding: 7px 9px;
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+.chat-message-search > span,
+.chat-message-search small { color: var(--md-sys-color-outline); font-size: 0.75rem; white-space: nowrap; }
+.chat-message-search small { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.chat-message-search button { display: inline-flex; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.chat-message-search button:hover:not(:disabled) { background: var(--md-sys-color-surface-variant); }
+.chat-message-search button:disabled { opacity: 0.35; }
