@@ -128,6 +128,33 @@ async function runTypedWorkCommand({ root, command }) {
   }
 }
 
+async function runWorkFileDiff({ root, filePath }) {
+  const cwd = await validatedRoot(root);
+  const relativePath = String(filePath || "").replace(/\\/g, "/");
+  if (!relativePath || path.isAbsolute(relativePath) || relativePath.split("/").includes("..") || relativePath.includes("\0")) {
+    const error = new Error("Work Review file path must stay inside the project root.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const options = { cwd, timeout: 15000, maxBuffer: 2 * 1024 * 1024, shell: false, encoding: "utf8" };
+  const collect = async (args) => {
+    try {
+      const result = await execFileAsync("git", args, options);
+      return String(result.stdout || result.stderr || "");
+    } catch (error) {
+      if (Number(error.code) === 1) return String(error.stdout || error.stderr || "");
+      throw error;
+    }
+  };
+  const [unstaged, staged] = await Promise.all([
+    collect(["diff", "--no-ext-diff", "--no-color", "--", relativePath]),
+    collect(["diff", "--cached", "--no-ext-diff", "--no-color", "--", relativePath]),
+  ]);
+  const output = [`# Unstaged\n${unstaged || "No unstaged diff."}`, `# Staged\n${staged || "No staged diff."}`].join("\n\n");
+  const maxChars = 300000;
+  return { path: relativePath, output: output.length > maxChars ? `${output.slice(0, maxChars)}\n\n… Diff truncated at 300,000 characters.` : output, truncated: output.length > maxChars };
+}
+
 function launch(file, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
@@ -187,4 +214,4 @@ async function openWorkTarget({ root, target, url, approvalGranted }) {
   return { opened: target, value: cwd };
 }
 
-module.exports = { openWorkTarget, runReadOnlyWorkCommand, runTypedWorkCommand };
+module.exports = { openWorkTarget, runReadOnlyWorkCommand, runTypedWorkCommand, runWorkFileDiff };

@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, ExternalLink, File, Folder, GitBranch, Globe2, PanelRightClose, RefreshCw, Save, Terminal, X } from "lucide-react";
+import { ChevronRight, ExternalLink, File, FileDiff, Folder, GitBranch, Globe2, PanelRightClose, RefreshCw, Save, Terminal, X } from "lucide-react";
 
 const WORK_FILES_CSS = `.work-files-workspace{display:flex;flex-direction:column;gap:10px}.work-file-list>button,.work-file-breadcrumbs button{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:inherit;cursor:pointer;font:inherit}.work-file-list>button{width:100%;padding:7px 4px;border-radius:7px;font-size:.73rem;text-align:left}.work-file-list>button:hover,.work-file-list>button.active{background:var(--md-sys-color-secondary-container)}.work-file-list>button span,.work-file-editor strong,.work-file-editor small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.work-file-filter{width:100%;box-sizing:border-box;margin-bottom:7px;padding:7px 9px;border:1px solid var(--md-sys-color-outline-variant);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:.7rem}.work-file-breadcrumbs{display:flex;align-items:center;gap:2px;overflow:auto;margin:-3px 0 8px}.work-file-breadcrumbs button{flex:0 0 auto;padding:3px;color:var(--md-sys-color-outline);font-size:.67rem}.work-file-editor{display:flex;flex-direction:column;gap:9px;min-height:310px;padding:13px;border:1px solid var(--md-sys-color-outline-variant);border-radius:13px;background:var(--md-sys-color-surface-container)}.work-file-editor>header,.work-file-editor>footer{display:flex;align-items:center;justify-content:space-between;gap:8px}.work-file-editor>header>div{min-width:0;display:flex;flex-direction:column;gap:2px}.work-file-editor small,.work-file-editor>footer span{color:var(--md-sys-color-outline);font-size:.65rem}.work-file-editor textarea{flex:1;min-height:220px;resize:vertical;padding:10px;border:1px solid var(--md-sys-color-outline-variant);border-radius:9px;outline:0;background:#111;color:#d8eadf;caret-color:#67d391;font:12px/1.5 monospace;tab-size:2}.work-file-editor button{display:flex;align-items:center;gap:5px;min-height:29px;padding:0 8px;border:1px solid var(--md-sys-color-outline-variant);border-radius:8px;background:transparent;color:inherit;cursor:pointer}.work-file-editor button:disabled{opacity:.4;cursor:not-allowed}`;
+
+const WORK_REVIEW_CSS = `.work-review-list>button{width:100%;display:flex;align-items:center;gap:8px;padding:7px 4px;border:0;border-radius:7px;background:transparent;color:inherit;cursor:pointer;text-align:left}.work-review-list>button:hover,.work-review-list>button.active{background:var(--md-sys-color-secondary-container)}.work-review-list>button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.work-review-diff{margin-top:10px}.work-review-diff header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:.7rem}.work-review-diff pre{max-height:430px;overflow:auto;margin:0;padding:10px;border-radius:9px;background:#111;color:#d8eadf;white-space:pre-wrap;font:11px/1.5 monospace}`;
 
 export default function WorkToolsPanel({ project, approvalMode = "auto", onClose }) {
   const [tab, setTab] = useState("environment");
@@ -16,6 +18,8 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   const [fileBusy, setFileBusy] = useState(false);
   const [directory, setDirectory] = useState({ path: "", parentPath: "", entries: [] });
   const [fileFilter, setFileFilter] = useState("");
+  const [reviewDiff, setReviewDiff] = useState(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const rootStorageKey = `luke_work_root:${project?.id || "none"}`;
   const [selectedRoot, setSelectedRoot] = useState(() => localStorage.getItem(rootStorageKey) || project?.sourceFolders?.[0] || "");
   const fileDirty = Boolean(openFile && fileDraft !== openFile.content);
@@ -157,9 +161,24 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   };
 
   const repository = environment?.repository;
+  const openReviewDiff = async (filePath) => {
+    if (!selectedRoot || reviewBusy) return;
+    setReviewBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/work/review/diff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ root: selectedRoot, path: filePath }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load the Work Review diff.");
+      setReviewDiff(data.result);
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : String(reviewError));
+    } finally {
+      setReviewBusy(false);
+    }
+  };
   return (
     <aside className="work-tools-panel" aria-label="Work tools">
-      <style>{WORK_FILES_CSS}</style>
+      <style>{WORK_FILES_CSS}{WORK_REVIEW_CSS}</style>
       <header>
         <div><strong>{project?.name || "Work tools"}</strong><small>Project tools · guarded writes</small></div>
         <button type="button" onClick={refresh} disabled={loading} title="Refresh"><RefreshCw size={16} className={loading ? "progress-spinner" : ""} /></button>
@@ -187,7 +206,8 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
             <h3>Changed files <span>{repository?.changeCount || 0}</span></h3>
             {!repository && <p>No Git repository detected.</p>}
             {repository && repository.changedFiles.length === 0 && <p>Working tree is clean.</p>}
-            {repository?.changedFiles.map((entry) => <div key={`${entry.status}-${entry.path}`}><code>{entry.status}</code><span title={entry.path}>{entry.path}</span></div>)}
+            {repository?.changedFiles.map((entry) => <button type="button" className={reviewDiff?.path === entry.path ? "active" : ""} disabled={reviewBusy} onClick={() => void openReviewDiff(entry.path)} key={`${entry.status}-${entry.path}`}><code>{entry.status}</code><span title={entry.path}>{entry.path}</span></button>)}
+            {reviewDiff && <section className="work-review-diff" aria-label={`Diff for ${reviewDiff.path}`}><header><strong><FileDiff size={14} /> {reviewDiff.path}</strong><span>{reviewDiff.truncated ? "Truncated" : "Staged + unstaged"}</span></header><pre>{reviewDiff.output}</pre></section>}
           </div>
         )}
         {!error && environment && tab === "files" && (

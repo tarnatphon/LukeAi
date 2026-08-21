@@ -367,6 +367,7 @@ const {
   openWorkTarget,
   runReadOnlyWorkCommand,
   runTypedWorkCommand,
+  runWorkFileDiff,
 } = require("./work-action-runner.cjs");
 
 // LUKE_AI_STORAGE_DESTINATION_MANAGER_IMPORT_V2
@@ -20023,6 +20024,17 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readJsonRequestBody(req);
       const result = await writeWorkFile({ root: body.root, filePath: body.path, content: body.content, approvalGranted: body.approvalGranted, expectedModifiedAt: body.expectedModifiedAt });
+      return json(res, 200, { ok: true, result });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // POST /api/work/review/diff (bounded, read-only file diff)
+  if (req.url === "/api/work/review/diff" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await runWorkFileDiff({ root: body.root, filePath: body.path });
       return json(res, 200, { ok: true, result });
     } catch (error) {
       return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
