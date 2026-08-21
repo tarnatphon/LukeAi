@@ -43,6 +43,8 @@ if (/localStorage\.(?:getItem|setItem|removeItem)\(draftStorageKey/.test(chat)) 
 }
 requireText("event.nativeEvent.isComposing", "IME_COMPOSITION_GUARD_MISSING");
 requireText("draftSaveTimerRef", "DRAFT_DEBOUNCE_MISSING");
+requireText("composerResizeRafRef.current !== null", "COMPOSER_RESIZE_FRAME_GUARD_MISSING");
+requireText("scheduleComposerResize", "COMPOSER_RESIZE_BATCHING_MISSING");
 requireText("frameBudget = document.visibilityState === \"visible\" ? 40 : 160", "ADAPTIVE_STREAM_PAINT_MISSING");
 requireText("scheduleStreamPaint", "STREAM_PAINT_BATCHING_MISSING");
 requireText('scrollIntoView({ behavior: "auto" })', "STREAM_SCROLL_ANIMATION_GUARD_MISSING");

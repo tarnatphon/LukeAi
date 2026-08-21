@@ -423,6 +423,7 @@ function TextChat({
   const lastStreamPaintRef = useRef(0);
   const draftSaveTimerRef = useRef(null);
   const queueSaveTimerRef = useRef(null);
+  const composerResizeRafRef = useRef(null);
   const draftLatestRef = useRef({ [draftStorageKey]: readChatDraft(draftStorageKey) });
   const queueStorageKey = `luke_chat_queue:${assistantMode}:${activeProject?.id || "general"}:${activeConversationId || "new"}`;
 
@@ -443,6 +444,14 @@ function TextChat({
     textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }, []);
+
+  const scheduleComposerResize = useCallback(() => {
+    if (composerResizeRafRef.current !== null) return;
+    composerResizeRafRef.current = requestAnimationFrame(() => {
+      composerResizeRafRef.current = null;
+      resizeComposerInput();
+    });
+  }, [resizeComposerInput]);
 
   const flushStreamBuffer = useCallback(() => {
     const buffer = tokenBufferRef.current;
@@ -489,6 +498,10 @@ function TextChat({
 
   useEffect(() => () => cancelPendingStreamPaint(), [cancelPendingStreamPaint]);
 
+  useEffect(() => () => {
+    if (composerResizeRafRef.current !== null) cancelAnimationFrame(composerResizeRafRef.current);
+  }, []);
+
   useLayoutEffect(() => {
     draftLatestRef.current[draftStorageKey] = readChatDraft(draftStorageKey);
     resizeComposerInput();
@@ -509,8 +522,8 @@ function TextChat({
     draftSaveTimerRef.current = setTimeout(() => {
       persistChatDraft(draftStorageKey, value);
     }, 240);
-    requestAnimationFrame(resizeComposerInput);
-  }, [draftStorageKey, resizeComposerInput]);
+    scheduleComposerResize();
+  }, [draftStorageKey, scheduleComposerResize]);
 
   const fillComposer = useCallback((value) => {
     if (!textareaRef.current) return;
@@ -913,7 +926,7 @@ function TextChat({
       draftLatestRef.current[draftStorageKey] = "";
       persistChatDraft(draftStorageKey, "");
       setDraftAvailable(false);
-      requestAnimationFrame(resizeComposerInput);
+      scheduleComposerResize();
       return;
     }
 
@@ -1004,7 +1017,7 @@ function TextChat({
       clearTimeout(draftSaveTimerRef.current);
       persistChatDraft(draftStorageKey, "");
       setDraftAvailable(false);
-      requestAnimationFrame(resizeComposerInput);
+      scheduleComposerResize();
     }
     setIsBusy(true);
 
