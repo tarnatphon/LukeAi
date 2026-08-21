@@ -17,7 +17,10 @@ export default function WorkTerminalDock({ project, onClose }) {
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [copied, setCopied] = useState(false);
-  const root = project?.sourceFolders?.[0] || "";
+  const roots = project?.sourceFolders || [];
+  const [root, setRoot] = useState(() => roots[0] || "");
+
+  useEffect(() => { setRoot((current) => roots.includes(current) ? current : roots[0] || ""); }, [project?.id, project?.sourceFolders]);
 
   useEffect(() => {
     const receiveCommand = (event) => setCommandText(String(event.detail?.command || ""));
@@ -59,7 +62,7 @@ export default function WorkTerminalDock({ project, onClose }) {
   return (
     <section className={`work-terminal-dock ${collapsed ? "collapsed" : ""}`} aria-label="Bottom Work Terminal">
       <header>
-        <div><SquareTerminal size={15} /><strong>Terminal</strong>{activeCommand && <span>{activeCommand}</span>}</div>
+        <div><SquareTerminal size={15} /><strong>Terminal</strong>{roots.length > 1 ? <select value={root} onChange={(event) => { setRoot(event.target.value); setOutput("Read-only Work Terminal ready."); }} aria-label="Terminal source folder">{roots.map((folder) => <option key={folder} value={folder}>{folder.split(/[\\/]/).filter(Boolean).pop() || folder}</option>)}</select> : activeCommand && <span>{activeCommand}</span>}</div>
         <button type="button" onClick={async () => { await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1200); }} title="Copy Terminal output">{copied ? <Check size={16} /> : <Copy size={16} />}</button>
         <button type="button" onClick={() => setCollapsed((value) => !value)} title={collapsed ? "Expand Terminal" : "Collapse Terminal"}>{collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
         <button type="button" onClick={onClose} title="Close Terminal"><X size={16} /></button>

@@ -16,6 +16,8 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   const [fileBusy, setFileBusy] = useState(false);
   const [directory, setDirectory] = useState({ path: "", parentPath: "", entries: [] });
   const [fileFilter, setFileFilter] = useState("");
+  const rootStorageKey = `luke_work_root:${project?.id || "none"}`;
+  const [selectedRoot, setSelectedRoot] = useState(() => localStorage.getItem(rootStorageKey) || project?.sourceFolders?.[0] || "");
   const fileDirty = Boolean(openFile && fileDraft !== openFile.content);
   const visibleDirectoryEntries = useMemo(() => {
     const query = fileFilter.trim().toLocaleLowerCase();
@@ -29,7 +31,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
       const response = await fetch("/api/work/environment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceFolders: project?.sourceFolders || [] }),
+        body: JSON.stringify({ sourceFolders: project?.sourceFolders || [], activeRoot: selectedRoot }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not inspect the Work environment.");
@@ -39,16 +41,22 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
     } finally {
       setLoading(false);
     }
-  }, [project]);
+  }, [project, selectedRoot]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const roots = project?.sourceFolders || [];
+    const stored = localStorage.getItem(rootStorageKey);
+    setSelectedRoot(roots.includes(stored) ? stored : roots[0] || "");
+  }, [project?.id, project?.sourceFolders, rootStorageKey]);
+  useEffect(() => { if (selectedRoot) localStorage.setItem(rootStorageKey, selectedRoot); }, [rootStorageKey, selectedRoot]);
 
   const openDirectory = useCallback(async (directoryPath = "") => {
-    if (!environment?.activeRoot) return;
+    if (!selectedRoot) return;
     setFileBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/work/directory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ root: environment.activeRoot, path: directoryPath }) });
+      const response = await fetch("/api/work/directory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ root: selectedRoot, path: directoryPath }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not open the Work directory.");
       setDirectory(data.directory);
@@ -58,19 +66,19 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
     } finally {
       setFileBusy(false);
     }
-  }, [environment?.activeRoot]);
+  }, [selectedRoot]);
 
-  useEffect(() => { if (tab === "files" && environment?.activeRoot) void openDirectory(""); }, [tab, environment?.activeRoot, openDirectory]);
+  useEffect(() => { if (tab === "files" && selectedRoot) void openDirectory(""); }, [tab, selectedRoot, openDirectory]);
 
   const runCommand = async (commandId) => {
-    if (!environment?.activeRoot) return;
+    if (!selectedRoot) return;
     setTerminalBusy(true);
     setTerminalOutput(`Running ${commandId}…`);
     try {
       const response = await fetch("/api/work/command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ root: environment.activeRoot, commandId }),
+        body: JSON.stringify({ root: selectedRoot, commandId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Work command failed.");
@@ -84,14 +92,14 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   };
 
   const openTarget = async (target) => {
-    if (!environment?.activeRoot) return;
+    if (!selectedRoot) return;
     const needsConfirmation = approvalMode !== "full";
     if (needsConfirmation && !window.confirm(`Allow LUKE AI to open ${target} for this Work project?`)) return;
     try {
       const response = await fetch("/api/work/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ root: environment.activeRoot, target, url: target === "browser" ? browserUrl : undefined, approvalGranted: true }),
+        body: JSON.stringify({ root: selectedRoot, target, url: target === "browser" ? browserUrl : undefined, approvalGranted: true }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `Could not open ${target}.`);
@@ -101,7 +109,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   };
 
   const readFile = async (filePath) => {
-    if (!environment?.activeRoot || fileBusy) return;
+    if (!selectedRoot || fileBusy) return;
     if (fileDirty && !window.confirm("Discard the unsaved Work file changes?")) return;
     setFileBusy(true);
     setError("");
@@ -109,7 +117,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
       const response = await fetch("/api/work/file/read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ root: environment.activeRoot, path: filePath }),
+        body: JSON.stringify({ root: selectedRoot, path: filePath }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not open the Work file.");
@@ -123,7 +131,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   };
 
   const saveFile = async () => {
-    if (!environment?.activeRoot || !openFile || !fileDirty || fileBusy) return;
+    if (!selectedRoot || !openFile || !fileDirty || fileBusy) return;
     if (approvalMode !== "full" && !window.confirm(`Allow LUKE AI to save ${openFile.path}?`)) return;
     setFileBusy(true);
     setError("");
@@ -131,7 +139,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
       const response = await fetch("/api/work/file/write", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ root: environment.activeRoot, path: openFile.path, content: fileDraft, approvalGranted: true }),
+        body: JSON.stringify({ root: selectedRoot, path: openFile.path, content: fileDraft, approvalGranted: true }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save the Work file.");
@@ -158,6 +166,7 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
           <button type="button" className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)}>{item}</button>
         ))}
       </nav>
+      {environment?.sourceFolders?.length > 1 && <label className="work-root-selector"><span>Source</span><select value={selectedRoot} onChange={(event) => { setSelectedRoot(event.target.value); setOpenFile(null); setFileDraft(""); }} aria-label="Active Work source folder">{environment.sourceFolders.map((folder) => <option value={folder} key={folder}>{folder}</option>)}</select></label>}
       <div className="work-tools-content">
         {error && <div className="work-tools-error">{error}</div>}
         {!error && !project && <div className="work-tools-empty">Select a Work project to inspect its environment.</div>}

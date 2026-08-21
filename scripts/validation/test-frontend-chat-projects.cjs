@@ -98,6 +98,7 @@ requireText(workTools, 'fetch("/api/work/file/read"', "WORK_FILE_READER_MISSING"
 requireText(workTools, 'fetch("/api/work/directory"', "WORK_DIRECTORY_BROWSER_MISSING");
 requireText(workTools, 'className="work-file-breadcrumbs"', "WORK_DIRECTORY_BREADCRUMBS_MISSING");
 requireText(workTools, 'aria-label="Filter Work files"', "WORK_FILE_FILTER_MISSING");
+requireText(workTools, 'aria-label="Active Work source folder"', "MULTI_SOURCE_WORK_SELECTOR_MISSING");
 requireText(workTools, 'fetch("/api/work/file/write"', "WORK_FILE_EDITOR_MISSING");
 requireText(workTools, 'event.key.toLowerCase() === "s"', "WORK_FILE_SAVE_SHORTCUT_MISSING");
 requireText(server, 'req.url === "/api/work/file/read"', "WORK_FILE_READ_API_MISSING");
@@ -108,6 +109,7 @@ requireText(workFiles, "Work file symlink escaped", "WORK_FILE_SYMLINK_GUARD_MIS
 requireText(actionRunner, 'file === "cat"', "TERMINAL_CAT_MISSING");
 requireText(actionRunner, 'file === "head" || file === "tail"', "TERMINAL_HEAD_TAIL_MISSING");
 requireText(terminalDock, 'title="Copy Terminal output"', "TERMINAL_COPY_MISSING");
+requireText(terminalDock, 'aria-label="Terminal source folder"', "MULTI_SOURCE_TERMINAL_SELECTOR_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");

@@ -19985,6 +19985,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonRequestBody(req);
       const environment = await inspectWorkEnvironment({
         sourceFolders: body.sourceFolders,
+        activeRoot: body.activeRoot,
       });
       return json(res, 200, { ok: true, environment });
     } catch (error) {

@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { listWorkDirectory, readWorkFile, writeWorkFile } = require("../server/work-file-manager.cjs");
 const { runTypedWorkCommand } = require("../server/work-action-runner.cjs");
+const { inspectWorkEnvironment } = require("../server/work-environment-inspector.cjs");
 
 async function rejectsWithStatus(action, statusCode) {
   await assert.rejects(action, (error) => error?.statusCode === statusCode);
@@ -17,6 +18,8 @@ async function main() {
   const root = path.join(sandbox, "project");
   try {
     await fs.mkdir(root);
+    const secondRoot = path.join(sandbox, "second-project");
+    await fs.mkdir(secondRoot);
     await fs.mkdir(path.join(root, "nested"));
     await fs.writeFile(path.join(root, "nested", "inside.txt"), "inside", "utf8");
     await fs.writeFile(path.join(root, "notes.txt"), "one\ntwo\nthree\n", "utf8");
@@ -26,6 +29,10 @@ async function main() {
 
     const opened = await readWorkFile({ root, filePath: "notes.txt" });
     assert.equal(opened.content, "one\ntwo\nthree\n");
+    const selectedEnvironment = await inspectWorkEnvironment({ sourceFolders: [root, secondRoot], activeRoot: secondRoot });
+    assert.equal(selectedEnvironment.activeRoot, secondRoot);
+    const rejectedSelection = await inspectWorkEnvironment({ sourceFolders: [root, secondRoot], activeRoot: sandbox });
+    assert.equal(rejectedSelection.activeRoot, root);
     const nested = await listWorkDirectory({ root, directoryPath: "nested" });
     assert.equal(nested.path, "nested");
     assert.deepEqual(nested.entries.map((entry) => entry.path), ["nested/inside.txt"]);

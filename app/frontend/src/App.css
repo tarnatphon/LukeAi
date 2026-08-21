@@ -3912,6 +3912,8 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .work-tools-panel>nav { display:grid; grid-template-columns:repeat(5,1fr); gap:3px; padding:8px; border-bottom:1px solid var(--md-sys-color-outline-variant); }
 .work-tools-panel>nav button { min-height:34px; border:0; border-radius:9px; background:transparent; color:var(--md-sys-color-outline); cursor:pointer; font:inherit; font-size:.72rem; text-transform:capitalize; }
 .work-tools-panel>nav button.active { background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container); font-weight:700; }
+.work-root-selector { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--md-sys-color-outline-variant); color:var(--md-sys-color-outline); font-size:.68rem; }
+.work-root-selector select { min-width:0; flex:1; border:0; outline:0; background:transparent; color:inherit; font:inherit; }
 .work-tools-content { flex:1; min-height:0; overflow:auto; padding:12px; }
 .work-tools-empty,.work-tools-error { margin:8px 0; padding:14px; border-radius:12px; color:var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:.78rem; line-height:1.45; }
 .work-tools-error { color:var(--md-sys-color-error); }
@@ -3942,6 +3944,7 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .work-terminal-dock>header>div { min-width:0; display:flex; align-items:center; gap:8px; }
 .work-terminal-dock>header strong { font-size:.76rem; }
 .work-terminal-dock>header span { overflow:hidden; color:#8e9692; font-family:monospace; font-size:.66rem; text-overflow:ellipsis; white-space:nowrap; }
+.work-terminal-dock>header select { min-width:0; max-width:180px; border:0; outline:0; background:transparent; color:#8e9692; font:inherit; font-size:.66rem; }
 .work-terminal-dock>header button { display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:#aeb5b1; cursor:pointer; }
 .work-terminal-dock>header button:hover { background:rgba(255,255,255,.08); color:#fff; }
 .work-terminal-dock-body { flex:1; min-height:0; display:grid; grid-template-columns:150px 1fr; }

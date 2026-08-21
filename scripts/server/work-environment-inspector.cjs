@@ -58,14 +58,15 @@ async function listFiles(root) {
     .map((entry) => ({ name: entry.name, type: entry.isDirectory() ? "folder" : "file" }));
 }
 
-async function inspectWorkEnvironment({ sourceFolders = [] } = {}) {
+async function inspectWorkEnvironment({ sourceFolders = [], activeRoot: requestedRoot = "" } = {}) {
   if (!Array.isArray(sourceFolders) || sourceFolders.length === 0) {
     return { sourceFolders: [], activeRoot: null, repository: null, files: [] };
   }
 
   const folders = [];
   for (const folder of sourceFolders.slice(0, 20)) folders.push(await resolveFolder(folder));
-  const activeRoot = folders[0];
+  const requested = requestedRoot ? path.resolve(String(requestedRoot)) : "";
+  const activeRoot = folders.includes(requested) ? requested : folders[0];
   const repositoryRoot = await runGit(activeRoot, ["rev-parse", "--show-toplevel"]);
   let repository = null;
 
