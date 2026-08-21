@@ -500,6 +500,20 @@ function App() {
     }
   }, [activeConversationId]);
 
+  const handleMoveConversationToProject = useCallback((conversationId, projectId) => {
+    setConversations((current) => current.map((conversation) => {
+      if (conversation.id !== conversationId) return conversation;
+      const updated = {
+        ...conversation,
+        projectId: projectId || null,
+        assistantMode: projectId ? "work" : "chat",
+        timestamp: Date.now(),
+      };
+      persistConversation(updated);
+      return updated;
+    }));
+  }, []);
+
   const refreshSpeechTranscriptions = useCallback(async () => {
     try {
       const list = await listSpeechTranscriptions();
@@ -834,6 +848,7 @@ function App() {
       showHistory={showHistory}
       setShowHistory={setShowHistory}
       onDeleteConversation={handleDeleteConversation}
+      onMoveConversationToProject={handleMoveConversationToProject}
       speechTranscriptions={speechTranscriptions}
       selectedSpeechTranscript={selectedSpeechTranscript}
       setSelectedSpeechTranscript={setSelectedSpeechTranscript}
@@ -857,7 +872,7 @@ function App() {
         setActiveTab("chat");
       }}
     />
-  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput, chatProjects, activeProjectId, assistantMode]);
+  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, handleMoveConversationToProject, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput, chatProjects, activeProjectId, assistantMode]);
 
   const handleStopServer = useCallback(async () => {
     if (!serverRunning || isStoppingServer) return;

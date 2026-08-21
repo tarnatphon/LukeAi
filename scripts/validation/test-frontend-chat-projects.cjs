@@ -26,8 +26,13 @@ requireText(app, 'localStorage.getItem("luke_assistant_mode")', "ASSISTANT_MODE_
 requireText(sidebar, 'setAssistantMode?.("chat")', "CHAT_MODE_OPTION_MISSING");
 requireText(sidebar, 'setAssistantMode?.("work")', "WORK_MODE_OPTION_MISSING");
 requireText(sidebar, 'assistantMode === "work" && <ChatProjects', "WORK_PROJECT_VISIBILITY_MISSING");
+requireText(sidebar, "onContextMenu", "CHAT_CONTEXT_MENU_MISSING");
+requireText(sidebar, "Move to Work project", "MOVE_CHAT_TO_PROJECT_MISSING");
+requireText(sidebar, "onMoveConversationToProject", "MOVE_CHAT_HANDLER_MISSING");
 requireText(chat, 'assistantMode === "work"', "WORK_MODE_PROMPT_MISSING");
 requireText(chat, "Project source folders:", "WORK_SOURCE_FOLDER_CONTEXT_MISSING");
+requireText(chat, 'label="Copy code"', "COPY_CODE_BUTTON_MISSING");
+requireText(chat, 'label="Copy response"', "COPY_RESPONSE_BUTTON_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");

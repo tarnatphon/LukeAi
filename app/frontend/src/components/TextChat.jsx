@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bot, LoaderCircle, Send, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import { Bot, Check, Copy, LoaderCircle, Send, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
 import {
   getDownloadProgress,
   getLlmStatus,
@@ -104,6 +104,43 @@ const messageContainsImage = (message) => (
   Array.isArray(message?.content) &&
   message.content.some((item) => item?.type === "image_url" && item?.image_url?.url)
 );
+
+async function copyToClipboard(value) {
+  const text = String(value || "");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function CopyContentButton({ value, label = "Copy" }) {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(timeoutRef.current), []);
+
+  const handleCopy = async () => {
+    await copyToClipboard(value);
+    setCopied(true);
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <button type="button" className="chat-copy-button" onClick={handleCopy} aria-label={copied ? "Copied" : label} title={copied ? "Copied" : label}>
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+      <span>{copied ? "Copied" : label}</span>
+    </button>
+  );
+}
 
 function TextChat({ 
   specs, 
@@ -1227,6 +1264,11 @@ function TextChat({
                           )}
                         </div>
                       )}
+                      {message.role === "assistant" && hasDisplayContent && (
+                        <div className="chat-message-actions">
+                          <CopyContentButton value={Array.isArray(displayContent) ? displayContent.map((item) => item?.text || "").join("\n") : displayContent} label="Copy response" />
+                        </div>
+                      )}
                       {message.role === "assistant" && Array.isArray(message.webSources) && message.webSources.length > 0 && (
                         <div style={{
                           marginTop: "8px",
@@ -1448,7 +1490,12 @@ export function MarkdownRenderer({ content }) {
           const lang = match ? match[1] : "";
           const code = match ? match[2] : part.slice(3, -3);
           return (
-            <pre key={index} style={{ 
+            <div className="chat-code-block" key={index}>
+              <div className="chat-code-header">
+                <span>{lang || "Code"}</span>
+                <CopyContentButton value={code.trim()} label="Copy code" />
+              </div>
+              <pre style={{
               background: "var(--md-sys-color-surface-variant)", 
               color: "var(--md-sys-color-on-surface-variant)",
               padding: "12px", 
@@ -1456,14 +1503,14 @@ export function MarkdownRenderer({ content }) {
               fontFamily: "monospace", 
               fontSize: "0.85rem",
               overflowX: "auto",
-              margin: "6px 0",
+              margin: 0,
               border: "1px solid var(--border-color)",
               whiteSpace: "pre-wrap",
               wordBreak: "break-all"
             }}>
-              {lang && <div style={{ fontSize: "0.72rem", color: "var(--md-sys-color-outline)", marginBottom: "4px", textTransform: "uppercase", fontWeight: 600 }}>{lang}</div>}
               <code>{code.trim()}</code>
             </pre>
+            </div>
           );
         } else {
           const rawLines = part.split(/\r?\n/);

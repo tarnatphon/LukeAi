@@ -22,6 +22,7 @@ function Sidebar({
   showHistory,
   setShowHistory,
   onDeleteConversation,
+  onMoveConversationToProject,
   speechTranscriptions = [],
   selectedSpeechTranscript,
   setSelectedSpeechTranscript,
@@ -42,11 +43,13 @@ function Sidebar({
   setAssistantMode,
 }) {
   const [showModeMenu, setShowModeMenu] = useState(false);
+  const [chatContextMenu, setChatContextMenu] = useState(null);
   const modeMenuRef = useRef(null);
 
   useEffect(() => {
     const closeModeMenu = (event) => {
       if (modeMenuRef.current && !modeMenuRef.current.contains(event.target)) setShowModeMenu(false);
+      if (!event.target.closest?.(".chat-project-context-menu")) setChatContextMenu(null);
     };
     document.addEventListener("mousedown", closeModeMenu);
     return () => document.removeEventListener("mousedown", closeModeMenu);
@@ -219,6 +222,15 @@ function Sidebar({
                         }}
                         className="sidebar-history-item"
                         title={conv.title}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setChatContextMenu({
+                            conversationId: conv.id,
+                            x: Math.min(event.clientX, window.innerWidth - 286),
+                            y: Math.min(event.clientY, window.innerHeight - Math.min(360, 112 + projects.length * 41)),
+                          });
+                        }}
                       >
                         <span style={{
                           overflow: "hidden",
@@ -535,6 +547,31 @@ function Sidebar({
           setActiveConversationId={setActiveConversationId}
           setActiveTab={setActiveTab}
         />}
+        {chatContextMenu && (
+          <div className="chat-project-context-menu" role="menu" style={{ left: chatContextMenu.x, top: chatContextMenu.y }}>
+            <strong>Move to Work project</strong>
+            {projects.length === 0 && <span>No projects yet — switch to Work to create one.</span>}
+            {projects.map((project) => (
+              <button type="button" role="menuitem" key={project.id} onClick={() => {
+                onMoveConversationToProject?.(chatContextMenu.conversationId, project.id);
+                setAssistantMode?.("work");
+                setActiveProjectId(project.id);
+                setActiveConversationId(chatContextMenu.conversationId);
+                setChatContextMenu(null);
+              }}>
+                <BriefcaseBusiness size={15} /> {project.name}
+              </button>
+            ))}
+            {conversations.find((conversation) => conversation.id === chatContextMenu.conversationId)?.projectId && (
+              <button type="button" role="menuitem" onClick={() => {
+                onMoveConversationToProject?.(chatContextMenu.conversationId, null);
+                setChatContextMenu(null);
+              }}>
+                <MessageSquare size={15} /> Move back to Chat
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Sidebar Footer with Host Telemetry System Specs */}
