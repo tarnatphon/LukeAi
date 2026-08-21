@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { Archive, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
+import ChatProjects from "./ChatProjects";
 
 function formatSidebarDate(value) {
   const date = new Date(value);
@@ -32,7 +33,11 @@ function Sidebar({
   setSelectedTtsOutput,
   showTtsHistory,
   setShowTtsHistory,
-  onDeleteTtsOutput
+  onDeleteTtsOutput,
+  projects = [],
+  setProjects,
+  activeProjectId,
+  setActiveProjectId
 }) {
   const prefetchProps = (tab) => ({
     onPointerEnter: () => prefetchWorkspace?.(tab),
@@ -491,6 +496,16 @@ function Sidebar({
             <span>Settings</span>
           </div>
         </div>
+
+        <ChatProjects
+          projects={projects}
+          setProjects={setProjects}
+          conversations={conversations}
+          activeProjectId={activeProjectId}
+          setActiveProjectId={setActiveProjectId}
+          setActiveConversationId={setActiveConversationId}
+          setActiveTab={setActiveTab}
+        />
       </div>
 
       {/* Sidebar Footer with Host Telemetry System Specs */}

@@ -332,6 +332,24 @@ function App() {
   const [conversations, setConversations] = useState([]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [showHistory, setShowHistory] = useState(false); // Default hide
+  const [chatProjects, setChatProjects] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("chat_projects") || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [activeProjectId, setActiveProjectId] = useState(() => localStorage.getItem("active_chat_project") || null);
+
+  useEffect(() => {
+    localStorage.setItem("chat_projects", JSON.stringify(chatProjects));
+  }, [chatProjects]);
+
+  useEffect(() => {
+    if (activeProjectId) localStorage.setItem("active_chat_project", activeProjectId);
+    else localStorage.removeItem("active_chat_project");
+  }, [activeProjectId]);
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     const saved = localStorage.getItem("sidebarVisible");
     return saved !== "false";
@@ -441,7 +459,8 @@ function App() {
           messages: msgs,
           timestamp: Date.now(),
           model: modelName,
-          ...(newTitle ? { title: newTitle } : {})
+          ...(newTitle ? { title: newTitle } : {}),
+          projectId: activeProjectId || list[idx].projectId || null,
         };
         list[idx] = conversation;
       } else {
@@ -450,14 +469,15 @@ function App() {
           title: newTitle || "Chat Session",
           model: modelName,
           messages: msgs,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          projectId: activeProjectId || null,
         };
         list.unshift(conversation);
       }
       persistConversation(conversation);
       return list;
     });
-  }, []);
+  }, [activeProjectId]);
 
   const handleDeleteConversation = useCallback((id, e) => {
     if (e) e.stopPropagation();
@@ -819,8 +839,12 @@ function App() {
       showTtsHistory={showTtsHistory}
       setShowTtsHistory={setShowTtsHistory}
       onDeleteTtsOutput={handleDeleteTtsOutput}
+      projects={chatProjects}
+      setProjects={setChatProjects}
+      activeProjectId={activeProjectId}
+      setActiveProjectId={setActiveProjectId}
     />
-  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput]);
+  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput, chatProjects, activeProjectId]);
 
   const handleStopServer = useCallback(async () => {
     if (!serverRunning || isStoppingServer) return;
