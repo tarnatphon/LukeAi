@@ -341,6 +341,7 @@ function App() {
     }
   });
   const [activeProjectId, setActiveProjectId] = useState(() => localStorage.getItem("active_chat_project") || null);
+  const [assistantMode, setAssistantMode] = useState(() => localStorage.getItem("luke_assistant_mode") === "work" ? "work" : "chat");
 
   useEffect(() => {
     localStorage.setItem("chat_projects", JSON.stringify(chatProjects));
@@ -350,6 +351,10 @@ function App() {
     if (activeProjectId) localStorage.setItem("active_chat_project", activeProjectId);
     else localStorage.removeItem("active_chat_project");
   }, [activeProjectId]);
+
+  useEffect(() => {
+    localStorage.setItem("luke_assistant_mode", assistantMode);
+  }, [assistantMode]);
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     const saved = localStorage.getItem("sidebarVisible");
     return saved !== "false";
@@ -461,6 +466,7 @@ function App() {
           model: modelName,
           ...(newTitle ? { title: newTitle } : {}),
           projectId: activeProjectId || list[idx].projectId || null,
+          assistantMode,
         };
         list[idx] = conversation;
       } else {
@@ -471,13 +477,14 @@ function App() {
           messages: msgs,
           timestamp: Date.now(),
           projectId: activeProjectId || null,
+          assistantMode,
         };
         list.unshift(conversation);
       }
       persistConversation(conversation);
       return list;
     });
-  }, [activeProjectId]);
+  }, [activeProjectId, assistantMode]);
 
   const handleDeleteConversation = useCallback((id, e) => {
     if (e) e.stopPropagation();
@@ -843,8 +850,14 @@ function App() {
       setProjects={setChatProjects}
       activeProjectId={activeProjectId}
       setActiveProjectId={setActiveProjectId}
+      assistantMode={assistantMode}
+      setAssistantMode={(mode) => {
+        setAssistantMode(mode);
+        setActiveConversationId(null);
+        setActiveTab("chat");
+      }}
     />
-  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput, chatProjects, activeProjectId]);
+  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput, chatProjects, activeProjectId, assistantMode]);
 
   const handleStopServer = useCallback(async () => {
     if (!serverRunning || isStoppingServer) return;
@@ -964,6 +977,8 @@ function App() {
             setShowHistory={setShowHistory}
             saveConversationState={saveConversationState}
             setIsLlmLoaded={setIsLlmLoaded}
+            assistantMode={assistantMode}
+            activeProject={chatProjects.find((project) => project.id === activeProjectId) || null}
           />
         </WorkspacePanel>
         )}

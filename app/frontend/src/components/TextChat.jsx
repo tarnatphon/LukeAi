@@ -120,7 +120,9 @@ function TextChat({
   showHistory,
   setShowHistory,
   saveConversationState,
-  setIsLlmLoaded
+  setIsLlmLoaded,
+  assistantMode = "chat",
+  activeProject = null,
 }) {
   const formatGenerationTime = (seconds) => {
     const value = Number(seconds) || 0;
@@ -709,8 +711,18 @@ function TextChat({
 
     try {
       const systemPrompt = textSettings?.systemPrompt || "You are a helpful local AI assistant.";
+      const workInstruction = assistantMode === "work"
+        ? [
+            "You are in Work mode. Help complete multi-step project work with clear plans, checkpoints, and concrete deliverables.",
+            activeProject?.name ? `Active project: ${activeProject.name}.` : "No project is currently selected.",
+            activeProject?.sourceFolders?.length
+              ? `Project source folders: ${activeProject.sourceFolders.join(", ")}. Treat these paths as project scope; do not claim to have read files unless their contents were provided.`
+              : "No source folders are attached to this project.",
+          ].join("\n")
+        : "You are in Chat mode. Prioritize natural conversation, direct answers, learning, and exploration.";
       const combinedSystemPrompt = [
         systemPrompt.trim(),
+        workInstruction,
         visionInstruction,
       ].filter(Boolean).join("\n\n");
       const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
@@ -1322,7 +1334,7 @@ function TextChat({
                     sendMessage();
                   }
                 }}
-                placeholder={status.ready ? "Message your local model... (Shift+Enter for new line)" : "Select and load a GGUF model above to begin"}
+                placeholder={status.ready ? (assistantMode === "work" ? "What should we work on? (Shift+Enter for new line)" : "Message your local model... (Shift+Enter for new line)") : "Select and load a GGUF model above to begin"}
                 disabled={!status.ready || isBusy}
                 rows={1}
               />

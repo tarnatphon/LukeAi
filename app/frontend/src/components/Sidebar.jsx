@@ -1,5 +1,5 @@
-import React, { memo } from "react";
-import { Archive, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
+import React, { memo, useEffect, useRef, useState } from "react";
+import { Archive, BriefcaseBusiness, Check, Image, FolderDown, MessageSquare, Mic, Settings, Sparkles, Home, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Film } from "lucide-react";
 import ChatProjects from "./ChatProjects";
 
 function formatSidebarDate(value) {
@@ -37,8 +37,20 @@ function Sidebar({
   projects = [],
   setProjects,
   activeProjectId,
-  setActiveProjectId
+  setActiveProjectId,
+  assistantMode = "chat",
+  setAssistantMode,
 }) {
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const modeMenuRef = useRef(null);
+
+  useEffect(() => {
+    const closeModeMenu = (event) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(event.target)) setShowModeMenu(false);
+    };
+    document.addEventListener("mousedown", closeModeMenu);
+    return () => document.removeEventListener("mousedown", closeModeMenu);
+  }, []);
   const prefetchProps = (tab) => ({
     onPointerEnter: () => prefetchWorkspace?.(tab),
     onFocus: () => prefetchWorkspace?.(tab),
@@ -76,9 +88,26 @@ function Sidebar({
     <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div>
         {/* Sidebar Header */}
-        <div className="sidebar-logo">
-          <Sparkles className="sidebar-logo-icon" />
-          <span className="sidebar-logo-text"><b>LUKE AI</b><small>Studio</small></span>
+        <div className="sidebar-mode-selector" ref={modeMenuRef}>
+          <button type="button" className="sidebar-mode-trigger" onClick={() => setShowModeMenu((open) => !open)} aria-expanded={showModeMenu} aria-haspopup="menu">
+            {assistantMode === "work" ? <BriefcaseBusiness size={19} /> : <Sparkles size={19} />}
+            <span>{assistantMode === "work" ? "Work" : "Chat"}</span>
+            <ChevronDown size={16} />
+          </button>
+          {showModeMenu && (
+            <div className="sidebar-mode-menu" role="menu">
+              <button type="button" role="menuitemradio" aria-checked={assistantMode === "chat"} onClick={() => { setAssistantMode?.("chat"); setShowModeMenu(false); }}>
+                <MessageSquare size={18} />
+                <span><b>Chat</b><small>Ask, learn, and explore</small></span>
+                {assistantMode === "chat" && <Check size={17} />}
+              </button>
+              <button type="button" role="menuitemradio" aria-checked={assistantMode === "work"} onClick={() => { setAssistantMode?.("work"); setShowModeMenu(false); }}>
+                <BriefcaseBusiness size={18} />
+                <span><b>Work</b><small>Build with project context</small></span>
+                {assistantMode === "work" && <Check size={17} />}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Sidebar Navigation Links (Material 3 style) */}
@@ -497,7 +526,7 @@ function Sidebar({
           </div>
         </div>
 
-        <ChatProjects
+        {assistantMode === "work" && <ChatProjects
           projects={projects}
           setProjects={setProjects}
           conversations={conversations}
@@ -505,7 +534,7 @@ function Sidebar({
           setActiveProjectId={setActiveProjectId}
           setActiveConversationId={setActiveConversationId}
           setActiveTab={setActiveTab}
-        />
+        />}
       </div>
 
       {/* Sidebar Footer with Host Telemetry System Specs */}

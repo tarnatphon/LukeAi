@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const projects = fs.readFileSync("app/frontend/src/components/ChatProjects.jsx", "utf8");
 const app = fs.readFileSync("app/frontend/src/App.jsx", "utf8");
 const sidebar = fs.readFileSync("app/frontend/src/components/Sidebar.jsx", "utf8");
+const chat = fs.readFileSync("app/frontend/src/components/TextChat.jsx", "utf8");
 
 function requireText(source, text, label) {
   if (!source.includes(text)) throw new Error(`${label}: ${text}`);
@@ -21,9 +22,16 @@ requireText(projects, "!draftFolders.includes(selectedPath)", "DUPLICATE_FOLDER_
 requireText(projects, "Source folders and files will not be deleted", "NON_DESTRUCTIVE_REMOVAL_NOTICE_MISSING");
 requireText(projects, "conversation.projectId === project.id", "PROJECT_CHAT_FILTER_MISSING");
 requireText(projects, "pinned", "PROJECT_PINNING_MISSING");
+requireText(app, 'localStorage.getItem("luke_assistant_mode")', "ASSISTANT_MODE_PERSISTENCE_MISSING");
+requireText(sidebar, 'setAssistantMode?.("chat")', "CHAT_MODE_OPTION_MISSING");
+requireText(sidebar, 'setAssistantMode?.("work")', "WORK_MODE_OPTION_MISSING");
+requireText(sidebar, 'assistantMode === "work" && <ChatProjects', "WORK_PROJECT_VISIBILITY_MISSING");
+requireText(chat, 'assistantMode === "work"', "WORK_MODE_PROMPT_MISSING");
+requireText(chat, "Project source folders:", "WORK_SOURCE_FOLDER_CONTEXT_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
 console.log("PASS: Native source folders can be added and detached without deleting files.");
 console.log("PASS: Project chats are grouped in the sidebar.");
+console.log("PASS: Chat and Work modes persist and use distinct model instructions.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");

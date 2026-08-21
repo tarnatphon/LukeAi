@@ -3865,6 +3865,16 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .chat-project-modal-actions .primary { background:var(--md-sys-color-primary); color:var(--md-sys-color-on-primary); }
 .chat-project-modal-actions .danger { color:var(--md-sys-color-error); background:color-mix(in srgb,var(--md-sys-color-error) 12%,transparent); }
 .chat-projects button:focus-visible,.chat-project-name input:focus-visible { outline:3px solid color-mix(in srgb,var(--md-sys-color-primary) 72%,white); outline-offset:2px; }
+.sidebar-mode-selector { position:relative; margin:14px 12px 8px; }
+.sidebar-mode-trigger { width:100%; min-height:44px; display:flex; align-items:center; gap:10px; padding:0 12px; border:1px solid var(--md-sys-color-outline-variant); border-radius:14px; background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface); cursor:pointer; font:inherit; font-weight:700; }
+.sidebar-mode-trigger span { flex:1; text-align:left; }
+.sidebar-mode-menu { position:absolute; z-index:90; top:calc(100% + 8px); left:0; width:min(290px,calc(100vw - 32px)); padding:8px; border:1px solid var(--md-sys-color-outline-variant); border-radius:16px; background:var(--md-sys-color-surface-container-high); box-shadow:0 18px 48px rgba(0,0,0,.34); }
+.sidebar-mode-menu button { width:100%; display:grid; grid-template-columns:20px 1fr 18px; align-items:center; gap:11px; padding:11px 10px; border:0; border-radius:11px; background:transparent; color:var(--md-sys-color-on-surface); cursor:pointer; text-align:left; font:inherit; }
+.sidebar-mode-menu button:hover { background:var(--md-sys-color-surface-container-highest); }
+.sidebar-mode-menu button>span { display:flex; flex-direction:column; gap:3px; }
+.sidebar-mode-menu b { font-size:.9rem; }
+.sidebar-mode-menu small { color:var(--md-sys-color-outline); font-size:.72rem; }
+.sidebar-mode-trigger:focus-visible,.sidebar-mode-menu button:focus-visible { outline:3px solid color-mix(in srgb,var(--md-sys-color-primary) 72%,white); outline-offset:2px; }
 
 /* Global modern scrollbars */
 ::-webkit-scrollbar {
