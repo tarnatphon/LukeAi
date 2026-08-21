@@ -230,6 +230,20 @@ function TextChat({
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+  const getHardwareContextTarget = () => {
+    const ramGb = Math.max(0, Number(specs?.ram_total_gb) || 0);
+    const cpuCores = Math.max(1, Number(specs?.cpu_cores_physical) || 1);
+    let target = ramGb >= 64 ? 32768 : ramGb >= 32 ? 16384 : ramGb >= 16 ? 8192 : 4096;
+    if (cpuCores <= 4) target = Math.min(target, 8192);
+    return target;
+  };
+
+  const getAdaptiveContextLimit = () => {
+    const hardwareTarget = getHardwareContextTarget();
+    const runtimeLimit = Number(status.settings?.contextSize) || hardwareTarget;
+    return Math.max(2048, Math.min(hardwareTarget, runtimeLimit));
+  };
+
   const messageText = (message) => {
     if (!message) return "";
     if (Array.isArray(message.content)) {
@@ -298,7 +312,7 @@ function TextChat({
   };
 
   const getAutoMaxResponseTokens = (promptTokens, thinkingEnabled) => {
-    const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
+    const contextLimit = getAdaptiveContextLimit();
     const safetyBuffer = thinkingEnabled ? 768 : 512;
     const preferredMinimum = thinkingEnabled ? 512 : 256;
     const available = contextLimit - promptTokens - safetyBuffer;
@@ -471,7 +485,7 @@ function TextChat({
 
   const buildTextStartOptions = (settings) => ({
     threads: settings?.threads || specs?.cpu_cores_physical || 4,
-    contextSize: settings?.contextSize ?? 0,
+    contextSize: getHardwareContextTarget(),
     gpuLayers: settings?.gpuLayers ?? -1,
     enableThinking: settings?.enableThinking === true,
     flashAttn: settings?.flashAttn,
@@ -533,7 +547,7 @@ function TextChat({
         if (conv.model && models.some(m => m.filename === conv.model)) {
           setSelectedModel(conv.model);
         }
-        const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
+        const contextLimit = getAdaptiveContextLimit();
         const reservedSystemTokens = estimateTokens(
           textSettings?.systemPrompt || "You are a helpful local AI assistant.",
         ) + 16;
@@ -663,7 +677,7 @@ function TextChat({
 
       const result = await startLlm(filename, {
         threads: textSettings?.threads || specs?.cpu_cores_physical || 4,
-        contextSize: textSettings?.contextSize ?? 0,
+        contextSize: getHardwareContextTarget(),
         gpuLayers: textSettings?.gpuLayers ?? -1,
         enableThinking: textSettings?.enableThinking === true,
         flashAttn: textSettings?.flashAttn,
@@ -824,7 +838,7 @@ function TextChat({
         approvalInstruction,
         visionInstruction,
       ].filter(Boolean).join("\n\n");
-      const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
+      const contextLimit = getAdaptiveContextLimit();
       const reservedSystemTokens = estimateTokens(combinedSystemPrompt) + 16;
       const managedContext = compactConversationContext(
         requestConversationMessages,
@@ -1145,58 +1159,6 @@ function TextChat({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-            {/* Context gauge */}
-            {(() => {
-              const maxTokens = status.settings?.contextSize || 4096;
-              const used = tokenUsage.total_tokens || 0;
-              const percent = Math.min(100, Math.round((used / maxTokens) * 100));
-              return (
-                <div style={{ display: "flex", alignItems: "center", gap: "7px" }} title={`Context Used: ${used} / ${maxTokens} tokens`}>
-                  <div style={{ position: "relative", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <svg width="32" height="32" viewBox="0 0 40 40">
-                      <circle cx="20" cy="20" r="16" stroke="var(--border-color)" strokeWidth="3" fill="transparent" />
-                      <circle cx="20" cy="20" r="16" stroke="var(--md-sys-color-primary)" strokeWidth="3" fill="transparent"
-                        strokeDasharray={2 * Math.PI * 16}
-                        strokeDashoffset={2 * Math.PI * 16 * (1 - percent / 100)}
-                        strokeLinecap="round" transform="rotate(-90 20 20)"
-                        style={{ transition: "stroke-dashoffset 0.35s" }}
-                      />
-                    </svg>
-                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ fontSize: "0.58rem", fontWeight: "700", lineHeight: 1 }}>{percent}%</span>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
-                    <span style={{ fontSize: "0.6rem", color: "var(--md-sys-color-outline)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Context</span>
-                    <span style={{ fontSize: "0.76rem", fontWeight: "600", color: "var(--md-sys-color-on-surface)" }}>{used} / {maxTokens}</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {memoryStatus.compressed && memoryStatus.conversationId === activeConversationId && (
-              <div
-                role="status"
-                title={`${memoryStatus.archivedCount} older messages remain saved and visible, but are represented by an automatic memory summary in the active model context.`}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  maxWidth: "190px",
-                  padding: "5px 9px",
-                  borderRadius: "var(--md-shape-corner-medium)",
-                  background: "var(--md-sys-color-secondary-container)",
-                  color: "var(--md-sys-color-on-secondary-container)",
-                  lineHeight: 1.15,
-                }}
-              >
-                <strong style={{ fontSize: "0.68rem" }}>Auto context refreshed</strong>
-                <span style={{ fontSize: "0.62rem" }}>
-                  {memoryStatus.archivedCount} older messages remain visible
-                </span>
-              </div>
-            )}
-
             <button
               className="m3-btn m3-btn-outlined"
               style={{ height: "32px", padding: "0 10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", borderRadius: "var(--md-shape-corner-medium)" }}
