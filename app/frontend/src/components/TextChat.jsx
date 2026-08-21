@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Bot, Check, ChevronLeft, ChevronRight, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Pencil, RefreshCw, Search, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Brain, Check, ChevronLeft, ChevronRight, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Pencil, RefreshCw, Search, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
 import WorkToolsPanel from "./WorkToolsPanel";
 import WorkTerminalDock from "./WorkTerminalDock";
+import ProjectMemoryPanel, { createWorkCheckpoint, getProjectMemory } from "./ProjectMemoryPanel";
 import {
   getDownloadProgress,
   getLlmStatus,
@@ -192,6 +193,7 @@ function TextChat({
   const [showApprovalMenu, setShowApprovalMenu] = useState(false);
   const [showWorkTools, setShowWorkTools] = useState(false);
   const [showBottomTerminal, setShowBottomTerminal] = useState(false);
+  const [showProjectMemory, setShowProjectMemory] = useState(false);
   const [messageQueue, setMessageQueue] = useState([]);
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
@@ -783,6 +785,10 @@ function TextChat({
       isNew = true;
     }
 
+    if (assistantMode === "work" && activeProject?.id && conversationBase.length > 0 && !queuedItem?.preserveComposer) {
+      createWorkCheckpoint(activeProject.id, conversationBase, "Before next Work message");
+    }
+
     // Delimited context blocks for document attachments
     let documentContext = "";
     sourceAttachments.filter(att => att.type === "document").forEach((att) => {
@@ -899,6 +905,9 @@ function TextChat({
         workInstruction,
         approvalInstruction,
         visionInstruction,
+        assistantMode === "work" && activeProject?.id && getProjectMemory(activeProject.id).length
+          ? `Project memory:\n${getProjectMemory(activeProject.id).map((item) => `- [${item.type}${item.pinned ? ", pinned" : ""}] ${item.text}`).join("\n")}`
+          : "",
       ].filter(Boolean).join("\n\n");
       const contextLimit = getAdaptiveContextLimit();
       const reservedSystemTokens = estimateTokens(combinedSystemPrompt) + 16;
@@ -1284,6 +1293,7 @@ function TextChat({
             <button type="button" className="m3-btn m3-btn-outlined" onClick={() => setShowMessageSearch((open) => !open)} aria-pressed={showMessageSearch} title="Search chats" style={{ height: "32px", padding: "0 9px" }}><Search size={16} /></button>
             {assistantMode === "work" && (
               <>
+                <button type="button" className="m3-btn m3-btn-outlined" onClick={() => setShowProjectMemory((open) => !open)} aria-pressed={showProjectMemory} title="Project Memory and checkpoints" style={{ height: "32px", padding: "0 9px" }}><Brain size={16} /></button>
                 <button type="button" className="m3-btn m3-btn-outlined" onClick={() => setShowBottomTerminal((open) => !open)} aria-pressed={showBottomTerminal} title="Toggle bottom Terminal" style={{ height: "32px", padding: "0 9px" }}><PanelBottom size={16} /></button>
                 <button type="button" className="m3-btn m3-btn-outlined" onClick={() => setShowWorkTools((open) => !open)} aria-pressed={showWorkTools} title="Toggle Work tools" style={{ height: "32px", padding: "0 9px" }}><PanelRight size={16} /></button>
               </>
@@ -1679,6 +1689,7 @@ function TextChat({
         {assistantMode === "work" && showBottomTerminal && <WorkTerminalDock project={activeProject} onClose={() => setShowBottomTerminal(false)} />}
       </section>
       {assistantMode === "work" && showWorkTools && <WorkToolsPanel project={activeProject} approvalMode={approvalMode} onClose={() => setShowWorkTools(false)} />}
+      {assistantMode === "work" && showProjectMemory && <ProjectMemoryPanel project={activeProject} messages={messages} onRestore={(checkpoint) => { setMessages(checkpoint.messages); if (activeConversationId) saveConversationState(activeConversationId, checkpoint.messages, selectedModel); }} onClose={() => setShowProjectMemory(false)} />}
     </div>
   );
 }

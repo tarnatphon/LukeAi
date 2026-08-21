@@ -11,6 +11,7 @@ const server = fs.readFileSync("scripts/server/serve.cjs", "utf8");
 const inspector = fs.readFileSync("scripts/server/work-environment-inspector.cjs", "utf8");
 const actionRunner = fs.readFileSync("scripts/server/work-action-runner.cjs", "utf8");
 const terminalDock = fs.readFileSync("app/frontend/src/components/WorkTerminalDock.jsx", "utf8");
+const projectMemory = fs.readFileSync("app/frontend/src/components/ProjectMemoryPanel.jsx", "utf8");
 
 function requireText(source, text, label) {
   if (!source.includes(text)) throw new Error(`${label}: ${text}`);
@@ -82,6 +83,11 @@ requireText(chat, "branchAlternatives", "CHAT_RESPONSE_BRANCH_STORAGE_MISSING");
 requireText(chat, 'aria-label="Retry response"', "CHAT_RETRY_ACTION_MISSING");
 requireText(chat, 'aria-label="Edit message and retry"', "CHAT_EDIT_RETRY_ACTION_MISSING");
 requireText(chat, 'aria-label="Response branches"', "CHAT_BRANCH_SWITCHER_MISSING");
+requireText(chat, "getProjectMemory", "PROJECT_MEMORY_PROMPT_MISSING");
+requireText(chat, "createWorkCheckpoint", "AUTOMATIC_WORK_CHECKPOINT_MISSING");
+requireText(projectMemory, 'aria-label="Project Memory and checkpoints"', "PROJECT_MEMORY_PANEL_MISSING");
+requireText(projectMemory, "Conversation checkpoints", "WORK_CHECKPOINT_UI_MISSING");
+requireText(projectMemory, "Project files are never changed", "CHECKPOINT_SCOPE_WARNING_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
@@ -93,4 +99,5 @@ console.log("PASS: Work Terminal, Browser and external apps are allowlisted and 
 console.log("PASS: Composer remains editable during streaming and supports an editable message queue.");
 console.log("PASS: Chat search covers current and project conversations with result navigation.");
 console.log("PASS: Edit and retry preserve previous responses as switchable conversation branches.");
+console.log("PASS: Work projects expose editable memory and restorable conversation checkpoints.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");
