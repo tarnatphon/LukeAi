@@ -78,6 +78,10 @@ requireText(chat, 'disabled={!status.ready}', "BUSY_COMPOSER_MUST_REMAIN_EDITABL
 requireText(chat, 'aria-label="Search chat messages"', "CHAT_SEARCH_INPUT_MISSING");
 requireText(chat, "messageSearchResults", "PROJECT_CHAT_SEARCH_MISSING");
 requireText(chat, 'aria-label="Next search result"', "CHAT_SEARCH_NAVIGATION_MISSING");
+requireText(chat, "branchAlternatives", "CHAT_RESPONSE_BRANCH_STORAGE_MISSING");
+requireText(chat, 'aria-label="Retry response"', "CHAT_RETRY_ACTION_MISSING");
+requireText(chat, 'aria-label="Edit message and retry"', "CHAT_EDIT_RETRY_ACTION_MISSING");
+requireText(chat, 'aria-label="Response branches"', "CHAT_BRANCH_SWITCHER_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
@@ -88,4 +92,5 @@ console.log("PASS: Work Tools exposes read-only Environment, Review and Files vi
 console.log("PASS: Work Terminal, Browser and external apps are allowlisted and approval-gated.");
 console.log("PASS: Composer remains editable during streaming and supports an editable message queue.");
 console.log("PASS: Chat search covers current and project conversations with result navigation.");
+console.log("PASS: Edit and retry preserve previous responses as switchable conversation branches.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");

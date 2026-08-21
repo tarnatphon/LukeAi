@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Bot, Check, ChevronLeft, ChevronRight, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Search, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Check, ChevronLeft, ChevronRight, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Pencil, RefreshCw, Search, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
 import WorkToolsPanel from "./WorkToolsPanel";
 import WorkTerminalDock from "./WorkTerminalDock";
 import {
@@ -774,6 +774,7 @@ function TextChat({
       return;
     }
 
+    const conversationBase = Array.isArray(queuedItem?.baseMessages) ? queuedItem.baseMessages : messages;
     let convId = activeConversationId;
     let isNew = false;
     if (!convId) {
@@ -789,7 +790,7 @@ function TextChat({
     });
 
     const imageAttachments = sourceAttachments.filter(att => att.type === "image");
-    const conversationHasImage = messages.some(messageContainsImage);
+    const conversationHasImage = conversationBase.some(messageContainsImage);
     const requestHasImage = imageAttachments.length > 0 || conversationHasImage;
     const visionInstruction = requestHasImage
       ? "For images in this conversation: answer in natural language, describe the actual image content, and read visible text carefully when relevant. If the user asks a follow-up like \"what is this\" or \"explain\", treat it as referring to the most recent image unless they say otherwise. Do not output raw JSON, arrays, bounding boxes, OCR layout objects, UI class names, or detection labels unless the user explicitly asks for that format."
@@ -838,17 +839,26 @@ function TextChat({
       requestUserMessageContent = requestCombinedText;
     }
 
-    const nextMessages = [...messages, { role: "user", content: userMessageContent }];
-    const requestConversationMessages = [...messages, { role: "user", content: requestUserMessageContent }];
+    const branchGroupId = queuedItem?.branchGroupId || `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const userMessage = {
+      role: "user",
+      content: userMessageContent,
+      branchGroupId,
+      branchAlternatives: Array.isArray(queuedItem?.branchAlternatives) ? queuedItem.branchAlternatives : [],
+    };
+    const nextMessages = [...conversationBase, userMessage];
+    const requestConversationMessages = [...conversationBase, { role: "user", content: requestUserMessageContent }];
     followGenerationRef.current = true;
     setMessages(nextMessages);
-    setAttachments([]);
-    if (textareaRef.current) textareaRef.current.value = "";
-    draftLatestRef.current[draftStorageKey] = "";
-    clearTimeout(draftSaveTimerRef.current);
-    localStorage.removeItem(draftStorageKey);
-    setDraftAvailable(false);
-    requestAnimationFrame(resizeComposerInput);
+    if (!queuedItem?.preserveComposer) {
+      setAttachments([]);
+      if (textareaRef.current) textareaRef.current.value = "";
+      draftLatestRef.current[draftStorageKey] = "";
+      clearTimeout(draftSaveTimerRef.current);
+      localStorage.removeItem(draftStorageKey);
+      setDraftAvailable(false);
+      requestAnimationFrame(resizeComposerInput);
+    }
     setIsBusy(true);
 
     const displayTitleText = text || (imageAttachments.length > 0 ? "Sent Image" : "Sent File");
@@ -1104,6 +1114,60 @@ function TextChat({
     const timer = setTimeout(() => { void sendMessage(nextItem, true); }, 0);
     return () => clearTimeout(timer);
   }, [isBusy, status.ready, messageQueue]);
+
+  const stripBranchAlternatives = (tail) => tail.map((message, index) => index === 0
+    ? { ...message, branchAlternatives: [] }
+    : message);
+
+  const retryFromUserMessage = (userIndex, replacementText = null) => {
+    if (isBusy || userIndex < 0 || messages[userIndex]?.role !== "user") return;
+    const originalUser = messages[userIndex];
+    if (messageContainsImage(originalUser)) {
+      showAlert({ title: "Retry with image", message: "Image branches are not available yet. Start a new message with the image attached.", danger: false });
+      return;
+    }
+    const originalText = messageText(originalUser);
+    const nextText = String(replacementText ?? originalText).trim();
+    if (!nextText) return;
+    const originalTail = stripBranchAlternatives(messages.slice(userIndex));
+    const alternatives = [
+      ...(originalUser.branchAlternatives || []),
+      { id: `alternative_${Date.now()}`, label: "Previous response", messages: originalTail },
+    ];
+    void sendMessage({
+      text: nextText,
+      attachments: [],
+      baseMessages: messages.slice(0, userIndex),
+      branchGroupId: originalUser.branchGroupId || `branch_${Date.now()}`,
+      branchAlternatives: alternatives,
+      preserveComposer: true,
+    }, true);
+  };
+
+  const editAndRetryUserMessage = (userIndex) => {
+    const currentText = messageText(messages[userIndex]);
+    const replacement = window.prompt("Edit this message and create a new response branch:", currentText);
+    if (replacement !== null && replacement.trim() && replacement.trim() !== currentText) retryFromUserMessage(userIndex, replacement);
+  };
+
+  const switchMessageBranch = (userIndex, alternativeIndex) => {
+    if (isBusy) return;
+    const activeUser = messages[userIndex];
+    const alternatives = activeUser?.branchAlternatives || [];
+    const selected = alternatives[alternativeIndex];
+    if (!selected?.messages?.length) return;
+    const currentTail = stripBranchAlternatives(messages.slice(userIndex));
+    const nextAlternatives = [
+      ...alternatives.filter((_, index) => index !== alternativeIndex),
+      { id: `alternative_${Date.now()}`, label: "Alternate response", messages: currentTail },
+    ];
+    const selectedTail = selected.messages.map((message, index) => index === 0
+      ? { ...message, branchGroupId: activeUser.branchGroupId, branchAlternatives: nextAlternatives }
+      : message);
+    const nextMessages = [...messages.slice(0, userIndex), ...selectedTail];
+    setMessages(nextMessages);
+    if (activeConversationId) saveConversationState(activeConversationId, nextMessages, selectedModel);
+  };
 
   const handleClearChat = () => {
     setMessages([]);
@@ -1372,7 +1436,18 @@ function TextChat({
                       {message.role === "assistant" && hasDisplayContent && (
                         <div className="chat-message-actions">
                           <CopyContentButton value={Array.isArray(displayContent) ? displayContent.map((item) => item?.text || "").join("\n") : displayContent} label="Copy response" />
+                          <button type="button" className="chat-copy-button" disabled={isBusy} onClick={() => retryFromUserMessage(index - 1)} aria-label="Retry response"><RefreshCw size={14} /><span>Retry</span></button>
+                          {messages[index - 1]?.role === "user" && (messages[index - 1].branchAlternatives || []).length > 0 && (
+                            <div className="chat-branch-switcher" aria-label="Response branches">
+                              <button type="button" disabled={isBusy} onClick={() => switchMessageBranch(index - 1, 0)} aria-label="Previous response branch"><ChevronLeft size={14} /></button>
+                              <span>{(messages[index - 1].branchAlternatives || []).length + 1} branches</span>
+                              <button type="button" disabled={isBusy} onClick={() => switchMessageBranch(index - 1, 0)} aria-label="Next response branch"><ChevronRight size={14} /></button>
+                            </div>
+                          )}
                         </div>
+                      )}
+                      {message.role === "user" && hasDisplayContent && (
+                        <div className="chat-message-actions"><button type="button" className="chat-copy-button" disabled={isBusy} onClick={() => editAndRetryUserMessage(index)} aria-label="Edit message and retry"><Pencil size={14} /><span>Edit</span></button></div>
                       )}
                       {message.role === "assistant" && Array.isArray(message.webSources) && message.webSources.length > 0 && (
                         <div style={{

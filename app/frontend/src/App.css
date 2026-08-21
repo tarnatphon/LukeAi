@@ -10009,3 +10009,7 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .chat-message-search button { display: inline-flex; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
 .chat-message-search button:hover:not(:disabled) { background: var(--md-sys-color-surface-variant); }
 .chat-message-search button:disabled { opacity: 0.35; }
+.chat-branch-switcher { display: inline-flex; align-items: center; gap: 4px; color: var(--md-sys-color-outline); font-size: 0.72rem; }
+.chat-branch-switcher button { display: inline-flex; padding: 3px; border: 0; border-radius: 5px; color: inherit; background: transparent; cursor: pointer; }
+.chat-branch-switcher button:hover:not(:disabled) { background: var(--md-sys-color-surface-variant); }
+.chat-branch-switcher button:disabled { opacity: 0.35; }
