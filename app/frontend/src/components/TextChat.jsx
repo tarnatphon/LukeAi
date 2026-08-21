@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bot, Check, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Check, Copy, Hand, LoaderCircle, PanelBottom, PanelRight, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
 import WorkToolsPanel from "./WorkToolsPanel";
 import WorkTerminalDock from "./WorkTerminalDock";
 import {
@@ -192,6 +192,7 @@ function TextChat({
   const [showApprovalMenu, setShowApprovalMenu] = useState(false);
   const [showWorkTools, setShowWorkTools] = useState(false);
   const [showBottomTerminal, setShowBottomTerminal] = useState(false);
+  const [messageQueue, setMessageQueue] = useState([]);
   const approvalMenuRef = useRef(null);
 
   useEffect(() => {
@@ -722,10 +723,26 @@ function TextChat({
     setActiveConversationId(null);
   };
 
-  const sendMessage = async () => {
-    const text = String(textareaRef.current?.value || "").trim();
-    const hasAttachments = attachments.length > 0;
-    if ((!text && !hasAttachments) || isBusy || !status.ready) return;
+  const sendMessage = async (queuedItem = null, fromQueue = false) => {
+    const sourceAttachments = queuedItem?.attachments || attachments;
+    const text = String(queuedItem?.text ?? textareaRef.current?.value ?? "").trim();
+    const hasAttachments = sourceAttachments.length > 0;
+    if ((!text && !hasAttachments) || !status.ready) return;
+
+    if (isBusy && !fromQueue) {
+      setMessageQueue((current) => [...current, {
+        id: `queued_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        text,
+        attachments: sourceAttachments,
+      }]);
+      if (textareaRef.current) textareaRef.current.value = "";
+      setAttachments([]);
+      draftLatestRef.current[draftStorageKey] = "";
+      localStorage.removeItem(draftStorageKey);
+      setDraftAvailable(false);
+      requestAnimationFrame(resizeComposerInput);
+      return;
+    }
 
     let convId = activeConversationId;
     let isNew = false;
@@ -737,11 +754,11 @@ function TextChat({
 
     // Delimited context blocks for document attachments
     let documentContext = "";
-    attachments.filter(att => att.type === "document").forEach((att) => {
+    sourceAttachments.filter(att => att.type === "document").forEach((att) => {
       documentContext += `\n[Attached File: ${att.name}]\n${att.content}\n`;
     });
 
-    const imageAttachments = attachments.filter(att => att.type === "image");
+    const imageAttachments = sourceAttachments.filter(att => att.type === "image");
     const conversationHasImage = messages.some(messageContainsImage);
     const requestHasImage = imageAttachments.length > 0 || conversationHasImage;
     const visionInstruction = requestHasImage
@@ -795,6 +812,7 @@ function TextChat({
     const requestConversationMessages = [...messages, { role: "user", content: requestUserMessageContent }];
     followGenerationRef.current = true;
     setMessages(nextMessages);
+    setAttachments([]);
     if (textareaRef.current) textareaRef.current.value = "";
     draftLatestRef.current[draftStorageKey] = "";
     clearTimeout(draftSaveTimerRef.current);
@@ -1018,8 +1036,6 @@ function TextChat({
         : finalUsageEstimate
       );
       
-      // Clean up attached files on success
-      setAttachments([]);
     } catch (err) {
       if (err.name === "AbortError") {
         setMessages((prev) => {
@@ -1050,6 +1066,14 @@ function TextChat({
       }, 250);
     }
   };
+
+  useEffect(() => {
+    if (isBusy || !status.ready || messageQueue.length === 0) return;
+    const [nextItem, ...remaining] = messageQueue;
+    setMessageQueue(remaining);
+    const timer = setTimeout(() => { void sendMessage(nextItem, true); }, 0);
+    return () => clearTimeout(timer);
+  }, [isBusy, status.ready, messageQueue]);
 
   const handleClearChat = () => {
     setMessages([]);
@@ -1362,6 +1386,30 @@ function TextChat({
 
         {/* ─── Composer ───────────────────────────────────────── */}
         <div className="chat-composer">
+          {messageQueue.length > 0 && (
+            <div className="chat-message-queue" aria-label="Queued messages" aria-live="polite">
+              <div className="chat-message-queue-heading"><strong>Next messages</strong><span>{messageQueue.length} queued</span></div>
+              {messageQueue.map((item, index) => (
+                <div className="chat-message-queue-item" key={item.id}>
+                  <span className="chat-message-queue-number">{index + 1}</span>
+                  <input value={item.text} aria-label={`Edit queued message ${index + 1}`} onChange={(event) => setMessageQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, text: event.target.value } : candidate))} />
+                  <button type="button" onClick={() => setMessageQueue((current) => {
+                    if (index === 0) return current;
+                    const next = [...current];
+                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                    return next;
+                  })} disabled={index === 0} aria-label={`Move queued message ${index + 1} up`}><ArrowUp size={14} /></button>
+                  <button type="button" onClick={() => setMessageQueue((current) => {
+                    if (index >= current.length - 1) return current;
+                    const next = [...current];
+                    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                    return next;
+                  })} disabled={index === messageQueue.length - 1} aria-label={`Move queued message ${index + 1} down`}><ArrowDown size={14} /></button>
+                  <button type="button" onClick={() => setMessageQueue((current) => current.filter((candidate) => candidate.id !== item.id))} aria-label={`Remove queued message ${index + 1}`}><X size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Attachment previews */}
           {attachments.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", paddingBottom: "10px" }}>
@@ -1412,7 +1460,7 @@ function TextChat({
                   }
                 }}
                 placeholder={status.ready ? (assistantMode === "work" ? "What should we work on? (Shift+Enter for new line)" : "Message your local model... (Shift+Enter for new line)") : "Select and load a GGUF model above to begin"}
-                disabled={!status.ready || isBusy}
+                disabled={!status.ready}
                 rows={1}
               />
             </div>
@@ -1423,7 +1471,7 @@ function TextChat({
                 <button
                   className="chat-composer-attach-btn"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={!supportsVision || isBusy}
+                  disabled={!supportsVision}
                   title={supportsVision ? "Attach files or images" : visionStatus}
                 >
                   <Paperclip size={17} />
@@ -1431,7 +1479,7 @@ function TextChat({
                 <button
                   className={`chat-composer-deepthink-btn web-search-btn ${useWebSearch ? "active" : ""}`}
                   onClick={() => setUseWebSearch((value) => !value)}
-                  disabled={!status.ready || isBusy}
+                  disabled={!status.ready}
                   title={useWebSearch ? "Disable web search" : "Enable web search"}
                 >
                   <Globe2 size={14} />
@@ -1488,20 +1536,19 @@ function TextChat({
               </div>
 
               <div className="chat-composer-toolbar-right">
-                {isBusy && status.ready ? (
+                {isBusy && status.ready && (
                   <button className="chat-composer-stop-btn" onClick={handleStopGeneration} title="Stop generation">
                     <Square size={15} fill="currentColor" />
                   </button>
-                ) : (
-                  <button
-                    className="chat-composer-send-btn"
-                    onClick={sendMessage}
-                    disabled={(!draftAvailable && attachments.length === 0) || !status.ready}
-                    title="Send message"
-                  >
-                    <Send size={17} />
-                  </button>
                 )}
+                <button
+                  className="chat-composer-send-btn"
+                  onClick={() => void sendMessage()}
+                  disabled={(!draftAvailable && attachments.length === 0) || !status.ready}
+                  title={isBusy ? "Add message to queue" : "Send message"}
+                >
+                  <Send size={17} />
+                </button>
               </div>
             </div>
           </div>

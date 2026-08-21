@@ -9951,3 +9951,38 @@ html[data-theme^="dark"] .settings-subsection:hover {
   justify-content: center;
   gap: 0.75rem;
 }
+.chat-message-queue {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--md-sys-color-surface-container);
+}
+
+.chat-message-queue-heading,
+.chat-message-queue-item { display: flex; align-items: center; gap: 7px; }
+.chat-message-queue-heading { justify-content: space-between; font-size: 0.78rem; }
+.chat-message-queue-heading span { color: var(--md-sys-color-outline); }
+.chat-message-queue-number { width: 20px; color: var(--md-sys-color-outline); text-align: center; font-size: 0.75rem; }
+.chat-message-queue-item input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+.chat-message-queue-item button {
+  display: inline-flex;
+  padding: 5px;
+  color: var(--md-sys-color-on-surface-variant);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.chat-message-queue-item button:hover:not(:disabled) { background: var(--md-sys-color-surface-variant); }
+.chat-message-queue-item button:disabled { opacity: 0.35; cursor: default; }

@@ -69,6 +69,12 @@ requireText(terminalDock, 'event.key === "ArrowUp"', "TERMINAL_HISTORY_MISSING")
 requireText(server, 'req.url === "/api/work/terminal"', "TYPED_TERMINAL_API_MISSING");
 requireText(actionRunner, "runTypedWorkCommand", "TYPED_TERMINAL_RUNNER_MISSING");
 requireText(actionRunner, "Pipes, redirection, substitutions", "TERMINAL_METACHAR_GUARD_MISSING");
+requireText(chat, "messageQueue", "MESSAGE_QUEUE_STATE_MISSING");
+requireText(chat, 'aria-label="Queued messages"', "MESSAGE_QUEUE_UI_MISSING");
+requireText(chat, "Add message to queue", "MESSAGE_QUEUE_SEND_ACTION_MISSING");
+requireText(chat, "Edit queued message", "MESSAGE_QUEUE_EDIT_MISSING");
+requireText(chat, "Move queued message", "MESSAGE_QUEUE_REORDER_MISSING");
+requireText(chat, 'disabled={!status.ready}', "BUSY_COMPOSER_MUST_REMAIN_EDITABLE");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
@@ -77,4 +83,5 @@ console.log("PASS: Project chats are grouped in the sidebar.");
 console.log("PASS: Chat and Work modes persist and use distinct model instructions.");
 console.log("PASS: Work Tools exposes read-only Environment, Review and Files views.");
 console.log("PASS: Work Terminal, Browser and external apps are allowlisted and approval-gated.");
+console.log("PASS: Composer remains editable during streaming and supports an editable message queue.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");
