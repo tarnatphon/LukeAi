@@ -4,6 +4,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
+const { readWorkFile } = require("./work-file-manager.cjs");
 
 const execFileAsync = promisify(execFile);
 const READ_ONLY_COMMANDS = {
@@ -100,8 +101,21 @@ async function runTypedWorkCommand({ root, command }) {
     const output = entries.filter((entry) => showHidden || !entry.name.startsWith(".")).map((entry) => `${entry.isDirectory() ? "d" : "-"} ${entry.name}`).join("\n");
     return { command, output, exitCode: 0 };
   }
+  if (file === "cat" && args.length === 1) {
+    const opened = await readWorkFile({ root: cwd, filePath: args[0] });
+    return { command, output: opened.content, exitCode: 0 };
+  }
+  if ((file === "head" || file === "tail") && args.length >= 1) {
+    let count = 20;
+    let filePath = args[args.length - 1];
+    if (args.length === 3 && args[0] === "-n" && /^(?:[1-9]|[1-9]\d|1\d\d|200)$/.test(args[1])) count = Number(args[1]);
+    else if (args.length !== 1) throw Object.assign(new Error(`Usage: ${file} [-n 1-200] <project-file>`), { statusCode: 400 });
+    const opened = await readWorkFile({ root: cwd, filePath });
+    const lines = opened.content.split(/\r?\n/);
+    return { command, output: (file === "head" ? lines.slice(0, count) : lines.slice(-count)).join("\n"), exitCode: 0 };
+  }
   if (file !== "git" || !validateGitArguments(args)) {
-    const error = new Error("Command not allowed. Available: pwd, ls [-la], git status/diff/log/show/branch/rev-parse with read-only options.");
+    const error = new Error("Command not allowed. Available: pwd, ls [-la], cat <file>, head/tail [-n 1-200] <file>, git status/diff/log/show/branch/rev-parse with read-only options.");
     error.statusCode = 400;
     throw error;
   }

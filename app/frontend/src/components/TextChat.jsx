@@ -369,8 +369,8 @@ function TextChat({
   // rAF batching: accumulate token updates and flush once per frame
   const tokenBufferRef = useRef(null);
   const rafRef = useRef(null);
-  // Debounced stats: only update stats pill every 250ms
-  const statsDebounceRef = useRef(null);
+  const streamFlushTimerRef = useRef(null);
+  const lastStreamPaintRef = useRef(0);
   const draftSaveTimerRef = useRef(null);
   const draftLatestRef = useRef({ [draftStorageKey]: localStorage.getItem(draftStorageKey) || "" });
 
@@ -391,6 +391,51 @@ function TextChat({
     textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }, []);
+
+  const flushStreamBuffer = useCallback(() => {
+    const buffer = tokenBufferRef.current;
+    if (buffer) {
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (updated.length > 0 && updated[updated.length - 1].role === "assistant") {
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: buffer.content,
+            reasoning: buffer.reasoning,
+            thinkingDuration: buffer.thinkingDuration,
+            generationStats: buffer.stats,
+          };
+        }
+        return updated;
+      });
+      tokenBufferRef.current = null;
+      lastStreamPaintRef.current = performance.now();
+    }
+    rafRef.current = null;
+    streamFlushTimerRef.current = null;
+  }, []);
+
+  const scheduleStreamPaint = useCallback(() => {
+    if (streamFlushTimerRef.current || rafRef.current) return;
+    const frameBudget = document.visibilityState === "visible" ? 40 : 160;
+    const elapsed = performance.now() - lastStreamPaintRef.current;
+    const delay = Math.max(0, frameBudget - elapsed);
+    streamFlushTimerRef.current = setTimeout(() => {
+      streamFlushTimerRef.current = null;
+      if (document.visibilityState === "visible") rafRef.current = requestAnimationFrame(flushStreamBuffer);
+      else flushStreamBuffer();
+    }, delay);
+  }, [flushStreamBuffer]);
+
+  const cancelPendingStreamPaint = useCallback(() => {
+    clearTimeout(streamFlushTimerRef.current);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    streamFlushTimerRef.current = null;
+    rafRef.current = null;
+    tokenBufferRef.current = null;
+  }, []);
+
+  useEffect(() => () => cancelPendingStreamPaint(), [cancelPendingStreamPaint]);
 
   useLayoutEffect(() => {
     draftLatestRef.current[draftStorageKey] = localStorage.getItem(draftStorageKey) || "";
@@ -1024,8 +1069,8 @@ function TextChat({
           tokensPerSecond: streamedTokens / generationSeconds,
           seconds: (now - requestStartedAt) / 1000,
         };
-        // rAF batching: accumulate updates and flush once per frame (~16ms)
-        // This reduces React re-renders from N per token to ~60/sec
+        // Adaptive paint batching keeps token intake fast while limiting expensive
+        // Markdown/chat renders to ~25 FPS when visible and ~6 FPS in background.
         tokenBufferRef.current = {
           content: processed.content,
           reasoning: processed.reasoning,
@@ -1033,28 +1078,7 @@ function TextChat({
           stats: currentStats,
         };
 
-        if (!rafRef.current) {
-          rafRef.current = requestAnimationFrame(() => {
-            const buffer = tokenBufferRef.current;
-            if (buffer) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                if (updated.length > 0 && updated[updated.length - 1].role === "assistant") {
-                  updated[updated.length - 1] = {
-                    ...updated[updated.length - 1],
-                    content: buffer.content,
-                    reasoning: buffer.reasoning,
-                    thinkingDuration: buffer.thinkingDuration,
-                    generationStats: buffer.stats,
-                  };
-                }
-                return updated;
-              });
-              tokenBufferRef.current = null;
-            }
-            rafRef.current = null;
-          });
-        }
+        scheduleStreamPaint();
       });
 
       const completedAt = performance.now();
@@ -1089,6 +1113,7 @@ function TextChat({
         generationStats,
         webSources: response.webSources || [],
       }];
+      cancelPendingStreamPaint();
       setMessages(finalMessages);
       saveConversationState(convId, finalMessages, selectedModel);
       const finalCompletionEstimate = Math.max(
@@ -1110,6 +1135,8 @@ function TextChat({
       );
       
     } catch (err) {
+      const interruptedBuffer = tokenBufferRef.current;
+      cancelPendingStreamPaint();
       if (err.name === "AbortError") {
         setMessages((prev) => {
           const updated = [...prev];
@@ -1117,8 +1144,11 @@ function TextChat({
             const lastMsg = updated[updated.length - 1];
             updated[updated.length - 1] = {
               ...lastMsg,
-              generationStats: lastMsg.generationStats ? {
-                ...lastMsg.generationStats,
+              content: interruptedBuffer?.content ?? lastMsg.content,
+              reasoning: interruptedBuffer?.reasoning ?? lastMsg.reasoning,
+              thinkingDuration: interruptedBuffer?.thinkingDuration ?? lastMsg.thinkingDuration,
+              generationStats: (interruptedBuffer?.stats || lastMsg.generationStats) ? {
+                ...(interruptedBuffer?.stats || lastMsg.generationStats),
                 status: "complete",
               } : null
             };

@@ -12,6 +12,7 @@ const inspector = fs.readFileSync("scripts/server/work-environment-inspector.cjs
 const actionRunner = fs.readFileSync("scripts/server/work-action-runner.cjs", "utf8");
 const terminalDock = fs.readFileSync("app/frontend/src/components/WorkTerminalDock.jsx", "utf8");
 const projectMemory = fs.readFileSync("app/frontend/src/components/ProjectMemoryPanel.jsx", "utf8");
+const workFiles = fs.readFileSync("scripts/server/work-file-manager.cjs", "utf8");
 
 function requireText(source, text, label) {
   if (!source.includes(text)) throw new Error(`${label}: ${text}`);
@@ -93,6 +94,16 @@ requireText(chat, '"/checkpoint"', "CHECKPOINT_SLASH_COMMAND_MISSING");
 requireText(chat, '"@file"', "FILE_MENTION_MISSING");
 requireText(chat, 'aria-label="Send code to Work Terminal"', "CODE_TO_TERMINAL_ACTION_MISSING");
 requireText(terminalDock, '"luke:work-terminal-command"', "TERMINAL_CODE_RECEIVER_MISSING");
+requireText(workTools, 'fetch("/api/work/file/read"', "WORK_FILE_READER_MISSING");
+requireText(workTools, 'fetch("/api/work/file/write"', "WORK_FILE_EDITOR_MISSING");
+requireText(workTools, 'event.key.toLowerCase() === "s"', "WORK_FILE_SAVE_SHORTCUT_MISSING");
+requireText(server, 'req.url === "/api/work/file/read"', "WORK_FILE_READ_API_MISSING");
+requireText(server, 'req.url === "/api/work/file/write"', "WORK_FILE_WRITE_API_MISSING");
+requireText(workFiles, "approvalGranted !== true", "WORK_FILE_APPROVAL_GUARD_MISSING");
+requireText(workFiles, "Work file symlink escaped", "WORK_FILE_SYMLINK_GUARD_MISSING");
+requireText(actionRunner, 'file === "cat"', "TERMINAL_CAT_MISSING");
+requireText(actionRunner, 'file === "head" || file === "tail"', "TERMINAL_HEAD_TAIL_MISSING");
+requireText(terminalDock, 'title="Copy Terminal output"', "TERMINAL_COPY_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
@@ -106,4 +117,6 @@ console.log("PASS: Chat search covers current and project conversations with res
 console.log("PASS: Edit and retry preserve previous responses as switchable conversation branches.");
 console.log("PASS: Work projects expose editable memory and restorable conversation checkpoints.");
 console.log("PASS: Composer mentions, slash commands and safe code-to-terminal actions are connected.");
+console.log("PASS: Work Files edits confined text files with explicit write approval.");
+console.log("PASS: Work Terminal reads files with allowlisted commands and copies output.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");

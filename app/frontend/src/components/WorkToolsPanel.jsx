@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ExternalLink, File, Folder, GitBranch, Globe2, PanelRightClose, RefreshCw, Terminal } from "lucide-react";
+import { ExternalLink, File, Folder, GitBranch, Globe2, PanelRightClose, RefreshCw, Save, Terminal, X } from "lucide-react";
+
+const WORK_FILES_CSS = `.work-files-workspace{display:flex;flex-direction:column;gap:10px}.work-file-list>button{width:100%;display:flex;align-items:center;gap:8px;padding:7px 4px;border:0;border-radius:7px;background:transparent;color:inherit;cursor:pointer;font:inherit;font-size:.73rem;text-align:left}.work-file-list>button:hover,.work-file-list>button.active{background:var(--md-sys-color-secondary-container)}.work-file-list>button span,.work-file-editor strong,.work-file-editor small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.work-file-editor{display:flex;flex-direction:column;gap:9px;min-height:310px;padding:13px;border:1px solid var(--md-sys-color-outline-variant);border-radius:13px;background:var(--md-sys-color-surface-container)}.work-file-editor>header,.work-file-editor>footer{display:flex;align-items:center;justify-content:space-between;gap:8px}.work-file-editor>header>div{min-width:0;display:flex;flex-direction:column;gap:2px}.work-file-editor small,.work-file-editor>footer span{color:var(--md-sys-color-outline);font-size:.65rem}.work-file-editor textarea{flex:1;min-height:220px;resize:vertical;padding:10px;border:1px solid var(--md-sys-color-outline-variant);border-radius:9px;outline:0;background:#111;color:#d8eadf;caret-color:#67d391;font:12px/1.5 monospace;tab-size:2}.work-file-editor button{display:flex;align-items:center;gap:5px;min-height:29px;padding:0 8px;border:1px solid var(--md-sys-color-outline-variant);border-radius:8px;background:transparent;color:inherit;cursor:pointer}.work-file-editor button:disabled{opacity:.4;cursor:not-allowed}`;
 
 export default function WorkToolsPanel({ project, approvalMode = "auto", onClose }) {
   const [tab, setTab] = useState("environment");
@@ -9,6 +11,10 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
   const [terminalOutput, setTerminalOutput] = useState("Choose a read-only command to inspect this project.");
   const [terminalBusy, setTerminalBusy] = useState(false);
   const [browserUrl, setBrowserUrl] = useState("https://www.google.com");
+  const [openFile, setOpenFile] = useState(null);
+  const [fileDraft, setFileDraft] = useState("");
+  const [fileBusy, setFileBusy] = useState(false);
+  const fileDirty = Boolean(openFile && fileDraft !== openFile.content);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -69,11 +75,56 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
     }
   };
 
+  const readFile = async (filePath) => {
+    if (!environment?.activeRoot || fileBusy) return;
+    if (fileDirty && !window.confirm("Discard the unsaved Work file changes?")) return;
+    setFileBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/work/file/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root: environment.activeRoot, path: filePath }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not open the Work file.");
+      setOpenFile(data.file);
+      setFileDraft(data.file.content);
+    } catch (readError) {
+      setError(readError instanceof Error ? readError.message : String(readError));
+    } finally {
+      setFileBusy(false);
+    }
+  };
+
+  const saveFile = async () => {
+    if (!environment?.activeRoot || !openFile || !fileDirty || fileBusy) return;
+    if (approvalMode !== "full" && !window.confirm(`Allow LUKE AI to save ${openFile.path}?`)) return;
+    setFileBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/work/file/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root: environment.activeRoot, path: openFile.path, content: fileDraft, approvalGranted: true }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save the Work file.");
+      setOpenFile((current) => ({ ...current, content: fileDraft, sizeBytes: data.result?.sizeBytes ?? current.sizeBytes }));
+      await refresh();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    } finally {
+      setFileBusy(false);
+    }
+  };
+
   const repository = environment?.repository;
   return (
     <aside className="work-tools-panel" aria-label="Work tools">
+      <style>{WORK_FILES_CSS}</style>
       <header>
-        <div><strong>{project?.name || "Work tools"}</strong><small>Read-only project view</small></div>
+        <div><strong>{project?.name || "Work tools"}</strong><small>Project tools · guarded writes</small></div>
         <button type="button" onClick={refresh} disabled={loading} title="Refresh"><RefreshCw size={16} className={loading ? "progress-spinner" : ""} /></button>
         <button type="button" onClick={onClose} title="Close side panel"><PanelRightClose size={17} /></button>
       </header>
@@ -102,9 +153,18 @@ export default function WorkToolsPanel({ project, approvalMode = "auto", onClose
           </div>
         )}
         {!error && environment && tab === "files" && (
-          <div className="work-file-list">
-            <h3>Files <span>{environment.files.length}</span></h3>
-            {environment.files.map((entry) => <div key={entry.name}>{entry.type === "folder" ? <Folder size={15} /> : <File size={15} />}<span title={entry.name}>{entry.name}</span></div>)}
+          <div className="work-files-workspace">
+            <div className="work-file-list">
+              <h3>Files <span>{environment.files.length}</span></h3>
+              {environment.files.map((entry) => entry.type === "folder"
+                ? <div key={entry.name}><Folder size={15} /><span title={entry.name}>{entry.name}</span></div>
+                : <button type="button" className={openFile?.path === entry.name ? "active" : ""} disabled={fileBusy} key={entry.name} onClick={() => void readFile(entry.name)}><File size={15} /><span title={entry.name}>{entry.name}</span></button>)}
+            </div>
+            {openFile && <section className="work-file-editor" aria-label={`Editing ${openFile.path}`}>
+              <header><div><strong>{openFile.path}</strong><small>{openFile.sizeBytes} bytes{fileDirty ? " · Unsaved" : " · Saved"}</small></div><button type="button" onClick={() => { if (!fileDirty || window.confirm("Discard the unsaved Work file changes?")) { setOpenFile(null); setFileDraft(""); } }} title="Close file"><X size={15} /></button></header>
+              <textarea value={fileDraft} onChange={(event) => setFileDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveFile(); } }} spellCheck="false" disabled={fileBusy} aria-label="Work file contents" />
+              <footer><span>UTF-8 text · 1 MB maximum</span><button type="button" onClick={() => void saveFile()} disabled={!fileDirty || fileBusy}><Save size={14} /> {fileBusy ? "Saving…" : "Save"}</button></footer>
+            </section>}
           </div>
         )}
         {!error && environment && tab === "terminal" && (

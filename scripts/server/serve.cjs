@@ -356,6 +356,10 @@ const {
 const {
   inspectWorkEnvironment,
 } = require("./work-environment-inspector.cjs");
+const {
+  readWorkFile,
+  writeWorkFile,
+} = require("./work-file-manager.cjs");
 
 // LUKE_AI_WORK_ACTION_RUNNER_IMPORT_V1
 const {
@@ -19987,6 +19991,28 @@ const server = http.createServer(async (req, res) => {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  // POST /api/work/file/read (project-confined text preview)
+  if (req.url === "/api/work/file/read" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const file = await readWorkFile({ root: body.root, filePath: body.path });
+      return json(res, 200, { ok: true, file });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // POST /api/work/file/write (project-confined, approved atomic text save)
+  if (req.url === "/api/work/file/write" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await writeWorkFile({ root: body.root, filePath: body.path, content: body.content, approvalGranted: body.approvalGranted });
+      return json(res, 200, { ok: true, result });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   }
 

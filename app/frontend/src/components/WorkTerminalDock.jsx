@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, SquareTerminal, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, SquareTerminal, X } from "lucide-react";
 
 const COMMANDS = [
   { id: "git-status", label: "git status" },
@@ -16,6 +16,7 @@ export default function WorkTerminalDock({ project, onClose }) {
   const [commandText, setCommandText] = useState("");
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [copied, setCopied] = useState(false);
   const root = project?.sourceFolders?.[0] || "";
 
   useEffect(() => {
@@ -59,6 +60,7 @@ export default function WorkTerminalDock({ project, onClose }) {
     <section className={`work-terminal-dock ${collapsed ? "collapsed" : ""}`} aria-label="Bottom Work Terminal">
       <header>
         <div><SquareTerminal size={15} /><strong>Terminal</strong>{activeCommand && <span>{activeCommand}</span>}</div>
+        <button type="button" onClick={async () => { await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1200); }} title="Copy Terminal output">{copied ? <Check size={16} /> : <Copy size={16} />}</button>
         <button type="button" onClick={() => setCollapsed((value) => !value)} title={collapsed ? "Expand Terminal" : "Collapse Terminal"}>{collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
         <button type="button" onClick={onClose} title="Close Terminal"><X size={16} /></button>
       </header>
@@ -79,7 +81,7 @@ export default function WorkTerminalDock({ project, onClose }) {
               setHistoryIndex(nextIndex);
               setCommandText(nextIndex >= 0 ? history[history.length - 1 - nextIndex] : "");
             }
-          }} placeholder="Type a read-only command…" disabled={busy} aria-label="Work Terminal command" /><button type="submit" disabled={busy || !commandText.trim()}>Run</button></form></div>}
+          }} placeholder="git status, cat file, head/tail file, clear…" disabled={busy} aria-label="Work Terminal command" /><button type="submit" disabled={busy || !commandText.trim()}>Run</button></form></div>}
         </div>
       )}
     </section>

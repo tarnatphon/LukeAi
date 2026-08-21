@@ -36,6 +36,8 @@ requireText("defaultValue={localStorage.getItem(draftStorageKey)", "UNCONTROLLED
 requireText("luke_chat_draft:", "DRAFT_PERSISTENCE_MISSING");
 requireText("event.nativeEvent.isComposing", "IME_COMPOSITION_GUARD_MISSING");
 requireText("draftSaveTimerRef", "DRAFT_DEBOUNCE_MISSING");
+requireText("frameBudget = document.visibilityState === \"visible\" ? 40 : 160", "ADAPTIVE_STREAM_PAINT_MISSING");
+requireText("scheduleStreamPaint", "STREAM_PAINT_BATCHING_MISSING");
 
 console.log("PASS: Context automatically compacts before reaching the model limit.");
 console.log("PASS: System prompt tokens are reserved before selecting recent messages.");
@@ -44,4 +46,5 @@ console.log("PASS: Context sizing adapts to hardware without displaying a gauge.
 console.log("PASS: Destructive history deletion is labelled explicitly.");
 console.log("PASS: Composer typing avoids full-chat rerenders and preserves drafts.");
 console.log("PASS: IME composition cannot accidentally submit a partial message.");
+console.log("PASS: Streaming tokens are paint-batched and throttled when the app is hidden.");
 console.log("PASS: Frontend Automatic Context Refresh validation completed.");
