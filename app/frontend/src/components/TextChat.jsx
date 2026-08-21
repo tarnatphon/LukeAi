@@ -1468,11 +1468,11 @@ function TextChat({
         <div
           ref={chatMessagesRef}
           className="chat-messages"
-          onWheel={() => {
-            if (isBusy) followGenerationRef.current = false;
-          }}
-          onTouchMove={() => {
-            if (isBusy) followGenerationRef.current = false;
+          onScroll={(event) => {
+            if (!isBusy) return;
+            const container = event.currentTarget;
+            const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+            followGenerationRef.current = distanceFromBottom <= 80;
           }}
         >
           {loadingModel ? (

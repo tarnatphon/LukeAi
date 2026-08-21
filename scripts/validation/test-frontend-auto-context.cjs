@@ -4,6 +4,7 @@
 const fs = require("node:fs");
 
 const chat = fs.readFileSync("app/frontend/src/components/TextChat.jsx", "utf8");
+const styles = fs.readFileSync("app/frontend/src/App.css", "utf8");
 
 function requireText(text, label) {
   if (!chat.includes(text)) throw new Error(`${label}: ${text}`);
@@ -48,6 +49,10 @@ requireText("scheduleComposerResize", "COMPOSER_RESIZE_BATCHING_MISSING");
 requireText("frameBudget = document.visibilityState === \"visible\" ? 40 : 160", "ADAPTIVE_STREAM_PAINT_MISSING");
 requireText("scheduleStreamPaint", "STREAM_PAINT_BATCHING_MISSING");
 requireText('scrollIntoView({ behavior: "auto" })', "STREAM_SCROLL_ANIMATION_GUARD_MISSING");
+requireText("distanceFromBottom <= 80", "STREAM_SCROLL_FOLLOW_RECOVERY_MISSING");
+if (/\.chat-messages\s*\{[^}]*scroll-behavior:\s*smooth/s.test(styles)) {
+  throw new Error("CHAT_CONTAINER_MUST_NOT_FORCE_SMOOTH_STREAM_SCROLL");
+}
 requireText('className={`chat-message-row', "MESSAGE_ROW_VIRTUALIZATION_TARGET_MISSING");
 requireText(' ? " streaming" : ""', "ACTIVE_STREAM_VIRTUALIZATION_GUARD_MISSING");
 

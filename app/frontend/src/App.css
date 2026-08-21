@@ -602,7 +602,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
-  scroll-behavior: smooth;
 }
 
 .chat-messages::-webkit-scrollbar {
