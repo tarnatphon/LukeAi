@@ -3943,7 +3943,13 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .work-terminal-dock-commands button { min-height:30px; padding:0 8px; border:0; border-radius:7px; background:transparent; color:#aeb5b1; cursor:pointer; text-align:left; font-family:monospace; font-size:.66rem; }
 .work-terminal-dock-commands button:hover:not(:disabled) { background:rgba(255,255,255,.08); color:#fff; }
 .work-terminal-dock-commands button:disabled { opacity:.4; cursor:not-allowed; }
-.work-terminal-dock pre { min-width:0; overflow:auto; margin:0; padding:12px 14px; color:#d8eadf; white-space:pre-wrap; font-size:.7rem; line-height:1.5; }
+.work-terminal-session { min-width:0; min-height:0; display:flex; flex-direction:column; }
+.work-terminal-dock pre { flex:1; min-width:0; min-height:0; overflow:auto; margin:0; padding:12px 14px; color:#d8eadf; white-space:pre-wrap; font-size:.7rem; line-height:1.5; }
+.work-terminal-session form { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:8px; min-height:42px; padding:0 10px 0 14px; border-top:1px solid rgba(255,255,255,.08); }
+.work-terminal-session form>span { color:#67d391; font-family:monospace; }
+.work-terminal-session input { min-width:0; border:0; outline:0; background:transparent; color:#eef5f0; caret-color:#67d391; font-family:monospace; font-size:.72rem; }
+.work-terminal-session form button { min-height:28px; padding:0 10px; border:1px solid rgba(255,255,255,.14); border-radius:7px; background:rgba(255,255,255,.06); color:#dfe7e2; cursor:pointer; font-size:.68rem; }
+.work-terminal-session form button:disabled { opacity:.4; cursor:not-allowed; }
 .work-terminal-dock-empty { padding:14px; color:#8e9692; font-size:.72rem; }
 @media (max-width:700px) { .work-terminal-dock-body { grid-template-columns:1fr; } .work-terminal-dock-commands { flex-direction:row; overflow:auto; border-right:0; border-bottom:1px solid rgba(255,255,255,.08); } .work-terminal-dock-commands button { flex:0 0 auto; } }
 @media (max-width:900px) { .work-tools-panel { position:absolute; z-index:100; right:0; width:min(390px,92vw); box-shadow:-18px 0 48px rgba(0,0,0,.35); } }

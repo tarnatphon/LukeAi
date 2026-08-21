@@ -62,8 +62,13 @@ requireText(actionRunner, 'shell: false', "WORK_ACTION_SHELL_GUARD_MISSING");
 requireText(actionRunner, "approvalGranted !== true", "WORK_OPEN_BACKEND_APPROVAL_MISSING");
 requireText(chat, "<WorkTerminalDock", "BOTTOM_TERMINAL_DOCK_MISSING");
 requireText(chat, 'title="Toggle bottom Terminal"', "BOTTOM_TERMINAL_TOGGLE_MISSING");
-requireText(terminalDock, 'fetch("/api/work/command"', "BOTTOM_TERMINAL_API_MISSING");
+requireText(terminalDock, 'fetch("/api/work/terminal"', "BOTTOM_TERMINAL_API_MISSING");
 requireText(terminalDock, 'aria-label="Bottom Work Terminal"', "BOTTOM_TERMINAL_ACCESSIBILITY_MISSING");
+requireText(terminalDock, 'aria-label="Work Terminal command"', "EDITABLE_TERMINAL_INPUT_MISSING");
+requireText(terminalDock, 'event.key === "ArrowUp"', "TERMINAL_HISTORY_MISSING");
+requireText(server, 'req.url === "/api/work/terminal"', "TYPED_TERMINAL_API_MISSING");
+requireText(actionRunner, "runTypedWorkCommand", "TYPED_TERMINAL_RUNNER_MISSING");
+requireText(actionRunner, "Pipes, redirection, substitutions", "TERMINAL_METACHAR_GUARD_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");

@@ -361,6 +361,7 @@ const {
 const {
   openWorkTarget,
   runReadOnlyWorkCommand,
+  runTypedWorkCommand,
 } = require("./work-action-runner.cjs");
 
 // LUKE_AI_STORAGE_DESTINATION_MANAGER_IMPORT_V2
@@ -19994,6 +19995,17 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readJsonRequestBody(req);
       const result = await runReadOnlyWorkCommand({ root: body.root, commandId: body.commandId });
+      return json(res, 200, { ok: true, result });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // POST /api/work/terminal (typed, parsed, read-only; never invokes a shell)
+  if (req.url === "/api/work/terminal" && req.method === "POST") {
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await runTypedWorkCommand({ root: body.root, command: body.command });
       return json(res, 200, { ok: true, result });
     } catch (error) {
       return json(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });

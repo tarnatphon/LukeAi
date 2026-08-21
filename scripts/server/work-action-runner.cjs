@@ -12,6 +12,35 @@ const READ_ONLY_COMMANDS = {
   "git-log": { file: "git", args: ["log", "--oneline", "--decorate", "-20"] },
 };
 
+function parseCommandLine(value) {
+  const input = String(value || "").trim();
+  if (!input) return [];
+  if (/[;&|><`$\r\n]/.test(input)) {
+    const error = new Error("Pipes, redirection, substitutions, and command chaining are not allowed in read-only Work Terminal.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const tokens = [];
+  const pattern = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'|([^\s]+)/g;
+  let match;
+  while ((match = pattern.exec(input))) tokens.push((match[1] ?? match[2] ?? match[3]).replace(/\\(["\\])/g, "$1"));
+  return tokens;
+}
+
+function validateGitArguments(tokens) {
+  const [subcommand, ...args] = tokens;
+  const allowed = {
+    status: new Set(["--short", "--branch", "-s", "-b"]),
+    diff: new Set(["--stat", "--cached", "--staged", "--name-only", "--name-status"]),
+    log: new Set(["--oneline", "--decorate", "--all", "--graph"]),
+    show: new Set(["--stat", "--oneline", "--decorate"]),
+    branch: new Set(["--show-current", "-a", "-vv"]),
+    "rev-parse": new Set(["--show-toplevel", "--show-prefix", "--is-inside-work-tree"]),
+  };
+  if (!allowed[subcommand]) return false;
+  return args.every((arg) => allowed[subcommand].has(arg) || ((subcommand === "log" || subcommand === "show") && /^-[1-9]\d{0,2}$/.test(arg)) || (subcommand === "show" && /^[a-f0-9]{4,40}$/i.test(arg)));
+}
+
 async function validatedRoot(value) {
   if (!value || !path.isAbsolute(String(value))) {
     const error = new Error("Work action root must be an absolute path.");
@@ -55,6 +84,33 @@ async function runReadOnlyWorkCommand({ root, commandId }) {
       output: String(error.stdout || error.stderr || error.message || "Command failed."),
       exitCode: Number(error.code) || 1,
     };
+  }
+}
+
+async function runTypedWorkCommand({ root, command }) {
+  const cwd = await validatedRoot(root);
+  const tokens = parseCommandLine(command);
+  if (tokens.length === 0) return { command, output: "", exitCode: 0 };
+  const [file, ...args] = tokens;
+
+  if (file === "pwd") return { command, output: cwd, exitCode: 0 };
+  if (file === "ls" && args.every((arg) => ["-l", "-a", "-la", "-al"].includes(arg))) {
+    const entries = await fs.readdir(cwd, { withFileTypes: true });
+    const showHidden = args.some((arg) => arg.includes("a"));
+    const output = entries.filter((entry) => showHidden || !entry.name.startsWith(".")).map((entry) => `${entry.isDirectory() ? "d" : "-"} ${entry.name}`).join("\n");
+    return { command, output, exitCode: 0 };
+  }
+  if (file !== "git" || !validateGitArguments(args)) {
+    const error = new Error("Command not allowed. Available: pwd, ls [-la], git status/diff/log/show/branch/rev-parse with read-only options.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  try {
+    const result = await execFileAsync("git", args, { cwd, timeout: 15000, maxBuffer: 2 * 1024 * 1024, shell: false, encoding: "utf8" });
+    return { command, output: String(result.stdout || result.stderr || "No output."), exitCode: 0 };
+  } catch (error) {
+    return { command, output: String(error.stdout || error.stderr || error.message || "Command failed."), exitCode: Number(error.code) || 1 };
   }
 }
 
@@ -117,4 +173,4 @@ async function openWorkTarget({ root, target, url, approvalGranted }) {
   return { opened: target, value: cwd };
 }
 
-module.exports = { openWorkTarget, runReadOnlyWorkCommand };
+module.exports = { openWorkTarget, runReadOnlyWorkCommand, runTypedWorkCommand };
