@@ -3930,6 +3930,22 @@ html[data-theme^="dark"] .settings-subsection:hover {
 .work-browser { display:flex; flex-direction:column; gap:10px; padding:13px; border:1px solid var(--md-sys-color-outline-variant); border-radius:13px; background:var(--md-sys-color-surface-container); }
 .work-browser label { display:flex; flex-direction:column; gap:7px; font-size:.72rem; }
 .work-browser input { min-height:38px; padding:0 10px; border:1px solid var(--md-sys-color-outline-variant); border-radius:9px; background:var(--md-sys-color-surface-container-low); color:inherit; font:inherit; }
+.work-terminal-dock { flex:0 0 clamp(180px,28vh,320px); min-height:0; display:flex; flex-direction:column; border-top:1px solid var(--md-sys-color-outline-variant); background:#121313; color:#e2e5e3; }
+.work-terminal-dock.collapsed { flex-basis:42px; }
+.work-terminal-dock>header { min-height:42px; display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:5px; padding:0 9px 0 14px; border-bottom:1px solid rgba(255,255,255,.08); }
+.work-terminal-dock>header>div { min-width:0; display:flex; align-items:center; gap:8px; }
+.work-terminal-dock>header strong { font-size:.76rem; }
+.work-terminal-dock>header span { overflow:hidden; color:#8e9692; font-family:monospace; font-size:.66rem; text-overflow:ellipsis; white-space:nowrap; }
+.work-terminal-dock>header button { display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:#aeb5b1; cursor:pointer; }
+.work-terminal-dock>header button:hover { background:rgba(255,255,255,.08); color:#fff; }
+.work-terminal-dock-body { flex:1; min-height:0; display:grid; grid-template-columns:150px 1fr; }
+.work-terminal-dock-commands { display:flex; flex-direction:column; gap:5px; padding:9px; border-right:1px solid rgba(255,255,255,.08); }
+.work-terminal-dock-commands button { min-height:30px; padding:0 8px; border:0; border-radius:7px; background:transparent; color:#aeb5b1; cursor:pointer; text-align:left; font-family:monospace; font-size:.66rem; }
+.work-terminal-dock-commands button:hover:not(:disabled) { background:rgba(255,255,255,.08); color:#fff; }
+.work-terminal-dock-commands button:disabled { opacity:.4; cursor:not-allowed; }
+.work-terminal-dock pre { min-width:0; overflow:auto; margin:0; padding:12px 14px; color:#d8eadf; white-space:pre-wrap; font-size:.7rem; line-height:1.5; }
+.work-terminal-dock-empty { padding:14px; color:#8e9692; font-size:.72rem; }
+@media (max-width:700px) { .work-terminal-dock-body { grid-template-columns:1fr; } .work-terminal-dock-commands { flex-direction:row; overflow:auto; border-right:0; border-bottom:1px solid rgba(255,255,255,.08); } .work-terminal-dock-commands button { flex:0 0 auto; } }
 @media (max-width:900px) { .work-tools-panel { position:absolute; z-index:100; right:0; width:min(390px,92vw); box-shadow:-18px 0 48px rgba(0,0,0,.35); } }
 
 /* Global modern scrollbars */

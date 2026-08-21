@@ -10,6 +10,7 @@ const workTools = fs.readFileSync("app/frontend/src/components/WorkToolsPanel.js
 const server = fs.readFileSync("scripts/server/serve.cjs", "utf8");
 const inspector = fs.readFileSync("scripts/server/work-environment-inspector.cjs", "utf8");
 const actionRunner = fs.readFileSync("scripts/server/work-action-runner.cjs", "utf8");
+const terminalDock = fs.readFileSync("app/frontend/src/components/WorkTerminalDock.jsx", "utf8");
 
 function requireText(source, text, label) {
   if (!source.includes(text)) throw new Error(`${label}: ${text}`);
@@ -59,6 +60,10 @@ requireText(server, 'req.url === "/api/work/open"', "WORK_OPEN_API_MISSING");
 requireText(actionRunner, "READ_ONLY_COMMANDS", "READ_ONLY_COMMAND_PALETTE_MISSING");
 requireText(actionRunner, 'shell: false', "WORK_ACTION_SHELL_GUARD_MISSING");
 requireText(actionRunner, "approvalGranted !== true", "WORK_OPEN_BACKEND_APPROVAL_MISSING");
+requireText(chat, "<WorkTerminalDock", "BOTTOM_TERMINAL_DOCK_MISSING");
+requireText(chat, 'title="Toggle bottom Terminal"', "BOTTOM_TERMINAL_TOGGLE_MISSING");
+requireText(terminalDock, 'fetch("/api/work/command"', "BOTTOM_TERMINAL_API_MISSING");
+requireText(terminalDock, 'aria-label="Bottom Work Terminal"', "BOTTOM_TERMINAL_ACCESSIBILITY_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
