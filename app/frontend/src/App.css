@@ -943,6 +943,7 @@ body {
   width: 100%;
   display: flex;
   min-width: 0;
+  position: relative;
 }
 
 .chat-composer-textarea {

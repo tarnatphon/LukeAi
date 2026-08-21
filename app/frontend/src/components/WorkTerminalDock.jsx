@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, SquareTerminal, X } from "lucide-react";
 
 const COMMANDS = [
@@ -17,6 +17,12 @@ export default function WorkTerminalDock({ project, onClose }) {
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const root = project?.sourceFolders?.[0] || "";
+
+  useEffect(() => {
+    const receiveCommand = (event) => setCommandText(String(event.detail?.command || ""));
+    window.addEventListener("luke:work-terminal-command", receiveCommand);
+    return () => window.removeEventListener("luke:work-terminal-command", receiveCommand);
+  }, []);
 
   const runCommand = async () => {
     const command = commandText.trim();

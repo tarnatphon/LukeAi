@@ -198,6 +198,7 @@ function TextChat({
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
   const [messageSearchIndex, setMessageSearchIndex] = useState(0);
+  const [composerAssist, setComposerAssist] = useState("");
   const approvalMenuRef = useRef(null);
 
   useEffect(() => {
@@ -421,6 +422,15 @@ function TextChat({
     updateComposerDraft(value);
     textareaRef.current.focus();
   }, [updateComposerDraft]);
+
+  const insertComposerValue = useCallback((value) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const current = textarea.value;
+    const next = current.replace(/(?:^|\s)([@/][^\s]*)$/, (match) => `${match.startsWith(" ") ? " " : ""}${value} `);
+    fillComposer(next === current ? `${current}${current ? " " : ""}${value} ` : next);
+    setComposerAssist("");
+  }, [fillComposer]);
 
   const isImage = (file) => {
     return /\.(jpe?g|png|webp)$/i.test(file.name) || file.type.startsWith("image/");
@@ -760,6 +770,20 @@ function TextChat({
     const text = String(queuedItem?.text ?? textareaRef.current?.value ?? "").trim();
     const hasAttachments = sourceAttachments.length > 0;
     if ((!text && !hasAttachments) || !status.ready) return;
+
+    if (!queuedItem && !hasAttachments && text.startsWith("/")) {
+      const command = text.toLowerCase();
+      if (["/search", "/memory", "/checkpoint", "/new"].includes(command)) {
+        if (command === "/search") setShowMessageSearch(true);
+        if (command === "/memory" && assistantMode === "work") setShowProjectMemory(true);
+        if (command === "/checkpoint" && assistantMode === "work" && activeProject?.id) createWorkCheckpoint(activeProject.id, messages, "Manual slash-command checkpoint");
+        if (command === "/new") handleNewChat();
+        if (textareaRef.current) textareaRef.current.value = "";
+        updateComposerDraft("");
+        setComposerAssist("");
+        return;
+      }
+    }
 
     if (isBusy && !fromQueue) {
       setMessageQueue((current) => [...current, {
@@ -1429,7 +1453,7 @@ function TextChat({
                           {Array.isArray(displayContent) ? (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                               {displayContent.map((item, idx) => {
-                                if (item.type === "text") return <MarkdownRenderer key={idx} content={item.text} />;
+                                if (item.type === "text") return <MarkdownRenderer key={idx} content={item.text} workMode={assistantMode === "work"} onSendToTerminal={(code) => { setShowBottomTerminal(true); setTimeout(() => window.dispatchEvent(new CustomEvent("luke:work-terminal-command", { detail: { command: code } })), 0); }} />;
                                 if (item.type === "image_url") return (
                                   <img key={idx} src={item.image_url.url} alt="Attached image"
                                     style={{ maxWidth: "240px", maxHeight: "180px", objectFit: "contain", borderRadius: "8px", marginTop: "4px" }}
@@ -1439,7 +1463,7 @@ function TextChat({
                               })}
                             </div>
                           ) : (
-                            <MarkdownRenderer content={displayContent} />
+                            <MarkdownRenderer content={displayContent} workMode={assistantMode === "work"} onSendToTerminal={(code) => { setShowBottomTerminal(true); setTimeout(() => window.dispatchEvent(new CustomEvent("luke:work-terminal-command", { detail: { command: code } })), 0); }} />
                           )}
                         </div>
                       )}
@@ -1579,12 +1603,23 @@ function TextChat({
           {/* Input container with vertical layout */}
           <div className="chat-composer-inner">
             <div className="chat-composer-textarea-container">
+              {composerAssist && (
+                <div className="chat-model-dropdown-menu" style={{ top: "auto", bottom: "calc(100% + 6px)", minWidth: 0 }} role="listbox" aria-label="Composer commands and mentions">
+                  {composerAssist === "/" && [["/search", "Search chats"], ["/new", "Start a new chat"], ...(assistantMode === "work" ? [["/memory", "Open Project Memory"], ["/checkpoint", "Save conversation checkpoint"]] : [])].map(([value, label]) => <button type="button" className="chat-model-dropdown-item" key={value} onClick={() => { fillComposer(value); setComposerAssist(""); }}><code>{value}</code><span>{label}</span></button>)}
+                  {composerAssist === "@" && [["@project", activeProject?.name ? `Project: ${activeProject.name}` : "Current project"], ["@folder", activeProject?.sourceFolders?.[0] || "Project source folder"], ["@file", "Attach a local file"]].map(([value, label]) => <button type="button" className="chat-model-dropdown-item" key={value} onClick={() => {
+                    if (value === "@file") { fileInputRef.current?.click(); setComposerAssist(""); return; }
+                    if (value === "@folder" && activeProject?.sourceFolders?.[0]) insertComposerValue(`@folder(${activeProject.sourceFolders[0]})`);
+                    else if (value === "@project" && activeProject?.name) insertComposerValue(`@project(${activeProject.name})`);
+                    else insertComposerValue(value);
+                  }}><code>{value}</code><span>{label}</span></button>)}
+                </div>
+              )}
               <textarea
                 key={draftStorageKey}
                 ref={textareaRef}
                 className="chat-composer-textarea"
                 defaultValue={localStorage.getItem(draftStorageKey) || ""}
-                onInput={(event) => updateComposerDraft(event.currentTarget.value)}
+                onInput={(event) => { const value = event.currentTarget.value; updateComposerDraft(value); setComposerAssist(value.match(/(?:^|\s)([@/])[^\s]*$/)?.[1] || ""); }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
@@ -1727,7 +1762,7 @@ function parseInlineMarkdown(text) {
   });
 }
 
-export function MarkdownRenderer({ content }) {
+export function MarkdownRenderer({ content, workMode = false, onSendToTerminal }) {
   if (typeof content !== 'string') return null;
 
   const parts = content.split(/(```[\s\S]*?```)/g);
@@ -1743,7 +1778,7 @@ export function MarkdownRenderer({ content }) {
             <div className="chat-code-block" key={index}>
               <div className="chat-code-header">
                 <span>{lang || "Code"}</span>
-                <CopyContentButton value={code.trim()} label="Copy code" />
+                <span style={{ display: "inline-flex", gap: 6 }}><CopyContentButton value={code.trim()} label="Copy code" />{workMode && onSendToTerminal && <button type="button" className="chat-copy-button" onClick={() => onSendToTerminal(code.trim())} aria-label="Send code to Work Terminal"><PanelBottom size={14} /><span>Terminal</span></button>}</span>
               </div>
               <pre style={{
               background: "var(--md-sys-color-surface-variant)", 

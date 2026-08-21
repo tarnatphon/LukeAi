@@ -88,6 +88,11 @@ requireText(chat, "createWorkCheckpoint", "AUTOMATIC_WORK_CHECKPOINT_MISSING");
 requireText(projectMemory, 'aria-label="Project Memory and checkpoints"', "PROJECT_MEMORY_PANEL_MISSING");
 requireText(projectMemory, "Conversation checkpoints", "WORK_CHECKPOINT_UI_MISSING");
 requireText(projectMemory, "Project files are never changed", "CHECKPOINT_SCOPE_WARNING_MISSING");
+requireText(chat, 'aria-label="Composer commands and mentions"', "COMPOSER_COMMAND_MENU_MISSING");
+requireText(chat, '"/checkpoint"', "CHECKPOINT_SLASH_COMMAND_MISSING");
+requireText(chat, '"@file"', "FILE_MENTION_MISSING");
+requireText(chat, 'aria-label="Send code to Work Terminal"', "CODE_TO_TERMINAL_ACTION_MISSING");
+requireText(terminalDock, '"luke:work-terminal-command"', "TERMINAL_CODE_RECEIVER_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
@@ -100,4 +105,5 @@ console.log("PASS: Composer remains editable during streaming and supports an ed
 console.log("PASS: Chat search covers current and project conversations with result navigation.");
 console.log("PASS: Edit and retry preserve previous responses as switchable conversation branches.");
 console.log("PASS: Work projects expose editable memory and restorable conversation checkpoints.");
+console.log("PASS: Composer mentions, slash commands and safe code-to-terminal actions are connected.");
 console.log("PASS: Frontend Chat Projects foundation validation completed.");
