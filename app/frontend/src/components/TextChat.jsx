@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bot, Check, Copy, LoaderCircle, Send, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
+import { Bot, Check, Copy, Hand, LoaderCircle, Send, Settings2, ShieldAlert, ShieldCheck, Trash2, Square, History, Paperclip, X, ChevronDown, Globe2, Plus } from "lucide-react";
 import {
   getDownloadProgress,
   getLlmStatus,
@@ -182,6 +182,24 @@ function TextChat({
     total_tokens: 0
   });
   const [memoryStatus, setMemoryStatus] = useState({ compressed: false, archivedCount: 0 });
+  const [approvalMode, setApprovalMode] = useState(() => {
+    const saved = localStorage.getItem("luke_work_approval_mode");
+    return ["ask", "auto", "full", "custom"].includes(saved) ? saved : "auto";
+  });
+  const [showApprovalMenu, setShowApprovalMenu] = useState(false);
+  const approvalMenuRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem("luke_work_approval_mode", approvalMode);
+  }, [approvalMode]);
+
+  useEffect(() => {
+    const closeApprovalMenu = (event) => {
+      if (approvalMenuRef.current && !approvalMenuRef.current.contains(event.target)) setShowApprovalMenu(false);
+    };
+    document.addEventListener("mousedown", closeApprovalMenu);
+    return () => document.removeEventListener("mousedown", closeApprovalMenu);
+  }, []);
 
   useEffect(() => {
     if (setIsLlmLoaded) {
@@ -757,9 +775,18 @@ function TextChat({
               : "No source folders are attached to this project.",
           ].join("\n")
         : "You are in Chat mode. Prioritize natural conversation, direct answers, learning, and exploration.";
+      const approvalInstruction = assistantMode === "work"
+        ? {
+            ask: "Approval policy: ask before every action that changes files, runs commands, opens apps, or uses the network.",
+            auto: "Approval policy: proceed with safe project-scoped actions, but ask before potentially unsafe, destructive, external, or network actions.",
+            full: "Approval policy: broad access was selected, but still explain destructive or irreversible actions clearly before proceeding.",
+            custom: "Approval policy: use the custom project permission rules; if a rule is unavailable or ambiguous, ask first.",
+          }[approvalMode]
+        : "";
       const combinedSystemPrompt = [
         systemPrompt.trim(),
         workInstruction,
+        approvalInstruction,
         visionInstruction,
       ].filter(Boolean).join("\n\n");
       const contextLimit = Number(status.settings?.contextSize || textSettings?.contextSize || 4096);
@@ -1416,6 +1443,39 @@ function TextChat({
                     </svg>
                     <span>DeepThink</span>
                   </button>
+                )}
+                {assistantMode === "work" && (
+                  <div className="work-approval-selector" ref={approvalMenuRef}>
+                    <button type="button" className="work-approval-trigger" onClick={() => setShowApprovalMenu((open) => !open)} aria-expanded={showApprovalMenu} aria-haspopup="menu">
+                      {approvalMode === "ask" ? <Hand size={14} /> : approvalMode === "full" ? <ShieldAlert size={14} /> : approvalMode === "custom" ? <Settings2 size={14} /> : <ShieldCheck size={14} />}
+                      <span>{{ ask: "Ask for approval", auto: "Approve for me", full: "Full Access", custom: "Custom" }[approvalMode]}</span>
+                      <ChevronDown size={13} />
+                    </button>
+                    {showApprovalMenu && (
+                      <div className="work-approval-menu" role="menu" aria-label="Work approval policy">
+                        <div className="work-approval-heading"><span>How should Work actions be approved?</span></div>
+                        {[
+                          { id: "ask", icon: Hand, title: "Ask for approval", detail: "Ask before commands, external files, apps, and internet access" },
+                          { id: "auto", icon: ShieldCheck, title: "Approve for me", detail: "Only ask for actions detected as potentially unsafe" },
+                          { id: "full", icon: ShieldAlert, title: "Full Access", detail: "Broad access to project files, commands, and internet" },
+                          { id: "custom", icon: Settings2, title: "Custom", detail: "Use permissions configured for this project" },
+                        ].map((option) => {
+                          const Icon = option.icon;
+                          return (
+                            <button type="button" role="menuitemradio" aria-checked={approvalMode === option.id} className={option.id === "full" ? "danger" : ""} key={option.id} onClick={() => {
+                              if (option.id === "full" && !window.confirm("Full Access allows broad project-file, command, app, and network access. Enable it for this Work session?")) return;
+                              setApprovalMode(option.id);
+                              setShowApprovalMenu(false);
+                            }}>
+                              <Icon size={18} />
+                              <span><b>{option.title}</b><small>{option.detail}</small></span>
+                              {approvalMode === option.id && <Check size={17} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 

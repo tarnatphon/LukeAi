@@ -33,6 +33,12 @@ requireText(chat, 'assistantMode === "work"', "WORK_MODE_PROMPT_MISSING");
 requireText(chat, "Project source folders:", "WORK_SOURCE_FOLDER_CONTEXT_MISSING");
 requireText(chat, 'label="Copy code"', "COPY_CODE_BUTTON_MISSING");
 requireText(chat, 'label="Copy response"', "COPY_RESPONSE_BUTTON_MISSING");
+requireText(chat, 'localStorage.getItem("luke_work_approval_mode")', "APPROVAL_MODE_PERSISTENCE_MISSING");
+requireText(chat, '"Ask for approval"', "ASK_APPROVAL_MODE_MISSING");
+requireText(chat, '"Approve for me"', "AUTO_APPROVAL_MODE_MISSING");
+requireText(chat, '"Full Access"', "FULL_ACCESS_MODE_MISSING");
+requireText(chat, '"Custom"', "CUSTOM_APPROVAL_MODE_MISSING");
+requireText(chat, 'window.confirm("Full Access', "FULL_ACCESS_CONFIRMATION_MISSING");
 
 console.log("PASS: Projects persist locally and link new Chat conversations.");
 console.log("PASS: Projects can be created, renamed, pinned, selected and removed.");
